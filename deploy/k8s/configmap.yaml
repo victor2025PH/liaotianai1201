@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: group-ai-config
+  namespace: group-ai
+data:
+  # 应用配置
+  APP_NAME: "Smart TG Admin API"
+  DATABASE_POOL_SIZE: "10"
+  DATABASE_MAX_OVERFLOW: "20"
+  DATABASE_POOL_RECYCLE: "3600"
+  DATABASE_POOL_TIMEOUT: "30"
+  
+  # CORS 配置
+  CORS_ORIGINS: "http://localhost:3000,http://localhost:5173"
+  
+  # 服务 URL（Kubernetes 内部服务名）
+  SESSION_SERVICE_URL: "http://session-service:8001"
+  REDPACKET_SERVICE_URL: "http://redpacket-service:8002"
+  MONITORING_SERVICE_URL: "http://monitoring-service:8003"
+  
+  # Redis 配置
+  REDIS_URL: "redis://redis-service:6379/0"
+  
+  # 告警检查配置
+  ALERT_CHECK_INTERVAL_SECONDS: "300"
+  ALERT_CHECK_ENABLED: "true"
+  
+  # 开发模式（生产环境应设为 false）
+  DISABLE_AUTH: "false"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: group-ai-frontend-config
+  namespace: group-ai
+data:
+  # 前端 API 基础 URL（Kubernetes 内部服务名）
+  VITE_API_BASE_URL: "http://admin-backend-service:8000/api/v1"
+  NEXT_PUBLIC_API_URL: "http://admin-backend-service:8000/api/v1"
+

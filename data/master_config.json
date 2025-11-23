@@ -1,0 +1,57 @@
+{
+  "servers": {
+    "worker-01": {
+      "host": "165.154.254.99",
+      "user": "ubuntu",
+      "password": "Along2025!!!",
+      "node_id": "worker-01",
+      "deploy_dir": "/home/ubuntu",
+      "max_accounts": 5,
+      "location": "LosAngeles",
+      "telegram_api_id": "",
+      "telegram_api_hash": "",
+      "openai_api_key": ""
+    },
+    "los-angeles": {
+      "host": "165.154.255.48",
+      "user": "ubuntu",
+      "password": "8iDcGrYb52Fxpzee",
+      "node_id": "los-angeles",
+      "deploy_dir": "/home/ubuntu",
+      "max_accounts": 5,
+      "location": "LosAngeles",
+      "telegram_api_id": "",
+      "telegram_api_hash": "",
+      "openai_api_key": ""
+    },
+    "manila": {
+      "host": "165.154.233.179",
+      "user": "ubuntu",
+      "password": "8iDcGrYb52Fxpzee",
+      "node_id": "manila",
+      "deploy_dir": "/home/ubuntu",
+      "max_accounts": 5,
+      "location": "Manila",
+      "telegram_api_id": "",
+      "telegram_api_hash": "",
+      "openai_api_key": ""
+    }
+  },
+  "allocation": {
+    "default_strategy": "load_balance",
+    "rebalance_threshold": 30.0,
+    "health_check_interval": 60,
+    "max_retry_count": 3,
+    "retry_delay": 5,
+    "fault_recovery": {
+      "enabled": true,
+      "check_interval": 300,
+      "failure_threshold": 3
+    },
+    "account_type_strategies": {
+      "default": "load_balance",
+      "high_priority": "location",
+      "batch": "affinity"
+    }
+  }
+}

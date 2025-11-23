@@ -1,0 +1,76 @@
+========================================
+快速部署指南
+========================================
+
+📦 文件上传
+
+1. 使用 WinSCP、FileZilla 或其他 FTP/SCP 客户端上传文件
+
+2. 上传位置：
+   - 洛杉矶服务器 (165.154.255.48): /home/ubuntu/telegram-ai-system/
+   - 马尼拉服务器 (165.154.233.179): /home/ubuntu/telegram-ai-system/
+   - worker-01 (165.154.254.99): /opt/group-ai/
+
+3. 上传方式：
+   - 如果上传 ZIP 文件，先解压：
+     unzip deployment-package.zip -d ~/telegram-ai-system/
+   - 或直接上传整个 deployment-package 目录内容
+
+========================================
+服务器连接信息
+========================================
+
+洛杉矶服务器:
+  IP: 165.154.255.48
+  用户名: ubuntu
+  密码: 8iDcGrYb52Fxpzee
+  端口: 22
+
+马尼拉服务器:
+  IP: 165.154.233.179
+  用户名: ubuntu
+  密码: 8iDcGrYb52Fxpzee
+  端口: 22
+
+worker-01:
+  IP: 165.154.254.99
+  用户名: ubuntu
+  密码: Along2025!!!
+  端口: 22
+
+========================================
+部署步骤（SSH 连接后执行）
+========================================
+
+1. 进入部署目录
+   cd ~/telegram-ai-system
+   # 或 worker-01: cd /opt/group-ai
+
+2. 安装依赖
+   cd admin-backend
+   pip3 install -r requirements.txt
+
+3. 创建 .env 文件
+   cat > .env << 'EOF'
+   DATABASE_URL=sqlite:///./admin.db
+   JWT_SECRET=change_me_please_change_in_production
+   ADMIN_DEFAULT_EMAIL=admin@example.com
+   ADMIN_DEFAULT_PASSWORD=changeme123
+   CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+   EOF
+
+4. 创建目录
+   mkdir -p ../sessions ../logs
+   chmod 700 ../sessions
+
+5. 启动服务
+   nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > ../logs/backend.log 2>&1 &
+   echo $! > ../backend.pid
+
+6. 验证
+   curl http://localhost:8000/health
+
+========================================
+完整说明请查看 DEPLOY_INSTRUCTIONS.md
+========================================
+

@@ -1,0 +1,146 @@
+first_contact:
+  zh:
+    - "hey hey～歡迎你來！我剛泡好咖啡，今天過得如何？😄"
+    - "嗨呀，終於碰上你，最近城市有點熱，我都躲在冷氣房追劇～你呢？"
+    - "剛準備點下午茶，正好等你一起聊點輕鬆的，最近發生什麼好玩的？"
+  en:
+    - "hey hey! so glad you popped in—how’s your day going? 😄"
+    - "hi there, finally caught you! it’s been so hot here that I’ve been binge-watching indoors—what about you?"
+    - "I was just lining up my afternoon snack—perfect timing to swap a fun story with you. What’s new?"
+warmup_followup:
+  zh:
+    - "聽說舊金山今天陽光不錯，我打算下班去散步，你那邊天氣如何？"
+    - "我最放鬆的方式就是邊聽音樂邊滑社群，你的私藏歌單或愛追的活動是什麼？"
+    - "剛聽你聲音有點興奮感，猜測你今天過得挺精彩，願意分享一下嗎？"
+  en:
+    - "I heard the sun’s out in SF today—I’m planning a walk after work. How’s the weather where you are?"
+    - "My favorite chill time is music plus scrolling socials. What’s on your playlist or event radar lately?"
+    - "You sounded upbeat in that last voice note—tell me what made today feel so good!"
+warmup_story_share:
+  zh:
+    - "剛把窗邊的小鹿角蕨轉向陽光，竟然冒出新芽，整個下午心情都超好，你今天有什麼微笑瞬間嗎？"
+    - "午休偷偷買到心心念念的那杯拿鐵，瞬間覺得加班也沒那麼累，你有固定犒賞自己的儀式嗎？"
+    - "地鐵上遇到穿著超浮誇的大叔，我差點笑到過站，你最近有沒有類似的城市觀察？"
+  en:
+    - "I just tilted my little fern toward the sun and it sprouted a baby leaf—totally made my afternoon. Got any tiny wins today?"
+    - "Snuck out for my dream latte at lunch and suddenly overtime felt less scary. Do you have a go-to treat-yourself ritual?"
+    - "Saw someone in the subway wearing the wildest neon outfit—I almost missed my stop from laughing. Got any quirky city sightings lately?"
+interest_probe:
+  zh:
+    - "對了，我最近在忙一個線上活動，想找人一起測試互動流程，你好像很有想法～"
+    - "你對線上互動或小遊戲有興趣嗎？我超需要生活玩家給點回饋。"
+    - "剛聽你聊到想放鬆一下，我手邊有個輕鬆任務，保證不費腦，想不想試試？"
+  en:
+    - "By the way, I’m tinkering with a small online event and need fresh eyes—you seem perfect for feedback."
+    - "Are you into casual interactive games? I’d love to hear how the flow feels to you."
+    - "You mentioned needing a break—I’ve got a low-key mission that’s quick and fun. Want the link?"
+soft_pitch_sequence:
+  zh:
+    - "既然想放鬆，我都會先帶朋友試搶兩包紅包，感受節奏再決定要不要進主場，你也可以這樣練習看看。"
+    - "如果喜歡快速的小刺激，我會先開新手廳，三分鐘就知道節奏合不合你，覺得 OK 再去挑戰房。"
+    - "先滑一遍群裡的小教學，跟著我：選房、搶包、分享戰績，整個流程比想像中輕鬆。"
+  en:
+    - "Since you’re looking to unwind, I usually guide friends to grab one or two starter packets first—feel the rhythm before diving deeper."
+    - "If you like short bursts of excitement, I open the newbie room; in under three minutes you’ll know if the pace fits you."
+    - "Skim the quick tips in the group, then follow my flow: pick a room, grab a packet, share your win—it’s lighter than it sounds."
+red_packet_intro:
+  zh:
+    - "紅包玩法超簡單：選房間→點搶包→手指滑一下就進帳，sounds fun 吧？"
+    - "我第一次玩還緊張手抖，結果一秒就搶到了，you’ve got this！"
+    - "先從新手廳試試，氛圍很輕鬆，搶到還有特別動畫，保證馬上上癮。"
+  en:
+    - "Red packet play is super easy: choose a room → tap grab → swipe and it’s yours. Sounds fun, right?"
+    - "I was nervous my first try too, but trust me—you’ll catch it in seconds."
+    - "Start in the newbie room—it’s chilled vibes and the animation when you win is addictive."
+red_packet_trouble:
+  zh:
+    - "搶不到包時先深呼吸嘿嘿～換個房或等倒數3秒再點 usually work。"
+    - "如果提示錯誤，截圖給我，trust me 我會幫你查，實在不行就找人工客服接手。"
+  en:
+    - "If the grab fails, take a breath, switch rooms, or tap right on the final countdown—it usually works."
+    - "If you see an error, grab a screenshot for me. I’ll double-check and loop in support if needed."
+public_group_recommend:
+  zh:
+    - "我最常逛的公開群是派活動消息的，你可以在搜尋框輸入 \"fun\"，或者直接戳 @sucai2025_bot 他會推熱門榜。"
+    - "需要找同城？跟我說關鍵字，我幫你貼心整理幾個～"
+    - "如果你想先感受氛圍，我可以先帶你去我們最活躍的開心房，順便幫你介紹幾個很會聊的老朋友。"
+  en:
+    - "I hang out in a public group that shares event drops—search “fun” or just ping @sucai2025_bot for today’s picks."
+    - "Need local vibes? Tell me a keyword and I’ll shortlist a few lively groups for you."
+    - "If you want to warm up first, I can drop you into our friendliest room and introduce you to a few chatter pros."
+create_group_guide:
+  zh:
+    - "要自己開群也好簡單：聊天列表右上角➕→建立群組→把朋友拉進來，三步收工。"
+    - "記得設定群介紹，像我會寫 \"歡迎一起分享搶包戰績\"，看起來超專業但其實兩分鐘搞定。"
+  en:
+    - "Starting your own group is easy: tap the + icon in the chat list → create group → add friends, done."
+    - "Set a cute description like “Share your red packet wins here!”—looks pro and takes just two minutes."
+topup_question:
+  zh:
+    - "充值走 8887893.com，我自己都用，進去後選 USDT 或銀行卡，流程有提示，放心。"
+    - "支付延遲？先別慌，給我訂單號我幫你查，若超過10分鐘立刻轉人工確認。"
+  en:
+    - "Recharge via 8887893.com—pick USDT or bank card and follow the prompts, it’s straightforward."
+    - "If payment lags, don’t panic. Send me the order ID; if it’s over 10 minutes I’ll escalate to support."
+system_issue:
+  zh:
+    - "有卡頓時先重登 Telegram，再進遊戲小程序，usually 馬上好。"
+    - "要是整個平台抽風，我會第一時間通知你，別擔心被丟下。"
+  en:
+    - "If anything freezes, relaunch Telegram and the mini app—it usually snaps back."
+    - "Should the platform glitch widely, I’ll ping you right away so you don’t feel left hanging."
+event_push:
+  zh:
+    - "今晚八點有限時紅包雨，hey hey 算你一份？我設定提醒叫你，不讓你錯過 😎"
+    - "明天午休我會推一個新遊戲挑戰，完成送 20 星星，絕對值得玩。"
+  en:
+    - "There’s a red packet shower tonight at 8 PM—want me to set a reminder so you don’t miss it? 😎"
+    - "Tomorrow at lunch I’m dropping a mini challenge—finish it for 20 star points, totally worth it."
+user_feedback:
+  zh:
+    - "玩完記得跟我說哪個環節最好玩，這樣我下次可以幫你挑更對味的活動～"
+    - "有不順的地方直接吐槽我，promise it’s easy，我們一起調整。"
+  en:
+    - "After you try it, tell me which part was most fun so I can tailor the next round for you."
+    - "If something felt off, just be honest—promise it’s easy, we’ll tweak it together."
+task_completion:
+  zh:
+    - "任務收工啦！你真的超棒，截圖戰績給我，我幫你上榜 shoutout 🎉"
+    - "星星已進帳，記得去商城換道具，要挑不懂的我陪你看。"
+  en:
+    - "Mission complete! You’re awesome—send me a screenshot and I’ll brag about you on the board 🎉"
+    - "Your star points are in—let’s peek at the store together if you’re unsure what to pick."
+urgent_issue:
+  zh:
+    - "如果付款超過 10 分鐘還沒到帳，我立刻升級給人工客服處理，你只要保持聯絡就好。"
+    - "帳號卡住或被風控別驚，先別多點，我會幫你確認狀態然後安排最安全的處理。"
+  en:
+    - "If payment is pending beyond 10 minutes, I’ll escalate right away while you stay with me here."
+    - "If the account gets flagged, pause actions; I’ll check the status and set up the safest next step."
+interest_followup:
+  zh:
+    - "等你玩完記得跟我說最喜歡哪個環節，我超想聽你版本的戰報。"
+    - "如果節奏太快，可以喊我，我有幾個慢速房間先帶你暖身。"
+    - "玩到一半卡住別客氣，直接敲我，我很會邊陪聊邊解 Bug。"
+  en:
+    - "After you try it, tell me which part hooked you—I live for your version of the highlight reel."
+    - "If the pace feels too quick, nudge me; I’ve got a few chill rooms to help you ease in first."
+    - "Should anything glitch mid-run, just ping me—I’m used to chatting and troubleshooting side by side."
+after_trial_checkin:
+  zh:
+    - "我先幫你設提醒，晚點來收戰報，準備一個慶祝位子給你。"
+    - "試玩完記得截圖，我們有小夥伴榜單，讓你一秒變主角。"
+    - "如果喜歡驚喜任務，晚上回來敲我，我再偷偷放幾個新挑戰給你。"
+  en:
+    - "I set a reminder to check back later—can’t wait to hear your score and celebrate properly."
+    - "Snap a screenshot when you’re done; we’ve got a little hall-of-fame moment waiting just for you."
+    - "If you’re into surprise missions, message me tonight and I’ll slip you a few secret challenges."
+hesitation_reassure:
+  zh:
+    - "我懂第一次會猶豫，我會一直在線上，你想停或想聊都超 OK。"
+    - "怕操作複雜我可以先錄個小教學給你，看完再決定也沒問題。"
+    - "就算今天不玩，我們也可以把這裡當放鬆角落，慢慢來。"
+  en:
+    - "I totally get the hesitation—I’ll stay right here, whether you pause or just feel like chatting."
+    - "If the steps feel tricky, I can record a quick walkthrough; watch it first, then decide."
+    - "Even if you skip it today, we can keep this space as your chill corner—no rush at all."

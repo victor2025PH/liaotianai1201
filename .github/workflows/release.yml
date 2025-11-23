@@ -1,0 +1,116 @@
+name: 發布流程
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本號（例如: v1.0.0）'
+        required: true
+        type: string
+
+jobs:
+  # 構建和測試
+  build-and-test:
+    name: 構建和測試
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 檢出代碼
+        uses: actions/checkout@v4
+      
+      - name: 設置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'poetry'
+      
+      - name: 設置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: saas-demo/package-lock.json
+      
+      - name: 安裝後端依賴
+        working-directory: admin-backend
+        run: |
+          pip install poetry
+          poetry install --no-interaction
+      
+      - name: 安裝前端依賴
+        working-directory: saas-demo
+        run: npm ci
+      
+      - name: 運行後端測試
+        working-directory: admin-backend
+        run: poetry run pytest --cov=app --cov-report=xml
+        env:
+          DATABASE_URL: sqlite:///./test.db
+          DISABLE_AUTH: 'true'
+      
+      - name: 構建前端
+        working-directory: saas-demo
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://api.example.com/api/v1
+      
+      - name: 上傳構建產物
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            admin-backend/
+            saas-demo/.next/
+          retention-days: 7
+
+  # 創建發布
+  create-release:
+    name: 創建發布
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: 檢出代碼
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 獲取版本號
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "版本號: $VERSION"
+      
+      - name: 生成發布說明
+        id: release_notes
+        run: |
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "# 發布說明" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "版本: ${{ steps.get_version.outputs.version }}" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "## 變更內容" >> $GITHUB_OUTPUT
+          git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> $GITHUB_OUTPUT || echo "- 初始發布" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: 創建 GitHub 發布
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: 發布 ${{ steps.get_version.outputs.version }}
+          body: ${{ steps.release_notes.outputs.notes }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

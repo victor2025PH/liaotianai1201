@@ -1,0 +1,64 @@
+version: "3.9"
+
+services:
+  session-service:
+    build:
+      context: ..
+      dockerfile: deploy/session-service.Dockerfile
+    env_file:
+      - ../.env
+    volumes:
+      - ../sessions:/app/sessions
+      - ../logs:/app/logs
+      - ../configs:/app/configs
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+
+  admin-backend:
+    build:
+      context: ../admin-backend
+      dockerfile: Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///./admin.db}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SESSION_SERVICE_URL: http://session-service:8001
+    depends_on:
+      - session-service
+      - redis
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  admin-frontend:
+    build:
+      context: ../admin-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://admin-backend:8000/api/v1
+    depends_on:
+      - admin-backend
+    ports:
+      - "4173:80"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: sis
+      POSTGRES_PASSWORD: change_me
+      POSTGRES_DB: sis
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+

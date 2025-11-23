@@ -1,0 +1,37 @@
+不可用账号通知
+生成时间: 2025-11-21 21:21:20
+
+以下账号无法正常启动，请检查：
+账号ID: 639277333688
+Session文件: 639277333688.session
+失败原因: Response status code does not indicate success: 401 (Unauthorized).
+
+账号ID: 639277356155
+Session文件: 639277356155.session
+失败原因: Response status code does not indicate success: 401 (Unauthorized).
+
+账号ID: 639277356598
+Session文件: 639277356598.session
+失败原因: Response status code does not indicate success: 401 (Unauthorized).
+
+账号ID: 639457597211
+Session文件: 639457597211.session
+失败原因: Response status code does not indicate success: 401 (Unauthorized).
+
+账号ID: 639641837416
+Session文件: 639641837416.session
+失败原因: Response status code does not indicate success: 401 (Unauthorized).
+
+账号ID: 639641842001
+Session文件: 639641842001.session
+失败原因: Response status code does not indicate success: 401 (Unauthorized).
+
+账号ID: 639652840998
+Session文件: 639652840998.session
+失败原因: Response status code does not indicate success: 401 (Unauthorized).
+
+账号ID: 639679410504
+Session文件: 639679410504.session
+失败原因: Response status code does not indicate success: 401 (Unauthorized).
+
+

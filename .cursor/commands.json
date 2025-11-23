@@ -1,0 +1,32 @@
+{
+  "environment": {
+    "PYTHONIOENCODING": "utf-8",
+    "PYTHONUTF8": "1"
+  },
+  "prepend_commands": [
+    "chcp 65001 > $null",
+    "$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8"
+  ],
+  "rules": {
+    "must_read_before_starting_services": [
+      ".cursor/rules/always-run-in-cursor-terminal.mdc"
+    ],
+    "service_startup_commands": {
+      "backend": {
+        "command": ".\\scripts\\start_backend.ps1",
+        "description": "在 Cursor 终端中启动后端服务",
+        "must_use": true
+      },
+      "frontend": {
+        "command": ".\\scripts\\start_frontend.ps1",
+        "description": "在 Cursor 终端中启动前端服务",
+        "must_use": true
+      }
+    },
+    "forbidden_patterns": [
+      "Start-Process.*-WindowStyle",
+      "Start-Process.*powershell",
+      "Start-Process.*-NoExit"
+    ]
+  }
+}

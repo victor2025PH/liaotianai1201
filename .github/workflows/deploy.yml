@@ -1,0 +1,329 @@
+name: Deploy to Environments
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'admin-backend/**'
+      - 'admin-frontend/**'
+      - 'saas-demo/**'
+      - 'deploy/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '部署环境'
+        required: true
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      services:
+        description: '要部署的服务（逗号分隔，留空表示全部）'
+        required: false
+        type: string
+      skip_tests:
+        description: '跳过测试'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '20'
+
+jobs:
+  # ============================================
+  # 阶段 1: 测试和构建验证
+  # ============================================
+  test-and-build:
+    name: Test and Build
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_tests || github.event_name == 'push' }}
+    outputs:
+      backend-version: ${{ steps.version.outputs.backend }}
+      frontend-version: ${{ steps.version.outputs.frontend }}
+      demo-version: ${{ steps.version.outputs.demo }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate version tags
+        id: version
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          
+          if [ "$BRANCH_NAME" = "main" ]; then
+            BACKEND_VERSION="v1.${TIMESTAMP}-${SHORT_SHA}"
+            FRONTEND_VERSION="v1.${TIMESTAMP}-${SHORT_SHA}"
+            DEMO_VERSION="v1.${TIMESTAMP}-${SHORT_SHA}"
+          else
+            BACKEND_VERSION="dev-${TIMESTAMP}-${SHORT_SHA}"
+            FRONTEND_VERSION="dev-${TIMESTAMP}-${SHORT_SHA}"
+            DEMO_VERSION="dev-${TIMESTAMP}-${SHORT_SHA}"
+          fi
+          
+          echo "backend=${BACKEND_VERSION}" >> $GITHUB_OUTPUT
+          echo "frontend=${FRONTEND_VERSION}" >> $GITHUB_OUTPUT
+          echo "demo=${DEMO_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run backend tests
+        working-directory: admin-backend
+        run: |
+          pip install poetry
+          poetry install
+          poetry run pytest --cov=app --cov-report=xml --cov-report=html -v
+        env:
+          DATABASE_URL: sqlite:///./test.db
+          DISABLE_AUTH: 'true'
+
+      - name: Run frontend lint and build
+        working-directory: admin-frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+
+      - name: Run saas-demo lint and build
+        working-directory: saas-demo
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://api.example.com/api/v1
+
+  # ============================================
+  # 阶段 2: 构建 Docker 镜像
+  # ============================================
+  build-and-push-images:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: test-and-build
+    if: always() && (needs.test-and-build.result == 'success' || github.event_name == 'workflow_dispatch')
+    strategy:
+      matrix:
+        service:
+          - name: admin-backend
+            context: ./admin-backend
+            dockerfile: ./admin-backend/Dockerfile
+          - name: admin-frontend
+            context: ./admin-frontend
+            dockerfile: ./admin-frontend/Dockerfile
+            build-args: VITE_API_BASE_URL
+          - name: saas-demo
+            context: ./saas-demo
+            dockerfile: ./saas-demo/Dockerfile
+            build-args: NEXT_PUBLIC_API_URL
+          - name: session-service
+            context: .
+            dockerfile: ./deploy/session-service.Dockerfile
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service.name }}
+          tags: |
+            type=raw,value=${{ needs.test-and-build.outputs.backend-version }},enable={{isDefault(github.ref)}}
+            type=raw,value=${{ needs.test-and-build.outputs.frontend-version }},enable={{isDefault(github.ref)}}
+            type=raw,value=${{ needs.test-and-build.outputs.demo-version }},enable={{isDefault(github.ref)}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{isDefault(github.ref)}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            ${{ matrix.service.build-args }}
+
+  # ============================================
+  # 阶段 3: 部署到开发环境
+  # ============================================
+  deploy-development:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    needs: build-and-push-images
+    if: |
+      always() &&
+      (github.ref == 'refs/heads/develop' || 
+       (github.event_name == 'workflow_dispatch' && inputs.environment == 'development'))
+    environment:
+      name: development
+      url: https://dev-api.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBECONFIG_DEV }}" | base64 -d > kubeconfig
+          export KUBECONFIG=$(pwd)/kubeconfig
+          kubectl config view
+
+      - name: Deploy to Kubernetes
+        run: |
+          export KUBECONFIG=$(pwd)/kubeconfig
+          
+          # 更新镜像版本
+          sed -i "s|image:.*admin-backend.*|image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/admin-backend:${{ needs.test-and-build.outputs.backend-version }}|g" deploy/k8s/admin-backend-deployment.yaml
+          sed -i "s|image:.*admin-frontend.*|image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/admin-frontend:${{ needs.test-and-build.outputs.frontend-version }}|g" deploy/k8s/admin-frontend-deployment.yaml
+          sed -i "s|image:.*saas-demo.*|image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/saas-demo:${{ needs.test-and-build.outputs.demo-version }}|g" deploy/k8s/admin-frontend-deployment.yaml
+          
+          # 应用配置
+          kubectl apply -f deploy/k8s/namespace.yaml
+          kubectl apply -f deploy/k8s/configmap.yaml
+          kubectl apply -f deploy/k8s/admin-backend-deployment.yaml
+          kubectl apply -f deploy/k8s/admin-frontend-deployment.yaml
+          
+          # 等待部署完成
+          kubectl rollout status deployment/admin-backend -n group-ai --timeout=5m
+          kubectl rollout status deployment/admin-frontend -n group-ai --timeout=5m
+          kubectl rollout status deployment/saas-demo -n group-ai --timeout=5m
+
+      - name: Verify deployment
+        run: |
+          export KUBECONFIG=$(pwd)/kubeconfig
+          kubectl get pods -n group-ai
+          kubectl get svc -n group-ai
+
+      - name: Health check
+        run: |
+          export KUBECONFIG=$(pwd)/kubeconfig
+          kubectl port-forward -n group-ai svc/admin-backend-service 8000:8000 &
+          sleep 5
+          curl -f http://localhost:8000/health || exit 1
+
+  # ============================================
+  # 阶段 4: 部署到生产环境
+  # ============================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-and-push-images
+    if: |
+      always() &&
+      (github.ref == 'refs/heads/main' || 
+       (github.event_name == 'workflow_dispatch' && inputs.environment == 'production'))
+    environment:
+      name: production
+      url: https://api.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > kubeconfig
+          export KUBECONFIG=$(pwd)/kubeconfig
+          kubectl config view
+
+      - name: Create backup
+        run: |
+          export KUBECONFIG=$(pwd)/kubeconfig
+          kubectl get deployment admin-backend -n group-ai -o yaml > backup-admin-backend-$(date +%Y%m%d-%H%M%S).yaml || true
+          kubectl get deployment admin-frontend -n group-ai -o yaml > backup-admin-frontend-$(date +%Y%m%d-%H%M%S).yaml || true
+
+      - name: Deploy to Kubernetes
+        run: |
+          export KUBECONFIG=$(pwd)/kubeconfig
+          
+          # 更新镜像版本
+          sed -i "s|image:.*admin-backend.*|image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/admin-backend:${{ needs.test-and-build.outputs.backend-version }}|g" deploy/k8s/admin-backend-deployment.yaml
+          sed -i "s|image:.*admin-frontend.*|image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/admin-frontend:${{ needs.test-and-build.outputs.frontend-version }}|g" deploy/k8s/admin-frontend-deployment.yaml
+          sed -i "s|image:.*saas-demo.*|image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/saas-demo:${{ needs.test-and-build.outputs.demo-version }}|g" deploy/k8s/admin-frontend-deployment.yaml
+          
+          # 应用配置
+          kubectl apply -f deploy/k8s/namespace.yaml
+          kubectl apply -f deploy/k8s/configmap.yaml
+          kubectl apply -f deploy/k8s/admin-backend-deployment.yaml
+          kubectl apply -f deploy/k8s/admin-frontend-deployment.yaml
+          
+          # 等待部署完成
+          kubectl rollout status deployment/admin-backend -n group-ai --timeout=10m
+          kubectl rollout status deployment/admin-frontend -n group-ai --timeout=10m
+          kubectl rollout status deployment/saas-demo -n group-ai --timeout=10m
+
+      - name: Verify deployment
+        run: |
+          export KUBECONFIG=$(pwd)/kubeconfig
+          kubectl get pods -n group-ai
+          kubectl get svc -n group-ai
+
+      - name: Health check
+        run: |
+          export KUBECONFIG=$(pwd)/kubeconfig
+          kubectl port-forward -n group-ai svc/admin-backend-service 8000:8000 &
+          sleep 5
+          curl -f http://localhost:8000/health || exit 1
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          export KUBECONFIG=$(pwd)/kubeconfig
+          echo "部署失败，执行回滚..."
+          kubectl rollout undo deployment/admin-backend -n group-ai
+          kubectl rollout undo deployment/admin-frontend -n group-ai
+          kubectl rollout undo deployment/saas-demo -n group-ai
+
+      - name: Send deployment notification
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            生产环境部署 ${{ job.status }}
+            版本: ${{ needs.test-and-build.outputs.backend-version }}
+            提交: ${{ github.sha }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+

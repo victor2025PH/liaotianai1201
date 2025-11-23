@@ -1,0 +1,70 @@
+script_name: task_5_script
+steps:
+- step: 1
+  actor: huge
+  action: speak
+  delay_after: 2
+  lines:
+  - 家人们注意了！下一个任务非常特别，是一个【水滴公益捐献任务】，马上发布，请注意消息！
+  - '💖 **水滴公益捐献任务（5）** 💖 **结算时间：14:30**
+
+    步骤：微信公众号搜索【水滴公益】，【捐款任意项目】
+
+    - 捐赠1元，捐赠账单截图出来联系接待员，领取 **2.8元** - 捐赠3元，捐赠账单截图出来联系接待员，领取 **5.8元** - 捐赠5元，捐赠账单截图出来联系接待员，领取
+    **8.8元**
+
+    ▄▄▄公益完成本佣立返▄▄▄ 【连续做满7单额外奖励 8米】 【连续做满11单额外奖励 38米】 （注：任务不可中断）'
+- step: 2
+  actor: huge
+  action: speak
+  delay_after: 2
+  lines:
+  - 本次活动由我们亿企赢网络科技有限公司和水滴公益共同举行的，爱心慈善活动，捐献金额自由选择。
+  - 大家献出一份爱心，我们公司再给大家一份返利，双赢！
+- step: 3
+  actor: xiaoyou
+  action: speak
+  delay_after: 2
+  lines:
+  - 哇，做公益还有的赚？这个好！我选那个5块的试试！
+- step: 4
+  actor: siya
+  action: speak
+  delay_after: 2
+  lines:
+  - 这个活动有意义，还能赚钱，我去看看！
+- step: 5
+  actor: xiaoyou
+  action: speak
+  delay_after: 2
+  lines:
+  - '[image] FAKE_TASK_5_DONATION_SCREENSHOT.jpg'
+  - '@虎哥 虎哥，我捐好啦，截图发你了！'
+- step: 6
+  actor: huge
+  action: speak
+  delay_after: 2
+  lines:
+  - '@小柚 收到，马上安排财务给你结算！'
+  - 捐献成功的小伙伴截图发群里出来，每人提供一张即可，方便我们统计结算。谢谢！
+- step: 7
+  actor: xiaoyou
+  action: speak
+  delay_after: 2
+  lines:
+  - '[image] FAKE_TASK_5_PAYMENT_RECEIVED.jpg'
+  - 哇！收到了！真的返了8.8米！太给力了！
+- step: 8
+  actor: siya
+  action: speak
+  delay_after: 2
+  lines:
+  - 我也收到了！这活动是真的！大家快上车！
+- step: 9
+  actor: huge
+  action: speak
+  delay_after: 2
+  lines:
+  - 看到了吧家人们，活动真实有效，爱心必须支持！
+  - 收到工资的小伙伴记得要晒到账图分享群里出来，已证明我们活动的真实性。
+  - 第五个关注活动已结束，大家别离开，马上发布下一个活动，注意关注群消息。

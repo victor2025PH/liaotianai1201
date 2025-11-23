@@ -1,0 +1,158 @@
+{
+  "deployments": [
+    {
+      "timestamp": "2025-11-17T12:09:24.380929",
+      "node_id": "worker-01",
+      "step": "系统包检查",
+      "status": "进行中",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-11-17T12:09:28.874163",
+      "node_id": "worker-01",
+      "step": "系统包检查",
+      "status": "完成",
+      "details": "已安装: "
+    },
+    {
+      "timestamp": "2025-11-17T12:09:28.874985",
+      "node_id": "worker-01",
+      "step": "虚拟环境",
+      "status": "进行中",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-11-17T12:09:30.949296",
+      "node_id": "worker-01",
+      "step": "虚拟环境",
+      "status": "失败",
+      "details": "创建失败"
+    },
+    {
+      "timestamp": "2025-11-17T12:22:26.455749",
+      "node_id": "worker-01",
+      "step": "系统包检查",
+      "status": "进行中",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-11-17T12:22:31.024205",
+      "node_id": "worker-01",
+      "step": "系统包检查",
+      "status": "完成",
+      "details": "已安装: "
+    },
+    {
+      "timestamp": "2025-11-17T12:22:31.024751",
+      "node_id": "worker-01",
+      "step": "虚拟环境",
+      "status": "进行中",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-11-17T12:22:33.109728",
+      "node_id": "worker-01",
+      "step": "虚拟环境",
+      "status": "失败",
+      "details": "创建失败"
+    },
+    {
+      "timestamp": "2025-11-17T12:22:46.936725",
+      "node_id": "worker-01",
+      "step": "系统包检查",
+      "status": "进行中",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-11-17T12:22:51.809708",
+      "node_id": "worker-01",
+      "step": "系统包检查",
+      "status": "完成",
+      "details": "已安装: "
+    },
+    {
+      "timestamp": "2025-11-17T12:22:51.810289",
+      "node_id": "worker-01",
+      "step": "虚拟环境",
+      "status": "进行中",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-11-17T12:23:01.085086",
+      "node_id": "worker-01",
+      "step": "虚拟环境",
+      "status": "完成",
+      "details": "创建成功"
+    },
+    {
+      "timestamp": "2025-11-17T12:23:01.085745",
+      "node_id": "worker-01",
+      "step": "pip安装",
+      "status": "进行中",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-11-17T12:23:02.796412",
+      "node_id": "worker-01",
+      "step": "pip安装",
+      "status": "完成",
+      "details": "安装成功"
+    },
+    {
+      "timestamp": "2025-11-17T12:23:02.796945",
+      "node_id": "worker-01",
+      "step": "Python包安装",
+      "status": "进行中",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-11-17T12:23:44.419678",
+      "node_id": "worker-01",
+      "step": "Python包安装",
+      "status": "完成",
+      "details": "已安装 53 个包"
+    },
+    {
+      "timestamp": "2025-11-17T12:23:44.421282",
+      "node_id": "worker-01",
+      "step": "启动脚本",
+      "status": "进行中",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-11-17T12:23:45.086481",
+      "node_id": "worker-01",
+      "step": "启动脚本",
+      "status": "完成",
+      "details": "创建成功"
+    },
+    {
+      "timestamp": "2025-11-17T12:23:45.087062",
+      "node_id": "worker-01",
+      "step": "Systemd服务",
+      "status": "进行中",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-11-17T12:23:47.695325",
+      "node_id": "worker-01",
+      "step": "Systemd服务",
+      "status": "完成",
+      "details": "创建成功"
+    },
+    {
+      "timestamp": "2025-11-17T12:23:47.695930",
+      "node_id": "worker-01",
+      "step": "服务启动",
+      "status": "进行中",
+      "details": ""
+    },
+    {
+      "timestamp": "2025-11-17T12:23:54.518775",
+      "node_id": "worker-01",
+      "step": "服务启动",
+      "status": "失败",
+      "details": "启动失败"
+    }
+  ]
+}

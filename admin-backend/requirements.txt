@@ -1,0 +1,34 @@
+# FastAPI 核心
+fastapi>=0.115.5
+uvicorn>=0.32.1
+pydantic>=2.9.0
+pydantic-settings>=2.4.1
+
+# 數據庫
+sqlalchemy>=2.0.36
+alembic>=1.13.3
+
+# 認證和安全
+passlib>=1.7.4
+bcrypt>=4.2.0
+python-jose>=3.3.0
+
+# 緩存和限流
+redis>=5.2.0
+slowapi>=0.1.9
+
+# 其他
+python-multipart>=0.0.7
+httpx>=0.27.2
+email-validator>=2.2.0
+
+# 數據導出
+openpyxl>=3.1.2
+reportlab>=4.0.7
+
+# 任務調度
+apscheduler>=3.10.4
+
+# SSH連接（Telegram註冊功能）
+paramiko>=3.4.0
+

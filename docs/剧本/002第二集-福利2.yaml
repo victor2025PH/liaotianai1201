@@ -1,0 +1,86 @@
+script_name: task_2_script
+steps:
+- step: 1
+  actor: huge
+  action: speak
+  delay_after: 2
+  lines:
+  - 第二个任务来了，这次是抖音关注！跟上操作！
+  - '🧧 **抖音关注用户如下：** 🧧
+
+    **福力关注活动（2）**
+
+    **结算时间：12:15**
+
+
+    ▄▄▄▄▄▄▄▄▄▄▄
+
+    步骤①：打开抖音
+
+    步骤②：点击抖音搜索用户【熊猫能量社区】
+
+    步骤③：点赞关注任意作品截图发群里统计
+
+    步骤④：并附带zfb收歀码领本次工资 **3.8米**
+
+
+    ▄▄▄▄▄▄▄▄▄▄▄
+
+    【连续做满3单额外奖励 3米】
+
+    【连续做满7单额外奖励 8米】
+
+    【连续做满11单额外奖励 38米】
+
+    （注：任务不可中断）
+
+    ▄▄▄▄▄▄▄▄▄▄▄
+
+    '
+- step: 2
+  actor: siya
+  action: speak
+  delay_after: 2
+  lines:
+  - 来啦来啦！这就去关注！
+- step: 3
+  actor: xiaoyou
+  action: speak
+  delay_after: 2
+  lines:
+  - 熊猫能量社区，好的，马上去搜！
+- step: 4
+  actor: huge
+  action: speak
+  delay_after: 2
+  lines:
+  - 大家注意，这單关注的工资是3.8米，大家做好关注截图发群里并附带各自的zfb收歀码，统计洁算工资。
+  - 本單关注马上结束，还没做的抓紧时间。做好截图发群里出来统计。
+- step: 5
+  actor: siya
+  action: speak
+  delay_after: 2
+  lines:
+  - '[image] FAKE_TASK_2_SCREENSHOT_A.jpg'
+  - 搞定！截图发了哈~
+- step: 6
+  actor: xiaoyou
+  action: speak
+  delay_after: 2
+  lines:
+  - '[image] FAKE_TASK_2_SCREENSHOT_B.jpg'
+  - 我也好了，这个也太简单了吧！
+- step: 7
+  actor: huge
+  action: speak
+  delay_after: 2
+  lines:
+  - 首先感谢大家来做这个动动手指的关注活动，还没有做关注的小伙伴抓紧时间去做！
+  - 现商家关注活动多多，都是动动手指的事情，一天轻松拿个几十一百的零花钱是没问题的。
+- step: 8
+  actor: huge
+  action: speak
+  delay_after: 2
+  lines:
+  - ⏳ 任务结算时间已到，本轮任务奖励已在逐一派发，收到工资的小伙伴记得要晒到账图分享群里出来，已证明我们活动的真实性。
+  - 第二个关注活动已结束，下一个关注抖音用户5分后发布，大家别离开，注意关注群消息！

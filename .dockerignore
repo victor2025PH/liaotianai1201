@@ -1,0 +1,65 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Session files (should be mounted as volume)
+sessions/
+
+# Config files (should be mounted as volume)
+configs/
+
+# Frontend build artifacts
+admin-frontend/dist/
+admin-frontend/node_modules/
+saas-demo/.next/
+saas-demo/node_modules/
+saas-demo/out/
+
+# Backend build artifacts
+admin-backend/__pycache__/
+admin-backend/.pytest_cache/
+admin-backend/htmlcov/
+admin-backend/dist/
+admin-backend/build/
+admin-backend/*.egg-info/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+

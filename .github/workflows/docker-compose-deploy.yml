@@ -1,0 +1,70 @@
+name: Deploy with Docker Compose
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '部署环境'
+        required: true
+        type: choice
+        options:
+          - development
+          - staging
+      action:
+        description: '操作'
+        required: true
+        type: choice
+        options:
+          - deploy
+          - update
+          - rollback
+
+env:
+  DOCKER_COMPOSE_FILE: deploy/docker-compose.yaml
+
+jobs:
+  deploy:
+    name: Deploy with Docker Compose
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          docker-compose --version
+
+      - name: Create .env file
+        run: |
+          echo "${{ secrets.ENV_FILE }}" > .env
+
+      - name: Build images
+        if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'update'
+        run: |
+          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} build
+
+      - name: Deploy services
+        if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'update'
+        run: |
+          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d
+          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps
+
+      - name: Rollback
+        if: github.event.inputs.action == 'rollback'
+        run: |
+          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down
+          # 恢复到之前的版本（需要实现版本管理）
+
+      - name: Health check
+        run: |
+          sleep 10
+          curl -f http://localhost:8000/health || exit 1
+
+      - name: Show logs
+        if: failure()
+        run: |
+          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} logs --tail=100
+

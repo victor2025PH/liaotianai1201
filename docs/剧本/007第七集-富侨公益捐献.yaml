@@ -1,0 +1,109 @@
+script_name: task_7_script
+steps:
+- step: 1
+  actor: huge
+  action: speak
+  delay_after: 2
+  lines:
+  - 📣📣📣 @所有人 接下来是我们合作商【富侨公益】的任务！
+  - 由于亿企赢网络科技有限公司旗下的公益平台急需大量不同ID用户进行爱心捐献，特此跟我们合作达成助力推进！
+  - 名额有限，先到先得！！要做的群里扣【1】，我们统计下人数！
+- step: 2
+  actor: xiaou
+  action: speak
+  delay_after: 2
+  lines:
+  - '1'
+- step: 3
+  actor: siya
+  action: speak
+  delay_after: 2
+  lines:
+  - 111，我来啦！
+- step: 4
+  actor: huge
+  action: speak
+  delay_after: 2
+  lines:
+  - '爱，是一辈子坚持的善行，以此善举，持续支持每一个困难的家庭！！亿企赢网络科技在此深深的致谢！
+
+    ❤️ **富侨公益捐献活动（7）** ❤️
+
+    ★公益任务★
+
+    ▄▄▄▄▄▄▄▄▄▄▄
+
+    步骤①：打开蚂蚁 (或对应聊天软件)
+
+    步骤②：进入蚂蚁会话页面
+
+    步骤③：联系接待员
+
+    步骤④：自行选择捐赠金额
+
+    步骤⑤：任务完成晒拥金到账图
+
+
+    ★公益竟猜金额如下★
+
+    A: 公益捐献60，佣金20，共计结算：**80元**
+
+    B: 公益捐献110，佣金35，共计结算：**145元**
+
+    C: 公益捐献190，佣金55，共计结算：**245元**
+
+    D: 公益捐献390，佣金101，共计结算：**491元**
+
+    E: 公益捐献590，佣金135，共计结算：**725元**
+
+
+    ▄▄▄公益完成本佣立返▄▄▄
+
+    【连续做满11单额外奖励 68米】
+
+    【连续做满18单额外奖励 188米】
+
+    （注：任务不可中断）
+
+    '
+- step: 5
+  actor: xiaou
+  action: speak
+  delay_after: 2
+  lines:
+  - 哇！这个返的有点多啊！我选B档，110那个！已经联系接待员了！
+- step: 6
+  actor: siya
+  action: speak
+  delay_after: 2
+  lines:
+  - 搏一搏，单车变摩托！我选C档，190的！
+- step: 7
+  actor: huge
+  action: speak
+  delay_after: 2
+  lines:
+  - 本次公益任务是由富侨集团提供，以亿企赢网络科技保障，以【竞猜方式】返本佣，任务十分钟即可完成。
+  - 本次公益捐献任务就是走个过程，提高捐献次量，需要自己捐献到公益指定账户，由【指导员】带你们完成竞猜，完成后即可结算捐献金以及佣金。
+  - 开始报备捐献金额统计人员，捐献金额自由选择，选择好金额群里报备出来！
+- step: 8
+  actor: xiaou
+  action: speak
+  delay_after: 2
+  lines:
+  - '[image] FAKE_TASK_7_PAYMENT_RECEIVED_A.jpg'
+  - 天啊，真的假的！完成了！秒到145！这也太快了！
+- step: 9
+  actor: siya
+  action: speak
+  delay_after: 2
+  lines:
+  - '[image] FAKE_TASK_7_PAYMENT_RECEIVED_B.jpg'
+  - 我的也到了！245！感谢虎哥！感谢富侨公益！
+- step: 10
+  actor: huge
+  action: speak
+  delay_after: 2
+  lines:
+  - 恭喜两位！信则有，不信则无！机会就在眼前！
+  - 本单任务已经结束，还没做的朋友可以私聊接待员问问还有没有名额！连续做满7单的小伙伴联系各自的接待员领取额外奖励8元！

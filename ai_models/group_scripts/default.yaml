@@ -1,0 +1,28 @@
+script_id: default
+version: '1.0'
+description: 默认剧本 - 用于自动回复
+scenes:
+- scene_id: greeting
+  name: 问候场景
+  triggers:
+  - keywords:
+    - 你好
+    - hello
+    - hi
+    match_type: contains
+    type: message
+  responses:
+  - probability: 1.0
+    template: 你好！很高兴认识你。
+  id: scene_1
+- scene_id: general
+  name: 通用场景
+  triggers:
+  - keywords:
+    - '*'
+    match_type: always
+    type: message
+  responses:
+  - probability: 0.5
+    template: 谢谢你的消息！
+  id: scene_2

@@ -1,0 +1,44 @@
+script_id: daily_chat
+version: 1.0
+description: 日常聊天劇本示例
+
+scenes:
+  - id: greeting
+    triggers:
+      - type: keyword
+        keywords: ["你好", "hello", "hi", "嗨"]
+      - type: new_member
+    responses:
+      - template: "你好！很高興認識你 😊"
+      - template: "Hi! Nice to meet you!"
+      - template: "嗨呀，終於碰上你，最近過得如何？"
+    next_scene: conversation
+
+  - id: conversation
+    triggers:
+      - type: message
+        min_length: 5
+    responses:
+      - template: "{{contextual_reply}}"
+        ai_generate: true
+        context_window: 10
+        temperature: 0.7
+    next_scene: conversation
+
+  - id: redpacket_detected
+    triggers:
+      - type: redpacket
+    responses:
+      - action: participate_redpacket
+        strategy: random
+        probability: 0.7
+    next_scene: conversation
+
+variables:
+  user_name: "{{extract_name}}"
+  conversation_topic: "{{detect_topic}}"
+
+metadata:
+  author: "System"
+  created_at: "2024-12-19"
+

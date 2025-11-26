@@ -1,0 +1,101 @@
+# API 配置一键应用规则
+
+## 用途
+批量将前端 API 配置从生产环境切换到本地开发环境，或反之。
+
+## 应用规则
+
+### 规则 1: API Base URL 配置
+**目标**: 统一所有 API 文件的默认地址配置
+
+**文件列表**:
+- `src/lib/api-client.ts`
+- `src/lib/api/auth.ts`
+- `src/lib/api/notifications.ts`
+- `src/lib/api/users.ts`
+- `src/lib/api/servers.ts`
+- `src/lib/api/permissions.ts`
+- `src/lib/api/roles.ts`
+- `src/lib/api/audit-logs.ts`
+- `src/lib/api/telegram-registration.ts`
+- `src/lib/api/group-ai.ts`
+- `src/lib/api/user-roles.ts`
+- `src/hooks/useAccountsQuery.ts`
+- `src/components/notification-center.tsx`
+
+**替换规则**:
+
+#### 开发环境 (localhost)
+```typescript
+// 统一使用以下格式
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1"
+// 或
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1/group-ai"
+```
+
+#### 生产环境 (服务器)
+```typescript
+// 统一使用以下格式
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://jblt.usdt2026.cc/api/v1"
+// 或
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://jblt.usdt2026.cc/api/v1/group-ai"
+```
+
+### 规则 2: TypeScript 类型优化
+**目标**: 统一使用 `unknown` 替代 `any`
+
+**文件列表**:
+- `src/lib/api/notifications.ts`
+- `src/lib/api/group-ai.ts`
+
+**替换规则**:
+```typescript
+// 将所有 Record<string, any> 替换为 Record<string, unknown>
+Record<string, any> → Record<string, unknown>
+```
+
+### 规则 3: 错误消息统一
+**目标**: 统一错误提示信息
+
+**文件列表**:
+- `src/lib/api/auth.ts`
+
+**替换规则**:
+```typescript
+// 开发环境
+throw new Error("無法連接到後端服務，請檢查服務是否運行（http://localhost:8000）")
+
+// 生产环境
+throw new Error("無法連接到後端服務，請檢查網絡連接")
+```
+
+## 使用方法
+
+### 方法 1: 使用脚本一键应用
+运行以下脚本可以批量应用所有规则：
+
+```bash
+# 切换到开发环境
+npm run apply:dev
+
+# 切换到生产环境
+npm run apply:prod
+```
+
+### 方法 2: 手动应用
+1. 打开 `.cursor/rules/api-config-apply.mdc`
+2. 查看需要修改的文件列表
+3. 按照替换规则逐个修改
+
+## 注意事项
+
+1. **环境变量优先级**: 始终优先使用环境变量，fallback 到默认值
+2. **一致性**: 确保所有文件使用相同的环境变量名称
+3. **类型安全**: 使用 `unknown` 而不是 `any` 以提高类型安全
+4. **测试**: 应用规则后务必测试 API 连接
+
+## 当前配置状态
+
+- **默认环境**: 开发环境 (localhost:8000)
+- **生产环境**: jblt.usdt2026.cc
+- **类型优化**: 已应用 (Record<string, unknown>)

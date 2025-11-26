@@ -8,8 +8,15 @@ from app.api.deps import get_current_active_user
 
 logger = logging.getLogger(__name__)
 
-# 导入基础模块
-from app.api.group_ai import accounts, scripts, monitor, control, role_assignments, script_versions, servers, logs, dashboard, alert_rules, dialogue, redpacket, script_review, role_assignment_schemes, export, automation_tasks, telegram_alerts, session_export, account_allocation, allocation, account_management
+# 导入基础模块（logs 延迟导入以避免循环导入）
+from app.api.group_ai import accounts, scripts, monitor, control, role_assignments, script_versions, servers, dashboard, alert_rules, dialogue, redpacket, script_review, role_assignment_schemes, export, automation_tasks, telegram_alerts, session_export, account_allocation, allocation, account_management
+
+# 延迟导入 logs 以避免循环导入（logs 导入 servers，而 __init__ 同时导入两者）
+try:
+    from app.api.group_ai import logs
+except ImportError as e:
+    logger.warning(f"Logs模块导入失败: {e}，将跳过logs路由注册")
+    logs = None
 
 # 显式导入groups模块，添加错误处理
 try:
@@ -98,12 +105,14 @@ router.include_router(
     tags=["servers"],
     # dependencies=protected_dependency,  # 移除路由级别依赖，使用端点级别依赖
 )
-router.include_router(
-    logs.router,
-    prefix="/logs",
-    tags=["logs"],
-    # dependencies=protected_dependency,  # 移除路由级别依赖，使用端点级别依赖
-)
+# 注册 logs 路由（如果成功导入）
+if logs is not None:
+    router.include_router(
+        logs.router,
+        prefix="/logs",
+        tags=["logs"],
+        # dependencies=protected_dependency,  # 移除路由级别依赖，使用端点级别依赖
+    )
 router.include_router(
     dashboard.router,
     prefix="/dashboard",

@@ -1,10 +1,9 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Circle, AlertCircle, Info } from "lucide-react";
+import { CheckCircle2, Circle, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import Link from "next/link";
 
 export interface Step {
   number: number;
@@ -27,94 +26,40 @@ export function StepIndicator({
   steps, 
   title,
   description,
-  guideContent 
 }: StepIndicatorProps) {
-  const getStepIcon = (step: Step) => {
-    if (step.status === "completed") {
-      return <CheckCircle2 className="h-5 w-5 text-green-600" />;
-    } else if (step.status === "current") {
-      return <Circle className="h-5 w-5 text-primary fill-primary" />;
-    } else {
-      return <Circle className="h-5 w-5 text-muted-foreground" />;
-    }
-  };
-
-  const getStepBadge = (step: Step) => {
-    if (step.status === "optional") {
-      return <Badge variant="outline" className="ml-2">可選</Badge>;
-    }
-    return null;
-  };
-
   return (
-    <div className="space-y-4 mb-6">
-      {title && (
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground font-bold text-lg">
-            {currentStep}
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold">{title}</h2>
-            {description && (
-              <p className="text-muted-foreground text-sm mt-1">{description}</p>
+    <div className="flex items-center gap-2 mb-4 p-3 bg-muted/30 rounded-lg overflow-x-auto">
+      {steps.map((step, index) => (
+        <div key={step.number} className="flex items-center">
+          <Link 
+            href={step.href}
+            className={cn(
+              "flex items-center gap-1.5 px-2 py-1 rounded text-xs whitespace-nowrap transition-colors",
+              step.status === "current" && "bg-primary text-primary-foreground",
+              step.status === "completed" && "text-green-600 hover:bg-green-50",
+              step.status === "pending" && "text-muted-foreground hover:bg-muted",
+              step.status === "optional" && "text-muted-foreground hover:bg-muted"
             )}
-          </div>
+          >
+            {step.status === "completed" ? (
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            ) : step.status === "current" ? (
+              <span className="w-4 h-4 rounded-full bg-primary-foreground text-primary text-[10px] flex items-center justify-center font-bold">
+                {step.number}
+              </span>
+            ) : (
+              <Circle className="h-3.5 w-3.5" />
+            )}
+            <span className="font-medium">{step.title}</span>
+            {step.status === "optional" && (
+              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">可選</Badge>
+            )}
+          </Link>
+          {index < steps.length - 1 && (
+            <ChevronRight className="h-3 w-3 mx-1 text-muted-foreground flex-shrink-0" />
+          )}
         </div>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">工作流程步驟</CardTitle>
-          <CardDescription>按照順序完成以下步驟以配置系統</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {steps.map((step, index) => (
-              <div
-                key={step.number}
-                className={cn(
-                  "flex items-start gap-4 p-3 rounded-lg border transition-colors",
-                  step.status === "current" && "bg-primary/5 border-primary",
-                  step.status === "completed" && "bg-green-50 border-green-200",
-                  step.status === "pending" && "bg-muted/30 border-border"
-                )}
-              >
-                <div className="flex-shrink-0 mt-0.5">
-                  {getStepIcon(step)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm">
-                      步驟 {step.number}: {step.title}
-                    </span>
-                    {getStepBadge(step)}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {step.description}
-                  </p>
-                </div>
-                {step.status === "current" && (
-                  <Badge variant="default" className="ml-auto">
-                    當前步驟
-                  </Badge>
-                )}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {guideContent && (
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertDescription>
-            <div className="space-y-2">
-              {guideContent}
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
+      ))}
     </div>
   );
 }
-

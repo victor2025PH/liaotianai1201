@@ -25,9 +25,9 @@
       "openai_api_key": ""
     },
     "manila": {
-      "host": "165.154.233.179",
+      "host": "165.154.233.55",
       "user": "ubuntu",
-      "password": "8iDcGrYb52Fxpzee",
+      "password": "Along2025!!!",
       "node_id": "manila",
       "deploy_dir": "/home/ubuntu",
       "max_accounts": 5,

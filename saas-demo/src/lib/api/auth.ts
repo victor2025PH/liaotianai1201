@@ -2,7 +2,9 @@
  * 認證 API 客戶端
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+import { getApiBaseUrl } from "./config";
+
+const API_BASE = getApiBaseUrl();
 
 export interface LoginRequest {
   username: string // 郵箱
@@ -60,7 +62,7 @@ export async function login(credentials: LoginRequest): Promise<TokenResponse> {
     // 網絡錯誤
     if (error instanceof TypeError && error.message.includes("fetch")) {
       console.error("[API] 網絡錯誤，無法連接到後端服務（登錄 API）")
-      throw new Error("無法連接到後端服務，請檢查服務是否運行（http://localhost:8000）")
+      throw new Error(`無法連接到後端服務，請檢查服務是否運行（${API_BASE}）`)
     }
     // 重新拋出其他錯誤
     throw error

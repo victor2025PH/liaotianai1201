@@ -859,25 +859,7 @@ export default function GroupAIScriptsPage() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <StepIndicator
-        currentStep={1}
-        steps={workflowSteps}
-        title="劇本管理"
-        description="創建和管理 AI 對話劇本，這是配置系統的第一步"
-        guideContent={
-          <>
-            <p className="font-semibold mb-2">使用指導：</p>
-            <ol className="list-decimal list-inside space-y-1 text-sm">
-              <li>點擊「創建劇本」按鈕創建新劇本</li>
-              <li>填寫劇本 ID、名稱、版本和描述</li>
-              <li>編寫 YAML 格式的劇本內容，定義對話場景和角色</li>
-              <li>使用「智能轉換」功能將舊格式轉換為新格式</li>
-              <li>使用「內容優化」功能優化劇本內容</li>
-              <li>保存劇本後，進入 <Link href="/group-ai/accounts" className="text-primary underline">步驟 2：賬號管理</Link></li>
-            </ol>
-          </>
-        }
-      />
+      <StepIndicator currentStep={1} steps={workflowSteps} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">劇本管理</h1>

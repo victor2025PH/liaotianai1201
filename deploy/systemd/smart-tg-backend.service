@@ -1,0 +1,35 @@
+[Unit]
+Description=Smart TG Backend API Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/smart-tg/admin-backend
+Environment="PATH=/opt/smart-tg/admin-backend/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/smart-tg/admin-backend/.env
+ExecStart=/opt/smart-tg/admin-backend/.venv/bin/gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 120 --access-logfile - --error-logfile -
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=smart-tg-backend
+
+# 安全设置
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/smart-tg/admin-backend
+ReadWritePaths=/opt/smart-tg/data
+ReadWritePaths=/opt/smart-tg/logs
+
+# 资源限制
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
+

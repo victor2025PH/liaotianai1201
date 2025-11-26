@@ -2,7 +2,9 @@
  * 群組 AI API 客戶端
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1/group-ai"
+import { getGroupAiApiBaseUrl } from "./config";
+
+const API_BASE = getGroupAiApiBaseUrl();
 
 export interface Account {
   account_id: string

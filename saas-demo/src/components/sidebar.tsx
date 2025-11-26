@@ -36,11 +36,11 @@ const navigation = [
     description: "系統總覽和快速訪問",
   },
   {
-    name: "服務器狀態",
-    href: "/group-ai/servers",
-    icon: Server,
+    name: "節點管理",
+    href: "/group-ai/nodes",
+    icon: Monitor,
     step: null,
-    description: "查看服務器運行狀態",
+    description: "管理本地電腦和遠程服務器",
   },
   {
     name: "Telegram 註冊",
@@ -91,7 +91,7 @@ const navigation = [
   // ========== 監控和管理 ==========
   {
     name: "群組監控",
-    href: "/group-ai/monitor",
+    href: "/group-ai/groups",
     icon: Monitor,
     step: null,
     description: "監控群組活動和消息",

@@ -22,6 +22,7 @@ import {
   markAllRead,
   type Notification,
 } from "@/lib/api/notifications"
+import { getWebSocketUrl } from "@/lib/api/config"
 
 // 日期格式化函數
 const formatDateTime = (dateString: string) => {
@@ -55,7 +56,8 @@ export function NotificationCenter() {
     const fetchUserEmail = async () => {
       try {
         const { fetchWithAuth } = await import("@/lib/api/client");
-        const response = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000/api/v1"}/users/me`, {
+        const { getApiBaseUrl } = await import("@/lib/api/config");
+        const response = await fetchWithAuth(`${getApiBaseUrl()}/users/me`, {
           credentials: "include",
         })
         
@@ -129,11 +131,7 @@ export function NotificationCenter() {
     }
 
     try {
-      const wsUrl =
-        process.env.NEXT_PUBLIC_WS_URL ||
-        (typeof window !== "undefined"
-          ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/v1/notifications/ws`
-          : "ws://localhost:8000/api/v1/notifications/ws")
+      const wsUrl = getWebSocketUrl();
 
       setConnectionState(reconnectAttemptsRef.current > 0 ? "reconnecting" : "connecting")
       const ws = new WebSocket(`${wsUrl}/${encodeURIComponent(userEmail)}`)

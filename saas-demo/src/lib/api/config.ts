@@ -1,0 +1,68 @@
+/**
+ * 統一的 API 配置
+ * 所有 API 調用都應該使用這個配置文件中的常量
+ */
+
+/**
+ * API 基礎 URL
+ * 優先使用環境變量 NEXT_PUBLIC_API_BASE_URL
+ * 如果未設置，則根據當前環境自動判斷
+ */
+export function getApiBaseUrl(): string {
+  // 優先使用環境變量
+  if (process.env.NEXT_PUBLIC_API_BASE_URL) {
+    return process.env.NEXT_PUBLIC_API_BASE_URL;
+  }
+
+  // 如果是在瀏覽器環境，嘗試從 window.location 獲取
+  if (typeof window !== "undefined") {
+    // 生產環境：使用當前域名
+    const protocol = window.location.protocol;
+    const host = window.location.host;
+    return `${protocol}//${host}/api/v1`;
+  }
+
+  // 服務端渲染或開發環境：使用默認值
+  return "http://localhost:8000/api/v1";
+}
+
+/**
+ * Group AI API 基礎 URL
+ * 用於群組 AI 相關的 API 調用
+ */
+export function getGroupAiApiBaseUrl(): string {
+  const baseUrl = getApiBaseUrl();
+  // 如果 baseUrl 已經包含 /group-ai，直接返回
+  if (baseUrl.endsWith("/group-ai")) {
+    return baseUrl;
+  }
+  // 否則追加 /group-ai
+  return `${baseUrl}/group-ai`;
+}
+
+/**
+ * WebSocket URL
+ * 用於 WebSocket 連接
+ */
+export function getWebSocketUrl(): string {
+  // 優先使用環境變量
+  if (process.env.NEXT_PUBLIC_WS_URL) {
+    return process.env.NEXT_PUBLIC_WS_URL;
+  }
+
+  // 如果是在瀏覽器環境，根據當前協議構建
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.host;
+    return `${protocol}//${host}/api/v1/notifications/ws`;
+  }
+
+  // 默認值
+  return "ws://localhost:8000/api/v1/notifications/ws";
+}
+
+// 導出常量（為了向後兼容）
+export const API_BASE_URL = getApiBaseUrl();
+export const GROUP_AI_API_BASE_URL = getGroupAiApiBaseUrl();
+export const WS_URL = getWebSocketUrl();
+

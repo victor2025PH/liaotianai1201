@@ -1,0 +1,35 @@
+# 马尼拉服务器一键部署命令
+# 在服务器上执行以下命令（复制粘贴到 Web SSH 或 SSH 终端）
+
+# 1. 进入目录
+cd /home/ubuntu/saas-demo/src/components
+
+# 2. 备份原文件
+cp layout-wrapper.tsx layout-wrapper.tsx.bak
+
+# 3. 编辑文件（需要手动粘贴修复后的代码）
+nano layout-wrapper.tsx
+
+# 在 nano 中：
+# - 删除所有内容（多次按 Ctrl+K）
+# - 从本地文件 deploy/systemd/fix_layout_wrapper.txt 复制全部内容
+# - 按 Ctrl+V 粘贴
+# - 按 Ctrl+O 保存
+# - 按 Enter 确认
+# - 按 Ctrl+X 退出
+
+# 4. 返回前端目录并构建
+cd /home/ubuntu/saas-demo
+source ~/.nvm/nvm.sh
+nvm use 20
+npm run build
+
+# 5. 重启服务
+sudo systemctl restart smart-tg-frontend
+
+# 6. 检查状态
+sudo systemctl status smart-tg-frontend
+
+# 7. 查看日志（如果需要）
+# sudo journalctl -u smart-tg-frontend -n 20 --no-pager
+

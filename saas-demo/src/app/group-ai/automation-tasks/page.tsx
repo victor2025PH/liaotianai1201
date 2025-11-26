@@ -300,26 +300,7 @@ export default function AutomationTasksPage() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <StepIndicator
-        currentStep={5}
-        steps={workflowSteps}
-        title="自動化任務"
-        description="配置自動化執行任務（可選步驟）"
-        guideContent={
-          <>
-            <p className="font-semibold mb-2">使用指導：</p>
-            <ol className="list-decimal list-inside space-y-1 text-sm">
-              <li>確保已完成前面的所有步驟</li>
-              <li>創建自動化任務：選擇任務類型和動作</li>
-              <li>配置執行計劃：使用 Cron 表達式、間隔時間或模板</li>
-              <li>設置依賴任務（如果需要）</li>
-              <li>配置通知設置（成功/失敗時通知）</li>
-              <li>啟用任務並監控執行日誌</li>
-              <li>完成！系統已配置完成，可以開始使用</li>
-            </ol>
-          </>
-        }
-      />
+      <StepIndicator currentStep={5} steps={workflowSteps} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">自動化任務</h1>

@@ -11,7 +11,8 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 
-from app.api.group_ai.servers import load_server_configs
+# 延迟导入以避免循环导入
+# from app.api.group_ai.servers import load_server_configs
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,8 @@ async def list_logs(
     """獲取系統日誌列表（從遠程服務器和本地服務）"""
     try:
         # 1. 從遠程服務器獲取日誌
+        # 延迟导入以避免循环导入
+        from app.api.group_ai.servers import load_server_configs
         servers_config = load_server_configs()
         remote_logs = get_remote_server_logs(servers_config, lines=page_size * 3)
         

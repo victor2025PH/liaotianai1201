@@ -1,0 +1,112 @@
+"use client";
+
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { Sidebar } from "@/components/sidebar";
+import { Header } from "@/components/header";
+import { isAuthenticated } from "@/lib/api/auth";
+
+export function LayoutWrapper({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const isLoginPage = pathname === "/login";
+  const [checking, setChecking] = useState(true);
+  const [authState, setAuthState] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    // 檢查認證狀態
+    const checkAuth = () => {
+      const authenticated = isAuthenticated();
+      
+      if (!isLoginPage && !authenticated) {
+        setChecking(false); // 先停止檢查狀態，避免卡住
+        // 未登錄且不在登入頁，強制重定向到登入頁
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login";
+        }
+        return false;
+      }
+      
+      if (authenticated !== authState) {
+        setAuthState(authenticated);
+      }
+      
+      // 無論是否認證，都應該停止檢查狀態
+      setChecking(false);
+      
+      return authenticated;
+    };
+    
+    // 立即檢查
+    const authenticated = checkAuth();
+    
+    // 如果已認證且在登入頁，重定向到首頁
+    if (isLoginPage && authenticated) {
+      router.push("/");
+      return;
+    }
+    
+    // 監聽 localStorage 變化（當 token 被清除時）
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "access_token") {
+        checkAuth();
+      }
+    };
+    
+    // 監聽自定義事件（當 token 在同標籤頁中被清除時）
+    const handleTokenCleared = () => {
+      checkAuth();
+    };
+    
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("tokenCleared", handleTokenCleared);
+    
+    // 定期檢查（作為後備方案）
+    const interval = setInterval(() => {
+      const currentAuth = isAuthenticated();
+      if (currentAuth !== authenticated && !isLoginPage) {
+        checkAuth();
+      }
+    }, 500); // 每 500ms 檢查一次
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("tokenCleared", handleTokenCleared);
+    };
+  }, [pathname, router, isLoginPage, authState]);
+
+  // 如果正在檢查認證，顯示加載中（避免閃爍）
+  if (checking && !isLoginPage) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600 mx-auto"></div>
+          <p className="text-sm text-gray-500">檢查認證狀態...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoginPage) {
+    return <>{children}</>;
+  }
+
+  // 如果未認證，不顯示主界面（應該已經重定向）
+  if (!isAuthenticated()) {
+    return null;
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      <Sidebar />
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <Header />
+        <main className="flex-1 overflow-y-auto bg-background">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+

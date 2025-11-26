@@ -436,25 +436,7 @@ export default function RoleAssignmentSchemesPage() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <StepIndicator
-        currentStep={4}
-        steps={workflowSteps}
-        title="分配方案"
-        description="保存和重用角色分配方案（可選步驟）"
-        guideContent={
-          <>
-            <p className="font-semibold mb-2">使用指導：</p>
-            <ol className="list-decimal list-inside space-y-1 text-sm">
-              <li>確保已完成前面的步驟（劇本管理、賬號管理、角色分配）</li>
-              <li>創建分配方案：選擇劇本、提取角色、配置分配規則</li>
-              <li>保存方案以便重複使用</li>
-              <li>應用方案到選定的賬號</li>
-              <li>查看分配歷史記錄</li>
-              <li>完成後，可進入 <Link href="/group-ai/automation-tasks" className="text-primary underline">步驟 5：自動化任務</Link>（可選）</li>
-            </ol>
-          </>
-        }
-      />
+      <StepIndicator currentStep={4} steps={workflowSteps} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">角色分配方案管理</h1>

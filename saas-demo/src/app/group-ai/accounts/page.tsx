@@ -827,25 +827,7 @@ export default function GroupAIAccountsPage() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <StepIndicator
-        currentStep={2}
-        steps={workflowSteps}
-        title="賬號管理"
-        description="創建和管理 Telegram 賬號，關聯劇本"
-        guideContent={
-          <>
-            <p className="font-semibold mb-2">使用指導：</p>
-            <ol className="list-decimal list-inside space-y-1 text-sm">
-              <li>確保已完成 <Link href="/group-ai/scripts" className="text-primary underline">步驟 1：劇本管理</Link></li>
-              <li>通過「掃描 Session」或「上傳 Session」添加 Telegram 賬號</li>
-              <li>為每個賬號選擇對應的劇本（必需）</li>
-              <li>配置賬號的顯示名稱、簡介等信息</li>
-              <li>將賬號分配到服務器節點</li>
-              <li>完成後，可進入 <Link href="/group-ai/role-assignments" className="text-primary underline">步驟 3：角色分配</Link>（可選）</li>
-            </ol>
-          </>
-        }
-      />
+      <StepIndicator currentStep={2} steps={workflowSteps} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">群組 AI 賬號管理</h1>

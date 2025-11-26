@@ -11,10 +11,13 @@ import {
   type AccountCreateRequest,
 } from '@/lib/api/group-ai';
 
+import { getGroupAiApiBaseUrl } from "@/lib/api/config";
+import { fetchWithAuth } from "@/lib/api/client";
+
 // 刪除賬號函數（如果API不存在，創建一個）
 async function deleteAccount(accountId: string): Promise<void> {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1/group-ai";
-  const response = await fetch(`${API_BASE}/accounts/${accountId}`, {
+  const API_BASE = getGroupAiApiBaseUrl();
+  const response = await fetchWithAuth(`${API_BASE}/accounts/${accountId}`, {
     method: "DELETE",
   });
   if (!response.ok) {

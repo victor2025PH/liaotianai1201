@@ -20,6 +20,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
       
       if (!isLoginPage && !authenticated) {
         // 未登錄且不在登入頁，強制重定向到登入頁
+        setChecking(false); // 先停止檢查狀態，避免卡住
         if (window.location.pathname !== "/login") {
           window.location.href = "/login";
         }
@@ -30,9 +31,8 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
         setAuthState(authenticated);
       }
       
-      if (isLoginPage || authenticated) {
-        setChecking(false);
-      }
+      // 無論是否認證，都應該停止檢查狀態
+      setChecking(false);
       
       return authenticated;
     };
@@ -74,7 +74,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("tokenCleared", handleTokenCleared);
     };
-  }, [pathname, router, isLoginPage]);
+  }, [pathname, router, isLoginPage, authState]);
 
   // 如果正在檢查認證，顯示加載中（避免閃爍）
   if (checking && !isLoginPage) {

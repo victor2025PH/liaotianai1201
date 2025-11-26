@@ -6,8 +6,9 @@
 
 import { toast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/api/client";
+import { getApiBaseUrl } from "@/lib/api/config";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
+const API_BASE_URL = getApiBaseUrl();
 const API_TIMEOUT = 30000; // 30 秒超時（增加超时时间以处理较慢的API响应）
 
 // 導入 mock 數據

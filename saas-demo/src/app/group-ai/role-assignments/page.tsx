@@ -390,26 +390,7 @@ export default function RoleAssignmentsPage() {
       </div>
     }>
       <div className="container mx-auto py-6 space-y-6">
-        <StepIndicator
-          currentStep={3}
-          steps={workflowSteps}
-          title="角色分配"
-          description="從劇本提取角色並分配給賬號（可選步驟）"
-          guideContent={
-            <>
-              <p className="font-semibold mb-2">使用指導：</p>
-              <ol className="list-decimal list-inside space-y-1 text-sm">
-                <li>確保已完成 <Link href="/group-ai/scripts" className="text-primary underline">步驟 1</Link> 和 <Link href="/group-ai/accounts" className="text-primary underline">步驟 2</Link></li>
-                <li>選擇已創建的劇本</li>
-                <li>點擊「提取角色」按鈕，系統會自動從劇本中提取所有角色</li>
-                <li>選擇要參與分配的賬號</li>
-                <li>選擇分配模式：自動分配或手動分配</li>
-                <li>創建分配計劃並應用</li>
-                <li>完成後，可進入 <Link href="/group-ai/role-assignment-schemes" className="text-primary underline">步驟 4：分配方案</Link>（可選）</li>
-              </ol>
-            </>
-          }
-        />
+        <StepIndicator currentStep={3} steps={workflowSteps} />
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">角色分配管理</h1>

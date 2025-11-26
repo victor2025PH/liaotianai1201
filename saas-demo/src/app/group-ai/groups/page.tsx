@@ -1,0 +1,281 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { useToast } from "@/hooks/use-toast"
+import { 
+  Users, MessageSquare, RefreshCw, Search, 
+  Activity, Clock, UserPlus, Settings
+} from "lucide-react"
+
+import { getApiBaseUrl } from "@/lib/api/config";
+
+const API_BASE = getApiBaseUrl();
+
+interface GroupInfo {
+  id: string
+  title: string
+  member_count: number
+  ai_accounts: number
+  real_users: number
+  message_count: number
+  last_activity: string
+  status: "active" | "idle" | "paused"
+  auto_chat: boolean
+  redpacket: boolean
+}
+
+export default function GroupsPage() {
+  const { toast } = useToast()
+  const [groups, setGroups] = useState<GroupInfo[]>([])
+  const [loading, setLoading] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
+
+  const fetchGroups = async () => {
+    setLoading(true)
+    try {
+      // 嘗試從 Worker API 獲取群組數據
+      const res = await fetch(`${API_BASE.replace('/api/v1', '')}/api/workers/`)
+      const data = await res.json()
+      
+      // 從 Worker 數據中提取群組信息（模擬數據）
+      // 實際應該從專門的群組 API 獲取
+      const mockGroups: GroupInfo[] = [
+        {
+          id: "group_1",
+          title: "紅包遊戲群 1",
+          member_count: 8,
+          ai_accounts: 6,
+          real_users: 2,
+          message_count: 156,
+          last_activity: new Date().toISOString(),
+          status: "active",
+          auto_chat: true,
+          redpacket: true
+        },
+        {
+          id: "group_2", 
+          title: "AI 聊天測試群",
+          member_count: 6,
+          ai_accounts: 6,
+          real_users: 0,
+          message_count: 89,
+          last_activity: new Date(Date.now() - 3600000).toISOString(),
+          status: "idle",
+          auto_chat: true,
+          redpacket: false
+        }
+      ]
+      
+      setGroups(mockGroups)
+    } catch (error) {
+      console.error("獲取群組失敗:", error)
+      toast({ title: "錯誤", description: "獲取群組數據失敗", variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchGroups()
+    const interval = setInterval(fetchGroups, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const filteredGroups = groups.filter(g => 
+    g.title.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  const stats = {
+    total: groups.length,
+    active: groups.filter(g => g.status === "active").length,
+    totalMessages: groups.reduce((sum, g) => sum + g.message_count, 0),
+    totalMembers: groups.reduce((sum, g) => sum + g.member_count, 0)
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "active":
+        return <Badge className="bg-green-500">活躍</Badge>
+      case "idle":
+        return <Badge variant="secondary">空閒</Badge>
+      case "paused":
+        return <Badge variant="destructive">已暫停</Badge>
+      default:
+        return <Badge variant="outline">{status}</Badge>
+    }
+  }
+
+  return (
+    <div className="container mx-auto py-6 space-y-6">
+      {/* 標題 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Users className="h-6 w-6" />
+            群組監控
+          </h1>
+          <p className="text-sm text-muted-foreground">監控和管理所有 Telegram 群組</p>
+        </div>
+        <Button onClick={fetchGroups} variant="outline" size="sm" disabled={loading}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          刷新
+        </Button>
+      </div>
+
+      {/* 統計卡片 */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-500/10">
+                <Users className="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{stats.total}</div>
+                <p className="text-xs text-muted-foreground">總群組數</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-500/10">
+                <Activity className="h-5 w-5 text-green-500" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{stats.active}</div>
+                <p className="text-xs text-muted-foreground">活躍群組</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-purple-500/10">
+                <MessageSquare className="h-5 w-5 text-purple-500" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{stats.totalMessages}</div>
+                <p className="text-xs text-muted-foreground">總消息數</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-orange-500/10">
+                <UserPlus className="h-5 w-5 text-orange-500" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{stats.totalMembers}</div>
+                <p className="text-xs text-muted-foreground">總成員數</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 搜索 */}
+      <div className="flex gap-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="搜索群組名稱..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+      </div>
+
+      {/* 群組列表 */}
+      <Card>
+        <CardHeader className="py-4">
+          <CardTitle className="text-base">群組列表</CardTitle>
+          <CardDescription>共 {filteredGroups.length} 個群組</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {filteredGroups.length === 0 ? (
+            <div className="text-center py-12">
+              <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+              <h3 className="text-lg font-medium mb-2">暫無群組</h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                在節點管理頁面創建新群組
+              </p>
+              <Button variant="outline" asChild>
+                <a href="/group-ai/nodes">前往節點管理</a>
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredGroups.map((group) => (
+                <div key={group.id} className="border rounded-lg p-4 hover:bg-muted/30 transition-colors">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-primary/10">
+                        <Users className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <h4 className="font-medium">{group.title}</h4>
+                        <p className="text-xs text-muted-foreground">ID: {group.id}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {getStatusBadge(group.status)}
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs">成員數</p>
+                      <p className="font-medium">{group.member_count}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">AI 賬號</p>
+                      <p className="font-medium text-blue-500">{group.ai_accounts}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">真實用戶</p>
+                      <p className="font-medium text-green-500">{group.real_users}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">消息數</p>
+                      <p className="font-medium">{group.message_count}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">最後活動</p>
+                      <p className="font-medium flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {new Date(group.last_activity).toLocaleTimeString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 mt-3 pt-3 border-t">
+                    <Badge variant={group.auto_chat ? "default" : "outline"} className="text-xs">
+                      {group.auto_chat ? "✓ 自動聊天" : "✗ 自動聊天"}
+                    </Badge>
+                    <Badge variant={group.redpacket ? "default" : "outline"} className="text-xs">
+                      {group.redpacket ? "✓ 紅包遊戲" : "✗ 紅包遊戲"}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+

@@ -106,7 +106,7 @@ if RATE_LIMITING_ENABLED:
 cors_origins = settings.cors_origins.split(",") if settings.cors_origins else []
 # 如果未配置，使用默認開發環境的前端地址
 if not cors_origins:
-    cors_origins = ["http://localhost:3000", "http://localhost:5173"]
+    cors_origins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"]
 
 app.add_middleware(
     CORSMiddleware,

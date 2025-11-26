@@ -196,8 +196,9 @@ export default function ServersPage() {
         }
       } else if (data && typeof data === 'object' && 'server_id' in data) {
         // 如果是單個對象（不應該發生，但為了兼容性保留）
-        if (data.server_id === serverId || !serverId) {
-          accounts = Array.isArray(data.accounts) ? data.accounts : [];
+        const objData = data as { server_id: string; accounts?: ServerAccount[] };
+        if (objData.server_id === serverId || !serverId) {
+          accounts = Array.isArray(objData.accounts) ? objData.accounts : [];
           console.log(`使用單個對象結果，找到 ${accounts.length} 個賬號`);
         }
       } else {

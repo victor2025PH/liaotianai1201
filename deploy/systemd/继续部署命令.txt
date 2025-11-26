@@ -1,0 +1,161 @@
+# 继续部署命令（在服务器上执行）
+
+# ============================================
+# 当前状态：后端依赖已安装，虚拟环境已激活
+# 当前位置：~/admin-backend
+# ============================================
+
+# 步骤 1: 创建 .env 文件
+cat > .env << 'EOF'
+DATABASE_URL=sqlite:///./data/app.db
+SECRET_KEY=$(openssl rand -hex 32)
+CORS_ORIGINS=["http://localhost:3000","http://165.154.233.55:3000","http://165.154.233.55:8000"]
+EOF
+
+# 生成密钥并更新 .env
+SECRET_KEY=$(openssl rand -hex 32)
+sed -i "s/\$(openssl rand -hex 32)/$SECRET_KEY/" .env
+
+# 验证 .env 文件
+cat .env
+
+# ============================================
+# 步骤 2: 配置 systemd 服务
+# ============================================
+
+sudo tee /etc/systemd/system/admin-backend.service > /dev/null << 'EOF'
+[Unit]
+Description=Smart TG Admin Backend
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/admin-backend
+Environment="PATH=/home/ubuntu/admin-backend/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=-/home/ubuntu/admin-backend/.env
+ExecStart=/home/ubuntu/admin-backend/.venv/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 重新加载 systemd
+sudo systemctl daemon-reload
+
+# 启用服务（开机自启）
+sudo systemctl enable admin-backend
+
+# 启动服务
+sudo systemctl start admin-backend
+
+# 检查服务状态
+sudo systemctl status admin-backend
+
+# 查看日志（如果有问题）
+# sudo journalctl -u admin-backend -f
+
+# ============================================
+# 步骤 3: 验证后端
+# ============================================
+
+# 检查端口
+sudo ss -tlnp | grep 8000
+
+# 健康检查
+curl http://localhost:8000/health
+
+# ============================================
+# 步骤 4: 部署前端（在另一个终端或完成后执行）
+# ============================================
+
+# 进入主目录
+cd /home/ubuntu
+
+# 解压前端
+unzip -q -o frontend.zip
+
+# 检查解压后的目录名
+ls -d saas-demo*
+
+# 如果目录名不是 saas-demo，重命名
+# mv <目录名> saas-demo
+
+# 进入前端目录
+cd saas-demo
+
+# 确保使用 Node.js 20
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+nvm use 20
+
+# 安装依赖
+npm install
+
+# 创建 .env.local
+cat > .env.local << 'EOF'
+NEXT_PUBLIC_API_BASE_URL=http://165.154.233.55:8000/api/v1
+EOF
+
+# 构建前端
+npm run build
+
+# 获取 Node.js 路径
+NODE_PATH=$(which node)
+
+# 配置 systemd 服务
+sudo tee /etc/systemd/system/smart-tg-frontend.service > /dev/null << EOF
+[Unit]
+Description=Smart TG Frontend Service (Next.js)
+After=network.target admin-backend.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/saas-demo
+Environment="PATH=$NODE_PATH:/usr/local/bin:/usr/bin:/bin"
+Environment="NODE_ENV=production"
+EnvironmentFile=-/home/ubuntu/saas-demo/.env.local
+ExecStart=$NODE_PATH .next/standalone/server.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 重新加载 systemd
+sudo systemctl daemon-reload
+
+# 启用服务
+sudo systemctl enable smart-tg-frontend
+
+# 启动服务
+sudo systemctl start smart-tg-frontend
+
+# 检查服务状态
+sudo systemctl status smart-tg-frontend
+
+# ============================================
+# 步骤 5: 最终验证
+# ============================================
+
+# 检查所有服务
+sudo systemctl status admin-backend smart-tg-frontend
+
+# 检查端口
+sudo ss -tlnp | grep -E ':8000|:3000'
+
+# 健康检查
+curl http://localhost:8000/health
+curl -I http://localhost:3000
+
+

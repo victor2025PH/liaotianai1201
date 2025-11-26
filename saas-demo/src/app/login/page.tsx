@@ -3,7 +3,7 @@
  */
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast"
 import { login, setToken } from "@/lib/api/auth"
 import { Shield, Loader2 } from "lucide-react"
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
@@ -39,8 +39,8 @@ export default function LoginPage() {
         return
       }
       
-      // 开发模式：自动填充默认账号（仅用于测试，方便浏览器自动化）
-      if (process.env.NODE_ENV === "development" && !formData.username && !formData.password) {
+      // 自动填充默认账号
+      if (!formData.username && !formData.password) {
         setFormData({
           username: "admin@example.com",
           password: "changeme123",
@@ -163,6 +163,18 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   )
 }
 

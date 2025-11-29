@@ -141,10 +141,15 @@ if (-not $SkipDeploy) {
     # 先上传部署脚本（如果服务器上没有或需要更新）
     Write-Info "上传/更新部署脚本..."
     
+    # 读取脚本内容并转换行尾符从 CRLF 到 LF
     $scriptContent = Get-Content $deployScriptPath -Raw -Encoding UTF8
+    # 将 Windows 行尾符 (\r\n) 替换为 Unix 行尾符 (\n)
+    $scriptContent = $scriptContent -replace "`r`n", "`n" -replace "`r", "`n"
+    
     $base64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($scriptContent))
     
-    $uploadCmd = "mkdir -p ~/liaotian/deploy && echo '$base64' | base64 -d > ~/liaotian/deploy/从GitHub拉取并部署.sh && chmod +x ~/liaotian/deploy/从GitHub拉取并部署.sh && echo 'SCRIPT_UPLOADED'"
+    # 上传脚本并在服务器上转换行尾符（使用 sed 或 dos2unix）
+    $uploadCmd = "mkdir -p ~/liaotian/deploy && echo '$base64' | base64 -d > ~/liaotian/deploy/从GitHub拉取并部署.sh && sed -i 's/\r$//' ~/liaotian/deploy/从GitHub拉取并部署.sh 2>/dev/null || sed -i '' 's/\r$//' ~/liaotian/deploy/从GitHub拉取并部署.sh 2>/dev/null || true && chmod +x ~/liaotian/deploy/从GitHub拉取并部署.sh && echo 'SCRIPT_UPLOADED'"
     
     if ($Password) {
         $env:SSHPASS = $Password

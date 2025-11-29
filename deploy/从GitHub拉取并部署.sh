@@ -36,6 +36,13 @@ BRANCH=$(git branch --show-current 2>/dev/null || echo "master")
 echo "  当前分支: $BRANCH"
 git pull origin $BRANCH || git pull origin master || git pull origin main
 
+# 2.1 修复拉取的脚本文件的行尾符（如果存在）
+if [ -f "deploy/从GitHub拉取并部署.sh" ]; then
+    echo "  转换脚本行尾符为 Unix 格式..."
+    sed -i 's/\r$//' deploy/从GitHub拉取并部署.sh 2>/dev/null || sed -i '' 's/\r$//' deploy/从GitHub拉取并部署.sh 2>/dev/null || true
+    chmod +x deploy/从GitHub拉取并部署.sh 2>/dev/null || true
+fi
+
 if [ $? -eq 0 ]; then
     echo "  ✓ 代码拉取完成"
     echo ""

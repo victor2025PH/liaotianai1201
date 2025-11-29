@@ -37,16 +37,33 @@ export default function GroupsPage() {
   const fetchGroups = async () => {
     setLoading(true)
     try {
-      // 嘗試從 Worker API 獲取群組數據
-      const res = await fetch(`${API_BASE.replace('/api/v1', '')}/api/workers/`)
-      const data = await res.json()
+      // 嘗試從 Worker API 獲取群组数据
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/workers/`)
+      if (!res.ok) {
+        if (res.status === 404) {
+          // 端点不存在，使用模拟数据
+          console.warn("Workers API 端点不存在，使用模拟数据")
+        } else if (res.status === 401) {
+          console.warn("未授权，可能需要登录")
+          toast({ title: "错误", description: "未授权，请重新登录", variant: "destructive" })
+          setGroups([])
+          return
+        } else {
+          throw new Error(`HTTP ${res.status}`)
+        }
+      } else {
+        const data = await res.json()
+        // TODO: 从 Worker 数据中提取群组信息
+        // 实际应该从专门的群组 API 获取
+      }
       
-      // 從 Worker 數據中提取群組信息（模擬數據）
-      // 實際應該從專門的群組 API 獲取
+      // 從 Worker 数据中提取群组信息（模擬数据）
+      // 實際應該從專門的群组 API 獲取
       const mockGroups: GroupInfo[] = [
         {
           id: "group_1",
-          title: "紅包遊戲群 1",
+          title: "红包遊戲群 1",
           member_count: 8,
           ai_accounts: 6,
           real_users: 2,
@@ -58,7 +75,7 @@ export default function GroupsPage() {
         },
         {
           id: "group_2", 
-          title: "AI 聊天測試群",
+          title: "AI 聊天测试群",
           member_count: 6,
           ai_accounts: 6,
           real_users: 0,
@@ -72,8 +89,13 @@ export default function GroupsPage() {
       
       setGroups(mockGroups)
     } catch (error) {
-      console.error("獲取群組失敗:", error)
-      toast({ title: "錯誤", description: "獲取群組數據失敗", variant: "destructive" })
+      console.error("獲取群组失败:", error)
+      const errorMessage = error instanceof Error ? error.message : "未知错误"
+      if (!errorMessage.includes("401")) {
+        toast({ title: "错误", description: `獲取群组数据失败: ${errorMessage}`, variant: "destructive" })
+      }
+      // 使用模拟数据作为降级方案
+      setGroups([])
     } finally {
       setLoading(false)
     }
@@ -99,11 +121,11 @@ export default function GroupsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
-        return <Badge className="bg-green-500">活躍</Badge>
+        return <Badge className="bg-green-500">活跃</Badge>
       case "idle":
         return <Badge variant="secondary">空閒</Badge>
       case "paused":
-        return <Badge variant="destructive">已暫停</Badge>
+        return <Badge variant="destructive">已暂停</Badge>
       default:
         return <Badge variant="outline">{status}</Badge>
     }
@@ -116,9 +138,9 @@ export default function GroupsPage() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Users className="h-6 w-6" />
-            群組監控
+            群组监控
           </h1>
-          <p className="text-sm text-muted-foreground">監控和管理所有 Telegram 群組</p>
+          <p className="text-sm text-muted-foreground">监控和管理所有 Telegram 群组</p>
         </div>
         <Button onClick={fetchGroups} variant="outline" size="sm" disabled={loading}>
           <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -136,7 +158,7 @@ export default function GroupsPage() {
               </div>
               <div>
                 <div className="text-2xl font-bold">{stats.total}</div>
-                <p className="text-xs text-muted-foreground">總群組數</p>
+                <p className="text-xs text-muted-foreground">總群组數</p>
               </div>
             </div>
           </CardContent>
@@ -149,7 +171,7 @@ export default function GroupsPage() {
               </div>
               <div>
                 <div className="text-2xl font-bold">{stats.active}</div>
-                <p className="text-xs text-muted-foreground">活躍群組</p>
+                <p className="text-xs text-muted-foreground">活跃群组</p>
               </div>
             </div>
           </CardContent>
@@ -162,7 +184,7 @@ export default function GroupsPage() {
               </div>
               <div>
                 <div className="text-2xl font-bold">{stats.totalMessages}</div>
-                <p className="text-xs text-muted-foreground">總消息數</p>
+                <p className="text-xs text-muted-foreground">總消息数</p>
               </div>
             </div>
           </CardContent>
@@ -175,7 +197,7 @@ export default function GroupsPage() {
               </div>
               <div>
                 <div className="text-2xl font-bold">{stats.totalMembers}</div>
-                <p className="text-xs text-muted-foreground">總成員數</p>
+                <p className="text-xs text-muted-foreground">總成员数</p>
               </div>
             </div>
           </CardContent>
@@ -187,7 +209,7 @@ export default function GroupsPage() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="搜索群組名稱..."
+            placeholder="搜索群组名称..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-9"
@@ -195,22 +217,22 @@ export default function GroupsPage() {
         </div>
       </div>
 
-      {/* 群組列表 */}
+      {/* 群组列表 */}
       <Card>
         <CardHeader className="py-4">
-          <CardTitle className="text-base">群組列表</CardTitle>
-          <CardDescription>共 {filteredGroups.length} 個群組</CardDescription>
+          <CardTitle className="text-base">群组列表</CardTitle>
+          <CardDescription>共 {filteredGroups.length} 个群组</CardDescription>
         </CardHeader>
         <CardContent>
           {filteredGroups.length === 0 ? (
             <div className="text-center py-12">
               <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-medium mb-2">暫無群組</h3>
+              <h3 className="text-lg font-medium mb-2">暫无群组</h3>
               <p className="text-muted-foreground text-sm mb-4">
-                在節點管理頁面創建新群組
+                在节点管理页面创建新群组
               </p>
               <Button variant="outline" asChild>
-                <a href="/group-ai/nodes">前往節點管理</a>
+                <a href="/group-ai/nodes">前往节点管理</a>
               </Button>
             </div>
           ) : (
@@ -237,23 +259,23 @@ export default function GroupsPage() {
                   
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                     <div>
-                      <p className="text-muted-foreground text-xs">成員數</p>
+                      <p className="text-muted-foreground text-xs">成员数</p>
                       <p className="font-medium">{group.member_count}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground text-xs">AI 賬號</p>
+                      <p className="text-muted-foreground text-xs">AI 账号</p>
                       <p className="font-medium text-blue-500">{group.ai_accounts}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground text-xs">真實用戶</p>
+                      <p className="text-muted-foreground text-xs">真实用户</p>
                       <p className="font-medium text-green-500">{group.real_users}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground text-xs">消息數</p>
+                      <p className="text-muted-foreground text-xs">消息数</p>
                       <p className="font-medium">{group.message_count}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground text-xs">最後活動</p>
+                      <p className="text-muted-foreground text-xs">最后活动</p>
                       <p className="font-medium flex items-center gap-1">
                         <Clock className="h-3 w-3" />
                         {new Date(group.last_activity).toLocaleTimeString()}
@@ -263,10 +285,10 @@ export default function GroupsPage() {
 
                   <div className="flex gap-2 mt-3 pt-3 border-t">
                     <Badge variant={group.auto_chat ? "default" : "outline"} className="text-xs">
-                      {group.auto_chat ? "✓ 自動聊天" : "✗ 自動聊天"}
+                      {group.auto_chat ? "✓ 自动聊天" : "✗ 自动聊天"}
                     </Badge>
                     <Badge variant={group.redpacket ? "default" : "outline"} className="text-xs">
-                      {group.redpacket ? "✓ 紅包遊戲" : "✗ 紅包遊戲"}
+                      {group.redpacket ? "✓ 红包遊戲" : "✗ 红包遊戲"}
                     </Badge>
                   </div>
                 </div>

@@ -1,0 +1,87 @@
+# 手动修复 401 认证问题 - 在服务器上执行以下命令
+
+# ============================================================
+# 步骤 1: 找到实际的 .env 文件路径
+# ============================================================
+# 尝试以下路径：
+ls -la /opt/smart-tg/admin-backend/.env
+ls -la /home/ubuntu/liaotian/admin-backend/.env
+ls -la $(pwd)/admin-backend/.env
+
+# 找到后，设置变量（替换为实际路径）
+export BACKEND_ENV_PATH="/opt/smart-tg/admin-backend/.env"
+# 或
+# export BACKEND_ENV_PATH="/home/ubuntu/liaotian/admin-backend/.env"
+
+# ============================================================
+# 步骤 2: 备份配置
+# ============================================================
+sudo cp "$BACKEND_ENV_PATH" "${BACKEND_ENV_PATH}.bak.$(date +%Y%m%d_%H%M%S)"
+
+# ============================================================
+# 步骤 3: 更新 CORS 配置
+# ============================================================
+# 检查当前配置
+sudo grep CORS_ORIGINS "$BACKEND_ENV_PATH"
+
+# 如果已存在，添加生产域名
+sudo sed -i 's|CORS_ORIGINS=\(.*\)|CORS_ORIGINS=\1,http://aikz.usdt2026.cc|' "$BACKEND_ENV_PATH"
+
+# 如果不存在，添加新行
+if ! sudo grep -q "CORS_ORIGINS" "$BACKEND_ENV_PATH"; then
+    echo "CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:8080,http://aikz.usdt2026.cc" | sudo tee -a "$BACKEND_ENV_PATH"
+fi
+
+# 验证配置
+sudo grep CORS_ORIGINS "$BACKEND_ENV_PATH"
+
+# ============================================================
+# 步骤 4: 检查 Nginx 配置（可选）
+# ============================================================
+# 检查是否已包含 Authorization header
+sudo grep "proxy_set_header Authorization" /etc/nginx/sites-available/aikz.usdt2026.cc
+
+# 如果没有，添加（通常不需要，Nginx 默认会传递）
+# sudo sed -i '/location \/api\/ {/,/proxy_read_timeout/ {
+#     /proxy_set_header X-Forwarded-Proto/a\    proxy_set_header Authorization $http_authorization;
+# }' /etc/nginx/sites-available/aikz.usdt2026.cc
+
+# ============================================================
+# 步骤 5: 测试并应用 Nginx 配置
+# ============================================================
+sudo nginx -t
+sudo systemctl reload nginx
+
+# ============================================================
+# 步骤 6: 重启后端服务
+# ============================================================
+# 检测服务名
+systemctl list-units --type=service | grep -E "smart-tg-backend|liaotian-backend|admin-backend"
+
+# 重启服务（替换为实际服务名）
+sudo systemctl restart smart-tg-backend
+# 或
+# sudo systemctl restart liaotian-backend
+
+# 检查服务状态
+sudo systemctl status smart-tg-backend --no-pager | head -10
+
+# ============================================================
+# 步骤 7: 验证修复
+# ============================================================
+# 测试登录 API
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=admin@example.com&password=changeme123"
+
+# 查看后端日志
+sudo journalctl -u smart-tg-backend -n 50 | grep -i "auth\|cors"
+
+# ============================================================
+# 完成！
+# ============================================================
+# 下一步：
+# 1. 在浏览器中访问 http://aikz.usdt2026.cc/login 重新登录
+# 2. 登录后访问 http://aikz.usdt2026.cc/group-ai/accounts
+# 3. 检查浏览器控制台，确认 API 请求是否成功
+

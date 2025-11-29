@@ -1,0 +1,36 @@
+构建完成后执行命令
+
+========================================
+检查构建是否完成
+========================================
+
+cd /home/ubuntu/liaotian/saas-demo
+ls -la .next/standalone
+
+如果看到standalone目录，说明构建已完成。
+
+========================================
+继续部署（构建完成后执行）
+========================================
+
+cd /home/ubuntu/liaotian/saas-demo && mkdir -p .next/standalone/liaotian/saas-demo/.next/server && cp .next/BUILD_ID .next/standalone/liaotian/saas-demo/.next/ && cp .next/*.json .next/standalone/liaotian/saas-demo/.next/ && cp -r .next/server/* .next/standalone/liaotian/saas-demo/.next/server/ && cp -r .next/static .next/standalone/liaotian/saas-demo/.next/ && sudo systemctl start liaotian-frontend && sleep 5 && sudo systemctl status liaotian-frontend --no-pager | head -15
+
+========================================
+或者使用脚本
+========================================
+
+bash /tmp/continue_deploy.sh
+
+========================================
+验证部署
+========================================
+
+# 检查服务状态
+sudo systemctl status liaotian-frontend --no-pager | head -15
+
+# 检查文件
+ls -la .next/standalone/liaotian/saas-demo/.next/server/pages-manifest.json
+
+# 测试服务
+curl -I http://localhost:3000/group-ai/accounts
+

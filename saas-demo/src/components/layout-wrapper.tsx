@@ -1,101 +1,55 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Sidebar } from "@/components/sidebar";
-import { Header } from "@/components/header";
+import { useEffect, useState, useCallback, useMemo, memo } from "react";
+import dynamic from "next/dynamic";
 import { isAuthenticated } from "@/lib/api/auth";
+import { I18nProvider, useI18n } from "@/lib/i18n";
+import { OnboardingTour, isOnboardingCompleted } from "@/components/onboarding/onboarding-tour";
 
-export function LayoutWrapper({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const isLoginPage = pathname === "/login";
-  const [checking, setChecking] = useState(true);
-  const [authState, setAuthState] = useState<boolean | null>(null);
+// 懶加載 Sidebar 和 Header（非首屏關鍵組件）
+const Sidebar = dynamic(() => import("@/components/sidebar").then(m => ({ default: m.Sidebar })), {
+  ssr: false,
+  loading: () => <div className="hidden lg:block w-64 bg-card border-r border-border" />
+});
+
+const Header = dynamic(() => import("@/components/header").then(m => ({ default: m.Header })), {
+  ssr: false,
+  loading: () => <div className="h-14 border-b border-border bg-card" />
+});
+
+// 載入動畫組件（輕量級）
+const LoadingSpinner = memo(() => {
+  // 使用 try-catch 處理可能的 context 未初始化情況
+  let loadingText = "加载中...";
+  try {
+    const { t } = useI18n();
+    loadingText = t.common.loading;
+  } catch {
+    // 使用默認文本
+  }
+  
+  return (
+    <div className="flex h-screen items-center justify-center">
+      <div className="text-center">
+        <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600 mx-auto"></div>
+        <p className="text-sm text-gray-500">{loadingText}</p>
+      </div>
+    </div>
+  );
+});
+LoadingSpinner.displayName = 'LoadingSpinner';
+
+// 主佈局組件
+const MainLayout = memo(({ children }: { children: React.ReactNode }) => {
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
-    // 檢查認證狀態
-    const checkAuth = () => {
-      const authenticated = isAuthenticated();
-      
-      if (!isLoginPage && !authenticated) {
-        // 未登錄且不在登入頁，強制重定向到登入頁
-        setChecking(false); // 先停止檢查狀態，避免卡住
-        if (window.location.pathname !== "/login") {
-          window.location.href = "/login";
-        }
-        return false;
-      }
-      
-      if (authenticated !== authState) {
-        setAuthState(authenticated);
-      }
-      
-      // 無論是否認證，都應該停止檢查狀態
-      setChecking(false);
-      
-      return authenticated;
-    };
-    
-    // 立即檢查
-    const authenticated = checkAuth();
-    
-    // 如果已認證且在登入頁，重定向到首頁
-    if (isLoginPage && authenticated) {
-      router.push("/");
-      return;
+    // 检查是否需要显示引导
+    if (!isOnboardingCompleted()) {
+      setShowOnboarding(true);
     }
-    
-    // 監聽 localStorage 變化（當 token 被清除時）
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "access_token") {
-        checkAuth();
-      }
-    };
-    
-    // 監聽自定義事件（當 token 在同標籤頁中被清除時）
-    const handleTokenCleared = () => {
-      checkAuth();
-    };
-    
-    window.addEventListener("storage", handleStorageChange);
-    window.addEventListener("tokenCleared", handleTokenCleared);
-    
-    // 定期檢查（作為後備方案）
-    const interval = setInterval(() => {
-      const currentAuth = isAuthenticated();
-      if (currentAuth !== authenticated && !isLoginPage) {
-        checkAuth();
-      }
-    }, 500); // 每 500ms 檢查一次
-    
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("tokenCleared", handleTokenCleared);
-    };
-  }, [pathname, router, isLoginPage, authState]);
-
-  // 如果正在檢查認證，顯示加載中（避免閃爍）
-  if (checking && !isLoginPage) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600 mx-auto"></div>
-          <p className="text-sm text-gray-500">檢查認證狀態...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (isLoginPage) {
-    return <>{children}</>;
-  }
-
-  // 如果未認證，不顯示主界面（應該已經重定向）
-  if (!isAuthenticated()) {
-    return null;
-  }
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -106,7 +60,94 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      {/* 首次登录引导 */}
+      {showOnboarding && <OnboardingTour onClose={() => setShowOnboarding(false)} />}
     </div>
+  );
+});
+MainLayout.displayName = 'MainLayout';
+
+// 內部佈局組件（需要使用 I18n context）
+function LayoutWrapperInner({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const isLoginPage = useMemo(() => pathname === "/login", [pathname]);
+  const [checking, setChecking] = useState(!isLoginPage);
+  const [isAuthed, setIsAuthed] = useState(false);
+
+  // 優化：使用 useCallback 避免重複創建函數
+  const checkAuth = useCallback(() => {
+    const authenticated = isAuthenticated();
+    setIsAuthed(authenticated);
+    setChecking(false);
+    return authenticated;
+  }, []);
+
+  useEffect(() => {
+    // 登入頁不需要檢查
+    if (isLoginPage) {
+      const authenticated = isAuthenticated();
+      if (authenticated) {
+        router.replace("/");
+      }
+      setChecking(false);
+      return;
+    }
+
+    // 立即檢查認證
+    const authenticated = checkAuth();
+    
+    if (!authenticated) {
+      window.location.href = "/login";
+      return;
+    }
+    
+    // 監聽 localStorage 變化
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "access_token") {
+        checkAuth();
+      }
+    };
+    
+    const handleTokenCleared = () => checkAuth();
+    
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("tokenCleared", handleTokenCleared);
+    
+    // 優化：減少檢查頻率到 5 秒
+    const interval = setInterval(checkAuth, 5000);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("tokenCleared", handleTokenCleared);
+    };
+  }, [isLoginPage, router, checkAuth]);
+
+  // 登入頁直接渲染
+  if (isLoginPage) {
+    return <>{children}</>;
+  }
+
+  // 檢查中顯示載入
+  if (checking) {
+    return <LoadingSpinner />;
+  }
+
+  // 未認證返回空
+  if (!isAuthed) {
+    return null;
+  }
+
+  return <MainLayout>{children}</MainLayout>;
+}
+
+// 導出的主組件（包含 I18n Provider）
+export function LayoutWrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <I18nProvider>
+      <LayoutWrapperInner>{children}</LayoutWrapperInner>
+    </I18nProvider>
   );
 }
 

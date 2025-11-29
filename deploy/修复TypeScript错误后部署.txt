@@ -1,0 +1,43 @@
+修复TypeScript错误后部署 - 完整命令
+
+========================================
+问题
+========================================
+
+构建失败，TypeScript错误：
+- page.tsx:594:19
+- setFormData缺少role_id字段
+
+已修复：已将所有setFormData调用添加role_id字段
+
+========================================
+步骤1：上传修复后的文件（在本地PowerShell执行）
+========================================
+
+scp saas-demo/src/app/group-ai/accounts/page.tsx ubuntu@165.154.233.55:/tmp/accounts_page.tsx
+
+========================================
+步骤2：在服务器上替换文件并重新构建（SSH登录后，直接复制整行执行）
+========================================
+
+cd /home/ubuntu/liaotian/saas-demo && sudo systemctl stop liaotian-frontend && cp /tmp/accounts_page.tsx src/app/group-ai/accounts/page.tsx && rm -rf .next/standalone && export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm use 20 && npm run build && mkdir -p .next/standalone/liaotian/saas-demo/.next/server && cp .next/BUILD_ID .next/standalone/liaotian/saas-demo/.next/ && cp .next/*.json .next/standalone/liaotian/saas-demo/.next/ && cp -r .next/server/* .next/standalone/liaotian/saas-demo/.next/server/ && cp -r .next/static .next/standalone/liaotian/saas-demo/.next/ && sudo systemctl start liaotian-frontend && sleep 5 && sudo systemctl status liaotian-frontend --no-pager | head -15
+
+========================================
+如果构建成功，验证部署
+========================================
+
+# 检查服务状态
+sudo systemctl status liaotian-frontend --no-pager | head -15
+
+# 检查文件
+ls -la .next/standalone/liaotian/saas-demo/.next/server/pages-manifest.json
+
+# 测试服务
+curl -I http://localhost:3000/group-ai/accounts
+
+========================================
+如果构建失败，查看错误
+========================================
+
+npm run build 2>&1 | grep -E 'error|Error|Failed' | tail -10
+

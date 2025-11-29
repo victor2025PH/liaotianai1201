@@ -1,10 +1,13 @@
 import { test, expect } from '@playwright/test';
+import { ensureLoggedIn } from './helpers/auth';
 
 /**
  * 賬號管理頁面詳細測試
  */
 test.describe('賬號管理頁面測試', () => {
   test.beforeEach(async ({ page }) => {
+    // 確保用戶已登錄
+    await ensureLoggedIn(page);
     await page.goto('/group-ai/accounts');
     await page.waitForLoadState('networkidle');
     // 等待內容加載

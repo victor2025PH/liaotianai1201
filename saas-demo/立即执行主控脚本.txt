@@ -1,0 +1,25 @@
+在服务器上执行以下命令来启动自动执行和监控：
+
+========================================
+方法 1: 后台执行（推荐）
+========================================
+
+cd ~/liaotian/saas-demo && \
+git pull origin master && \
+chmod +x 主控自动执行和监控.sh && \
+nohup bash 主控自动执行和监控.sh > ~/liaotian/test_logs/main_execution.log 2>&1 & \
+echo "主控脚本已启动 PID: $!" && \
+echo "" && \
+echo "查看实时日志:" && \
+echo "tail -f ~/liaotian/test_logs/main_execution.log"
+
+========================================
+方法 2: 前台执行（可以看到实时输出）
+========================================
+
+cd ~/liaotian/saas-demo && \
+git pull origin master && \
+chmod +x 主控自动执行和监控.sh && \
+bash 主控自动执行和监控.sh
+
+========================================

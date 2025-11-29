@@ -29,24 +29,24 @@ export function ResponseTimeChart() {
     return (
       <Card className="shadow-sm border-destructive">
         <CardHeader>
-          <CardTitle className="text-destructive">載入失敗</CardTitle>
-          <CardDescription>{error?.message || "無法載入響應時間數據"}</CardDescription>
+          <CardTitle className="text-destructive">加载失败</CardTitle>
+          <CardDescription>{error?.message || "无法加载響應时间数据"}</CardDescription>
         </CardHeader>
       </Card>
     );
   }
 
-  // 檢查數據結構是否完整
+  // 检查数据結構是否完整
   if (!data.response_time || !data.response_time.data_points || data.response_time.data_points.length === 0) {
     return (
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle>響應時間趨勢</CardTitle>
-          <CardDescription>過去 24 小時平均響應時間變化</CardDescription>
+          <CardTitle>響應时间趨勢</CardTitle>
+          <CardDescription>過去 24 小时平均響應时间變化</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center h-[200px] text-muted-foreground">
-            暫無數據
+            暫无数据
           </div>
         </CardContent>
       </Card>
@@ -61,12 +61,12 @@ export function ResponseTimeChart() {
   const isPositiveTrend = trend.startsWith("-");
   return (
     <>
-      {/* Mock 數據提示 */}
+      {/* Mock 数据提示 */}
       {isMock && (
         <Alert className="border-amber-500/50 bg-amber-500/10 mb-4">
           <Info className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <AlertDescription className="text-amber-600 dark:text-amber-400">
-            當前展示的是模擬數據。後端服務器不可用，已自動切換到模擬數據模式。
+            当前展示的是模擬数据。後端服务器不可用，已自动切換到模擬数据模式。
           </AlertDescription>
         </Alert>
       )}
@@ -74,8 +74,8 @@ export function ResponseTimeChart() {
         <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>響應時間趨勢</CardTitle>
-            <CardDescription>過去 24 小時平均響應時間變化（每 10 秒自動更新）</CardDescription>
+            <CardTitle>響應时间趨勢</CardTitle>
+            <CardDescription>過去 24 小时平均響應时间變化（每 10 秒自动更新）</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={loading}>
@@ -162,7 +162,7 @@ export function ResponseTimeChart() {
               />
             )}
 
-            {/* 數據點 */}
+            {/* 数据點 */}
             {responseTimeData.map((d, i) => (
               <circle
                 key={i}

@@ -93,6 +93,7 @@ class AccountCreateRequest(BaseModel):
 class AccountUpdateRequest(BaseModel):
     script_id: Optional[str] = None
     server_id: Optional[str] = None  # 服務器ID
+    session_file: Optional[str] = None  # Session文件路徑（用於從遠程服務器創建記錄）
     group_ids: Optional[List[int]] = None
     active: Optional[bool] = None
     reply_rate: Optional[float] = None
@@ -960,26 +961,80 @@ async def get_account(
 ):
     """獲取賬號詳情（需要 account:view 權限）"""
     check_permission(current_user, PermissionCode.ACCOUNT_VIEW.value, db)
+    logger.info(f"[GET_ACCOUNT] 收到獲取賬號請求: account_id={account_id}")
+    
     try:
+        # 1. 先檢查 AccountManager（在內存中運行的賬號）
         accounts = manager.list_accounts()
         account = next((a for a in accounts if a.account_id == account_id), None)
         
-        if not account:
-            raise HTTPException(status_code=404, detail=f"賬號 {account_id} 不存在")
+        if account:
+            logger.info(f"[GET_ACCOUNT] 賬號 {account_id} 在 AccountManager 中找到")
+            return AccountResponse(
+                account_id=account.account_id,
+                session_file=account.session_file,
+                script_id=account.script_id,
+                status=account.status.value,
+                group_count=account.group_count,
+                message_count=account.message_count,
+                reply_count=account.reply_count,
+                last_activity=account.last_activity.isoformat() if account.last_activity else None
+            )
         
-        return AccountResponse(
-            account_id=account.account_id,
-            session_file=account.session_file,
-            script_id=account.script_id,
-            status=account.status.value,
-            group_count=account.group_count,
-            message_count=account.message_count,
-            reply_count=account.reply_count,
-            last_activity=account.last_activity.isoformat() if account.last_activity else None
-        )
+        # 2. 檢查數據庫（包含遠程服務器賬號）
+        logger.info(f"[GET_ACCOUNT] 賬號 {account_id} 不在 AccountManager 中，檢查數據庫")
+        db_account = db.query(GroupAIAccount).filter(
+            GroupAIAccount.account_id == account_id
+        ).first()
+        
+        if db_account:
+            logger.info(f"[GET_ACCOUNT] 賬號 {account_id} 在數據庫中找到")
+            # 構建 AccountResponse 從數據庫記錄
+            # 安全獲取 group_ids
+            try:
+                if db_account.group_ids:
+                    if isinstance(db_account.group_ids, list):
+                        group_count = len(db_account.group_ids)
+                    elif isinstance(db_account.group_ids, str):
+                        import json
+                        parsed = json.loads(db_account.group_ids)
+                        group_count = len(parsed) if isinstance(parsed, list) else 0
+                    else:
+                        group_count = 0
+                else:
+                    group_count = 0
+            except Exception as e:
+                logger.warning(f"解析賬號 {account_id} 的 group_ids 時出錯: {e}")
+                group_count = 0
+            
+            return AccountResponse(
+                account_id=db_account.account_id or account_id,
+                session_file=db_account.session_file or "",
+                script_id=db_account.script_id or "",
+                server_id=db_account.server_id or None,
+                status="offline",  # 不在 AccountManager 中，視為離線
+                group_count=group_count,
+                message_count=0,
+                reply_count=0,
+                last_activity=None,
+                phone_number=db_account.phone_number or None,
+                username=db_account.username or None,
+                first_name=db_account.first_name or None,
+                last_name=db_account.last_name or None,
+                display_name=db_account.display_name or None,
+                avatar_url=db_account.avatar_url or None,
+                bio=db_account.bio or None,
+                user_id=db_account.user_id or None
+            )
+        
+        # 3. 都不存在，返回 404
+        logger.warning(f"[GET_ACCOUNT] 賬號 {account_id} 在 AccountManager 和數據庫中都不存在")
+        raise HTTPException(status_code=404, detail=f"賬號 {account_id} 不存在")
+        
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception(f"[GET_ACCOUNT] 獲取賬號詳情失敗: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"獲取賬號詳情失敗: {str(e)}")
 
 
@@ -992,36 +1047,168 @@ async def update_account(
     db: Session = Depends(get_db)
 ):
     """更新賬號（需要 account:update 權限）"""
-    check_permission(current_user, PermissionCode.ACCOUNT_UPDATE.value, db)
+    # 在最开始就记录日志，确保请求到达
+    logger.info(f"[UPDATE_ACCOUNT] ════════════════════════════════════════════════════════")
+    logger.info(f"[UPDATE_ACCOUNT] 收到更新賬號請求: account_id={account_id}")
+    logger.info(f"[UPDATE_ACCOUNT] 請求參數: {request.model_dump()}")
+    logger.info(f"[UPDATE_ACCOUNT] server_id={request.server_id}, session_file={request.session_file}, script_id={request.script_id}")
+    logger.info(f"[UPDATE_ACCOUNT] 當前用戶: {current_user.email if current_user else 'None'}")
+    
     try:
-        if account_id not in manager.accounts:
-            raise HTTPException(status_code=404, detail=f"賬號 {account_id} 不存在")
+        check_permission(current_user, PermissionCode.ACCOUNT_UPDATE.value, db)
+        logger.info(f"[UPDATE_ACCOUNT] 權限檢查通過")
+    except HTTPException as e:
+        logger.error(f"[UPDATE_ACCOUNT] 權限檢查失敗: {e.detail}, status_code={e.status_code}")
+        raise
+    try:
+        # 先檢查 AccountManager 中是否存在
+        account_in_manager = account_id in manager.accounts
+        logger.info(f"賬號 {account_id} 在 AccountManager 中: {account_in_manager}")
         
-        account = manager.accounts[account_id]
+        # 如果不在 AccountManager 中，檢查數據庫中是否存在
+        if not account_in_manager:
+            db_account = db.query(GroupAIAccount).filter(
+                GroupAIAccount.account_id == account_id
+            ).first()
+            
+            if not db_account:
+                # UPSERT 模式：账号不存在，根据请求创建新记录
+                logger.info(f"賬號 {account_id} 不存在，使用 UPSERT 模式創建新記錄")
+                logger.info(f"請求參數: {request.model_dump()}")
+                
+                # 確保至少提供了 server_id 才能創建記錄
+                if not request.server_id:
+                    logger.warning(f"創建新賬號需要提供 server_id，但請求中未提供")
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"創建新賬號時必須提供 server_id。請在請求中包含 server_id 字段。"
+                    )
+                
+                # 嘗試從遠程服務器掃描獲取更多信息（可選，不影響創建）
+                session_file_path = request.session_file or f"{account_id}.session"
+                
+                # 如果提供了 server_id，嘗試掃描獲取 session_file 信息（可選）
+                try:
+                    from app.api.group_ai.account_management import scan_server_accounts, SessionUploader
+                    uploader = SessionUploader()
+                    
+                    if request.server_id in uploader.servers:
+                        server_node = uploader.servers[request.server_id]
+                        logger.info(f"嘗試掃描服務器 {request.server_id} 獲取賬號信息（可選）")
+                        server_accounts = scan_server_accounts(server_node, db)
+                        
+                        # 嘗試匹配賬號
+                        account_id_str = str(account_id).strip()
+                        server_account = next(
+                            (acc for acc in server_accounts if str(acc.account_id).strip() == account_id_str),
+                            None
+                        )
+                        
+                        if server_account:
+                            # 如果掃描到，使用掃描到的 session_file
+                            session_file_path = request.session_file or server_account.session_file
+                            logger.info(f"在服務器上找到賬號，使用 session_file: {session_file_path}")
+                        else:
+                            logger.info(f"服務器上未掃描到賬號 {account_id}，將使用默認 session_file 創建記錄")
+                    else:
+                        logger.info(f"服務器 {request.server_id} 不在配置中，將使用默認值創建記錄")
+                except Exception as e:
+                    logger.warning(f"掃描服務器時出錯（不影響創建）: {e}，將使用默認值創建記錄")
+                
+                # 使用請求中的字段創建新的數據庫記錄
+                # 必填字段使用請求中的值或默認值
+                db_account = GroupAIAccount(
+                    account_id=account_id,
+                    session_file=session_file_path,
+                    script_id=request.script_id or "",
+                    server_id=request.server_id,  # 必須提供
+                    group_ids=request.group_ids or [],
+                    active=request.active if request.active is not None else True,
+                    reply_rate=request.reply_rate or 0.3,
+                    redpacket_enabled=request.redpacket_enabled if request.redpacket_enabled is not None else True,
+                    redpacket_probability=request.redpacket_probability or 0.5,
+                    max_replies_per_hour=request.max_replies_per_hour or 50,
+                    min_reply_interval=request.min_reply_interval or 3,
+                    display_name=request.display_name
+                )
+                db.add(db_account)
+                db.commit()
+                db.refresh(db_account)
+                logger.info(f"✅ UPSERT: 已創建新賬號 {account_id} 的數據庫記錄（server_id: {request.server_id}, script_id: {request.script_id or ''}）")
+            else:
+                # 賬號在數據庫中存在但不在 AccountManager 中（可能是在遠程服務器上的賬號）
+                logger.info(f"賬號 {account_id} 在數據庫中但不在 AccountManager 中，直接更新數據庫記錄")
+                db_account = db_account  # 已在上面查詢到
+        else:
+            # 賬號在 AccountManager 中，更新配置
+            account = manager.accounts[account_id]
+            
+            # 更新 AccountManager 中的配置
+            if request.script_id is not None:
+                account.config.script_id = request.script_id
+            if request.group_ids is not None:
+                account.config.group_ids = request.group_ids
+            if request.active is not None:
+                account.config.active = request.active
+            if request.reply_rate is not None:
+                account.config.reply_rate = request.reply_rate
+            if request.redpacket_enabled is not None:
+                account.config.redpacket_enabled = request.redpacket_enabled
+            if request.redpacket_probability is not None:
+                account.config.redpacket_probability = request.redpacket_probability
+            if request.max_replies_per_hour is not None:
+                account.config.max_replies_per_hour = request.max_replies_per_hour
+            if request.min_reply_interval is not None:
+                account.config.min_reply_interval = request.min_reply_interval
+            
+            # 查詢數據庫記錄
+            db_account = db.query(GroupAIAccount).filter(
+                GroupAIAccount.account_id == account_id
+            ).first()
         
-        # 更新配置
-        if request.script_id is not None:
-            account.config.script_id = request.script_id
-        if request.group_ids is not None:
-            account.config.group_ids = request.group_ids
-        if request.active is not None:
-            account.config.active = request.active
-        if request.reply_rate is not None:
-            account.config.reply_rate = request.reply_rate
-        if request.redpacket_enabled is not None:
-            account.config.redpacket_enabled = request.redpacket_enabled
-        if request.redpacket_probability is not None:
-            account.config.redpacket_probability = request.redpacket_probability
-        if request.max_replies_per_hour is not None:
-            account.config.max_replies_per_hour = request.max_replies_per_hour
-        if request.min_reply_interval is not None:
-            account.config.min_reply_interval = request.min_reply_interval
+        # 更新或創建數據庫記錄（無論賬號是否在 AccountManager 中都需要更新數據庫）
+        # 確保有 db_account（應該在上面的邏輯中已經創建或查詢到）
+        # 如果 db_account 還沒有被設置，可能是異常情況，重新查詢一次
+        if not db_account:
+            db_account = db.query(GroupAIAccount).filter(
+                GroupAIAccount.account_id == account_id
+            ).first()
         
-        # 更新數據庫記錄
-        db_account = db.query(GroupAIAccount).filter(
-            GroupAIAccount.account_id == account_id
-        ).first()
+        # 如果仍然沒有 db_account，使用 UPSERT 邏輯創建新記錄
+        if not db_account:
+            logger.info(f"賬號 {account_id} 在 AccountManager 中但數據庫記錄不存在，使用 UPSERT 模式創建數據庫記錄")
+            
+            # 確保至少提供了 server_id 才能創建記錄
+            if not request.server_id:
+                logger.warning(f"創建新賬號需要提供 server_id，但請求中未提供")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"創建新賬號時必須提供 server_id。請在請求中包含 server_id 字段。"
+                )
+            
+            # 使用請求中的字段創建新的數據庫記錄
+            session_file_path = request.session_file or (manager.accounts[account_id].config.session_file if account_in_manager else f"{account_id}.session")
+            
+            db_account = GroupAIAccount(
+                account_id=account_id,
+                session_file=session_file_path,
+                script_id=request.script_id or (manager.accounts[account_id].config.script_id if account_in_manager else ""),
+                server_id=request.server_id,
+                group_ids=request.group_ids or (manager.accounts[account_id].config.group_ids if account_in_manager else []),
+                active=request.active if request.active is not None else (manager.accounts[account_id].config.active if account_in_manager else True),
+                reply_rate=request.reply_rate or (manager.accounts[account_id].config.reply_rate if account_in_manager else 0.3),
+                redpacket_enabled=request.redpacket_enabled if request.redpacket_enabled is not None else (manager.accounts[account_id].config.redpacket_enabled if account_in_manager else True),
+                redpacket_probability=request.redpacket_probability or (manager.accounts[account_id].config.redpacket_probability if account_in_manager else 0.5),
+                max_replies_per_hour=request.max_replies_per_hour or (manager.accounts[account_id].config.max_replies_per_hour if account_in_manager else 50),
+                min_reply_interval=request.min_reply_interval or (manager.accounts[account_id].config.min_reply_interval if account_in_manager else 3),
+                display_name=request.display_name
+            )
+            db.add(db_account)
+            db.commit()
+            db.refresh(db_account)
+            logger.info(f"✅ UPSERT: 已創建賬號 {account_id} 的數據庫記錄（server_id: {request.server_id}）")
         
+        # 更新數據庫記錄（db_account 一定存在）
         if db_account:
             # 更新配置字段
             if request.script_id is not None:
@@ -1051,56 +1238,68 @@ async def update_account(
             
             db.commit()
             db.refresh(db_account)
-        else:
-            # 如果數據庫記錄不存在，創建一個（不應該發生，但為了安全性）
-            logger.warning(f"數據庫記錄不存在，創建新記錄: {account_id}")
-            db_account = GroupAIAccount(
-                account_id=account_id,
-                session_file=account.config.session_file,
-                script_id=request.script_id or account.config.script_id,
-                server_id=request.server_id,
-                group_ids=request.group_ids or account.config.group_ids,
-                active=request.active if request.active is not None else account.config.active,
-                reply_rate=request.reply_rate if request.reply_rate is not None else account.config.reply_rate,
-                redpacket_enabled=request.redpacket_enabled if request.redpacket_enabled is not None else account.config.redpacket_enabled,
-                redpacket_probability=request.redpacket_probability if request.redpacket_probability is not None else account.config.redpacket_probability,
-                max_replies_per_hour=request.max_replies_per_hour if request.max_replies_per_hour is not None else account.config.max_replies_per_hour,
-                min_reply_interval=request.min_reply_interval if request.min_reply_interval is not None else account.config.min_reply_interval,
-                display_name=request.display_name,
-                bio=request.bio
-            )
-            db.add(db_account)
-            db.commit()
-            db.refresh(db_account)
-        
-        # 返回更新後的賬號信息
-        accounts = manager.list_accounts()
-        account_data = next((a for a in accounts if a.account_id == account_id), None)
-        
-        if not account_data:
-            raise HTTPException(status_code=500, detail="更新失敗")
         
         # 清除緩存
         invalidate_cache("accounts_list*")
         
+        # 返回更新後的賬號信息
+        # 如果賬號在 AccountManager 中，從 AccountManager 獲取狀態；否則從數據庫構建響應
+        if account_in_manager:
+            accounts = manager.list_accounts()
+            account_data = next((a for a in accounts if a.account_id == account_id), None)
+            
+            if account_data:
+                return AccountResponse(
+                    account_id=account_data.account_id,
+                    session_file=account_data.session_file,
+                    script_id=account_data.script_id,
+                    server_id=db_account.server_id if db_account else None,
+                    status=account_data.status.value,
+                    group_count=account_data.group_count,
+                    message_count=account_data.message_count,
+                    reply_count=account_data.reply_count,
+                    last_activity=account_data.last_activity.isoformat() if account_data.last_activity else None,
+                    phone_number=db_account.phone_number if db_account else None,
+                    username=db_account.username if db_account else None,
+                    first_name=db_account.first_name if db_account else None,
+                    last_name=db_account.last_name if db_account else None,
+                    display_name=db_account.display_name if db_account else None,
+                    avatar_url=db_account.avatar_url if db_account else None,
+                    bio=db_account.bio if db_account else None,
+                    user_id=db_account.user_id if db_account else None
+                )
+        
+        # 如果賬號不在 AccountManager 中，從數據庫構建響應
+        if not db_account:
+            raise HTTPException(status_code=500, detail="更新失敗：無法獲取賬號信息")
+        
+        # 從數據庫構建響應（賬號不在 AccountManager 中，狀態為 offline）
+        group_ids_list = db_account.group_ids if db_account.group_ids else []
+        if isinstance(group_ids_list, str):
+            import json
+            try:
+                group_ids_list = json.loads(group_ids_list)
+            except:
+                group_ids_list = []
+        
         return AccountResponse(
-            account_id=account_data.account_id,
-            session_file=account_data.session_file,
-            script_id=account_data.script_id,
-            server_id=db_account.server_id if db_account else None,
-            status=account_data.status.value,
-            group_count=account_data.group_count,
-            message_count=account_data.message_count,
-            reply_count=account_data.reply_count,
-            last_activity=account_data.last_activity.isoformat() if account_data.last_activity else None,
-            phone_number=db_account.phone_number if db_account else None,
-            username=db_account.username if db_account else None,
-            first_name=db_account.first_name if db_account else None,
-            last_name=db_account.last_name if db_account else None,
-            display_name=db_account.display_name if db_account else None,
-            avatar_url=db_account.avatar_url if db_account else None,
-            bio=db_account.bio if db_account else None,
-            user_id=db_account.user_id if db_account else None
+            account_id=db_account.account_id,
+            session_file=db_account.session_file,
+            script_id=db_account.script_id or "",
+            server_id=db_account.server_id,
+            status="offline",  # 不在 AccountManager 中的賬號狀態為 offline
+            group_count=len(group_ids_list) if isinstance(group_ids_list, list) else 0,
+            message_count=0,
+            reply_count=0,
+            last_activity=None,
+            phone_number=db_account.phone_number,
+            username=db_account.username,
+            first_name=db_account.first_name,
+            last_name=db_account.last_name,
+            display_name=db_account.display_name,
+            avatar_url=db_account.avatar_url,
+            bio=db_account.bio,
+            user_id=db_account.user_id
         )
     
     except HTTPException:

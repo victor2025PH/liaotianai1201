@@ -1,0 +1,26 @@
+# 在服务器上执行以下命令验证修复结果
+
+# 1. 检查 location 数量（应该只有 1 个）
+sudo grep -c 'location /api/v1/notifications/ws' /etc/nginx/sites-available/aikz.usdt2026.cc
+
+# 2. 查看完整的 WebSocket 配置
+sudo grep -A 15 'location /api/v1/notifications/ws' /etc/nginx/sites-available/aikz.usdt2026.cc
+
+# 3. 检查 proxy_pass 是否有末尾斜杠
+sudo grep 'proxy_pass.*notifications/ws' /etc/nginx/sites-available/aikz.usdt2026.cc
+
+# 4. 检查 Nginx 服务状态
+sudo systemctl status nginx --no-pager | head -10
+
+# 5. 检查后端服务状态
+sudo systemctl status liaotian-backend --no-pager | head -10
+
+# 6. 确认 Nginx 已重载（检查最后的重载时间）
+sudo systemctl status nginx --no-pager | grep -i "reload\|active"
+
+# 7. 如果 Nginx 未重载，手动重载
+sudo systemctl reload nginx
+
+# 8. 或者重启（如果 reload 失败）
+sudo systemctl restart nginx
+

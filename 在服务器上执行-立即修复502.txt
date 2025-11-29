@@ -1,0 +1,17 @@
+========================================
+在服务器上执行这个命令立即修复 502 错误
+========================================
+
+ssh ubuntu@165.154.233.55
+
+然后在服务器上执行：
+
+cd ~/liaotian/admin-backend && source .venv/bin/activate && pkill -f "uvicorn.*app.main:app" || true && sleep 2 && nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/backend.log 2>&1 & sleep 5 && curl http://localhost:8000/health
+
+cd ~/liaotian/saas-demo && pkill -f "next.*dev\|node.*3000" || true && sleep 2 && nohup npm run dev > /tmp/frontend.log 2>&1 & sleep 15 && curl http://localhost:3000 | head -1
+
+sudo systemctl reload nginx
+
+然后等待30秒后刷新浏览器
+
+========================================

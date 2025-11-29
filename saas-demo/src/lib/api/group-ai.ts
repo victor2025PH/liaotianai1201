@@ -188,6 +188,7 @@ export async function updateAccount(
   request: {
     script_id?: string
     server_id?: string
+    session_file?: string  // Session文件路徑（用於從遠程服務器創建記錄）
     display_name?: string
     bio?: string
     active?: boolean
@@ -1212,6 +1213,49 @@ export async function createAssignment(request: CreateAssignmentRequest): Promis
     throw new Error(error.detail || `HTTP ${response.status}`)
   }
   return response.json()
+}
+
+// Workers API - 获取所有节点账号
+export interface WorkerAccount {
+  phone: string
+  first_name?: string
+  status: string
+  role_name?: string
+  node_id?: string
+}
+
+export interface WorkerNode {
+  node_id: string
+  status: string
+  account_count: number
+  last_heartbeat: string
+  accounts: WorkerAccount[]
+  metadata?: Record<string, any>
+}
+
+export interface WorkersResponse {
+  workers: Record<string, WorkerNode>
+}
+
+export async function getWorkers(): Promise<WorkersResponse> {
+  try {
+    const { fetchWithAuth } = await import("./client")
+    const { getApiBaseUrl } = await import("./config")
+    const response = await fetchWithAuth(`${getApiBaseUrl()}/workers/`)
+    
+    if (!response.ok) {
+      if (response.status === 404 || response.status === 401) {
+        console.warn("Workers API 端点不存在或未授权，返回空数据")
+        return { workers: {} }
+      }
+      throw new Error(`HTTP ${response.status}`)
+    }
+    
+    return response.json()
+  } catch (error) {
+    console.warn("获取 Workers 列表失败:", error)
+    return { workers: {} }
+  }
 }
 
 export async function applyAssignment(

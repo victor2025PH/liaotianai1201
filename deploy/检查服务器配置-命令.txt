@@ -1,0 +1,62 @@
+# 在服务器上执行以下命令检查 WebSocket 配置
+
+# ============================================================
+# 1. 检查 WebSocket location 是否存在
+# ============================================================
+sudo grep -A 15 "location /api/v1/notifications/ws" /etc/nginx/sites-available/aikz.usdt2026.cc
+
+# ============================================================
+# 2. 检查配置是否正确
+# ============================================================
+# 检查 Upgrade header
+sudo grep -A 15 "location /api/v1/notifications/ws" /etc/nginx/sites-available/aikz.usdt2026.cc | grep "Upgrade"
+
+# 检查 Connection header
+sudo grep -A 15 "location /api/v1/notifications/ws" /etc/nginx/sites-available/aikz.usdt2026.cc | grep "Connection"
+
+# 检查 proxy_pass
+sudo grep -A 5 "location /api/v1/notifications/ws" /etc/nginx/sites-available/aikz.usdt2026.cc | grep "proxy_pass"
+
+# ============================================================
+# 3. 检查是否有重复的 location 块
+# ============================================================
+sudo grep -c "location /api/v1/notifications/ws" /etc/nginx/sites-available/aikz.usdt2026.cc
+# 应该返回 1（如果返回 2 或更多，说明有重复）
+
+# ============================================================
+# 4. 检查 Nginx 配置语法
+# ============================================================
+sudo nginx -t
+
+# ============================================================
+# 5. 检查 Nginx 服务状态
+# ============================================================
+sudo systemctl status nginx --no-pager | head -10
+
+# ============================================================
+# 6. 检查后端服务状态
+# ============================================================
+sudo systemctl status liaotian-backend --no-pager | head -10
+
+# ============================================================
+# 7. 检查后端日志（WebSocket 相关）
+# ============================================================
+sudo journalctl -u liaotian-backend -n 100 | grep -i "websocket\|ws" | tail -10
+
+# ============================================================
+# 8. 测试 WebSocket 连接（需要先获取 token）
+# ============================================================
+# 获取 token
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=admin@example.com&password=changeme123" | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
+
+# 测试 WebSocket 连接（会显示连接状态）
+curl -i -N \
+  -H "Connection: Upgrade" \
+  -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" \
+  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8000/api/v1/notifications/ws/admin@example.com
+

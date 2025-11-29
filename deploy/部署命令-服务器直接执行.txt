@@ -1,0 +1,42 @@
+部署角色选择功能 - 服务器直接执行命令
+
+========================================
+问题分析
+========================================
+
+从日志可以看到：
+1. 服务当前是停止状态（inactive (dead)）
+2. 文件 /tmp/accounts_page.tsx 不存在，需要先上传
+3. 需要重新构建并复制standalone文件
+
+========================================
+步骤1：上传文件（在本地PowerShell执行）
+========================================
+
+scp saas-demo/src/app/group-ai/accounts/page.tsx ubuntu@165.154.233.55:/tmp/accounts_page.tsx
+
+========================================
+步骤2：在服务器上执行完整部署（SSH登录后执行）
+========================================
+
+cd /home/ubuntu/liaotian/saas-demo && sudo systemctl stop liaotian-frontend && cp /tmp/accounts_page.tsx src/app/group-ai/accounts/page.tsx && rm -rf .next/standalone && export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm use 20 && npm run build && mkdir -p .next/standalone/liaotian/saas-demo/.next/server && cp .next/BUILD_ID .next/standalone/liaotian/saas-demo/.next/ && cp .next/*.json .next/standalone/liaotian/saas-demo/.next/ && cp -r .next/server/* .next/standalone/liaotian/saas-demo/.next/server/ && cp -r .next/static .next/standalone/liaotian/saas-demo/.next/ && sudo systemctl start liaotian-frontend && sleep 5 && sudo systemctl status liaotian-frontend --no-pager | head -15
+
+========================================
+或者使用脚本（SSH登录后执行）
+========================================
+
+bash /tmp/deploy_full.sh
+
+========================================
+验证步骤
+========================================
+
+# 检查服务状态
+sudo systemctl status liaotian-frontend
+
+# 检查文件
+ls -la .next/standalone/liaotian/saas-demo/.next/server/pages-manifest.json
+
+# 测试服务
+curl -I http://localhost:3000/group-ai/accounts
+

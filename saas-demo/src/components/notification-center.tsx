@@ -188,7 +188,8 @@ export function NotificationCenter() {
 
       ws.onclose = () => {
         clearHeartbeat()
-        if (!disconnectToastShownRef.current) {
+        // 只有在之前成功連接過且未顯示過斷線提示時才顯示
+        if (connectionState === "connected" && !disconnectToastShownRef.current) {
           toast({
             title: "通知連線中斷",
             description: "正在嘗試重新連線...",
@@ -201,6 +202,12 @@ export function NotificationCenter() {
         }
         const attempt = reconnectAttemptsRef.current + 1
         reconnectAttemptsRef.current = attempt
+        // 如果連接失敗次數超過 3 次，停止重試
+        if (attempt > 3) {
+          console.warn("WebSocket 連接失敗次數過多，停止重試")
+          setConnectionState("error")
+          return
+        }
         const delay = Math.min(30000, 2000 * attempt)
         setConnectionState("reconnecting")
         reconnectTimerRef.current = setTimeout(() => {

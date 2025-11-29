@@ -1,0 +1,64 @@
+# 修复 401 认证问题 - 逐行执行命令
+# 在服务器上逐行复制执行，避免格式问题
+
+# ============================================================
+# 步骤 1: 创建目录和文件
+# ============================================================
+sudo mkdir -p /home/ubuntu/admin-backend
+sudo touch /home/ubuntu/admin-backend/.env
+
+# ============================================================
+# 步骤 2: 添加 CORS_ORIGINS 配置
+# ============================================================
+# 先检查是否存在
+sudo grep CORS_ORIGINS /home/ubuntu/admin-backend/.env
+
+# 如果不存在，添加新配置
+echo "CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:8080,http://aikz.usdt2026.cc" | sudo tee -a /home/ubuntu/admin-backend/.env
+
+# 如果已存在，更新配置（替换整行）
+sudo sed -i 's|CORS_ORIGINS=.*|CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:8080,http://aikz.usdt2026.cc|' /home/ubuntu/admin-backend/.env
+
+# ============================================================
+# 步骤 3: 验证配置
+# ============================================================
+sudo grep CORS_ORIGINS /home/ubuntu/admin-backend/.env
+
+# ============================================================
+# 步骤 4: 如果实际运行路径也有 .env，也更新它（可选）
+# ============================================================
+# 检查是否存在
+ls -la /home/ubuntu/liaotian/admin-backend/.env
+
+# 如果存在，更新它
+if [ -f "/home/ubuntu/liaotian/admin-backend/.env" ]; then
+    sudo sed -i 's|CORS_ORIGINS=.*|CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:8080,http://aikz.usdt2026.cc|' /home/ubuntu/liaotian/admin-backend/.env
+    # 或者如果不存在，添加
+    if ! sudo grep -q "CORS_ORIGINS" /home/ubuntu/liaotian/admin-backend/.env; then
+        echo "CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:8080,http://aikz.usdt2026.cc" | sudo tee -a /home/ubuntu/liaotian/admin-backend/.env
+    fi
+fi
+
+# ============================================================
+# 步骤 5: 重启服务
+# ============================================================
+sudo systemctl restart liaotian-backend
+
+# 等待 2 秒
+sleep 2
+
+# 检查服务状态
+sudo systemctl status liaotian-backend --no-pager | head -10
+
+# ============================================================
+# 步骤 6: 验证修复
+# ============================================================
+# 检查配置
+sudo grep CORS_ORIGINS /home/ubuntu/admin-backend/.env
+
+# 检查服务状态
+sudo systemctl is-active liaotian-backend
+
+# 检查后端日志
+sudo journalctl -u liaotian-backend -n 20 | grep -i cors
+

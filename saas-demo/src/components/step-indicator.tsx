@@ -52,7 +52,7 @@ export function StepIndicator({
             )}
             <span className="font-medium">{step.title}</span>
             {step.status === "optional" && (
-              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">可選</Badge>
+              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">可选</Badge>
             )}
           </Link>
           {index < steps.length - 1 && (

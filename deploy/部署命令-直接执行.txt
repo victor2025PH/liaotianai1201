@@ -1,0 +1,42 @@
+部署角色选择功能 - 直接执行命令
+
+========================================
+一键部署命令（在服务器上执行）
+========================================
+
+cd /home/ubuntu/liaotian/saas-demo && sudo systemctl stop liaotian-frontend && cp /tmp/accounts_page.tsx src/app/group-ai/accounts/page.tsx && export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm use 20 && npm run build && mkdir -p .next/standalone/liaotian/saas-demo/.next/server && cp .next/BUILD_ID .next/standalone/liaotian/saas-demo/.next/ && cp .next/*.json .next/standalone/liaotian/saas-demo/.next/ && cp -r .next/server/* .next/standalone/liaotian/saas-demo/.next/server/ && cp -r .next/static .next/standalone/liaotian/saas-demo/.next/ && sudo systemctl start liaotian-frontend && sleep 5 && sudo systemctl status liaotian-frontend --no-pager | head -15
+
+========================================
+分步执行（如果一键执行失败）
+========================================
+
+# 步骤1：进入目录并停止服务
+cd /home/ubuntu/liaotian/saas-demo
+sudo systemctl stop liaotian-frontend
+
+# 步骤2：替换文件
+cp /tmp/accounts_page.tsx src/app/group-ai/accounts/page.tsx
+
+# 步骤3：加载NVM并构建
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+nvm use 20
+npm run build
+
+# 步骤4：复制必要文件
+mkdir -p .next/standalone/liaotian/saas-demo/.next/server
+cp .next/BUILD_ID .next/standalone/liaotian/saas-demo/.next/
+cp .next/*.json .next/standalone/liaotian/saas-demo/.next/
+cp -r .next/server/* .next/standalone/liaotian/saas-demo/.next/server/
+cp -r .next/static .next/standalone/liaotian/saas-demo/.next/
+
+# 步骤5：启动服务
+sudo systemctl start liaotian-frontend
+sleep 5
+
+# 步骤6：检查服务状态
+sudo systemctl status liaotian-frontend --no-pager | head -15
+
+# 步骤7：测试服务
+curl -I http://localhost:3000/group-ai/accounts
+

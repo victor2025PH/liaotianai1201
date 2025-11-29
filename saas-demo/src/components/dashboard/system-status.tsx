@@ -8,8 +8,8 @@ import { useRealtimeMetrics } from "@/hooks/useRealtimeMetrics";
 import { cn } from "@/lib/utils";
 
 const iconMap: Record<string, any> = {
-  "API Key 狀態": "🔑",
-  "模型狀態": "💻",
+  "API Key 状态": "🔑",
+  "模型状态": "💻",
   "系統健康度": "❤️",
 };
 
@@ -36,14 +36,14 @@ export function SystemStatus() {
     return (
       <Card className="shadow-sm border-destructive">
         <CardHeader>
-          <CardTitle className="text-destructive">載入失敗</CardTitle>
-          <CardDescription>{error?.message || "無法載入系統狀態數據"}</CardDescription>
+          <CardTitle className="text-destructive">加载失败</CardTitle>
+          <CardDescription>{error?.message || "无法加载系統状态数据"}</CardDescription>
         </CardHeader>
       </Card>
     );
   }
 
-  // 防禦式邏輯：確保數據結構完整
+  // 防禦式邏輯：確保数据結構完整
   const systemStatusData = data?.system_status;
   const statusItems = Array.isArray(systemStatusData?.status_items) 
     ? systemStatusData.status_items 
@@ -52,18 +52,18 @@ export function SystemStatus() {
     ? new Date(systemStatusData.last_updated) 
     : new Date();
 
-  // 如果沒有狀態項，顯示空狀態
+  // 如果沒有状态項，顯示空状态
   if (statusItems.length === 0) {
     return (
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle>系統狀態</CardTitle>
-          <CardDescription>實時監控關鍵服務和配置狀態</CardDescription>
+          <CardTitle>系統状态</CardTitle>
+          <CardDescription>实时监控關鍵服務和配置状态</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-muted-foreground">
             <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">暫時無法獲取系統狀態數據</p>
+            <p className="text-sm">暫時无法獲取系統状态数据</p>
             <p className="text-xs mt-1">請稍後重試</p>
           </div>
         </CardContent>
@@ -74,8 +74,8 @@ export function SystemStatus() {
   return (
     <Card className="shadow-sm">
       <CardHeader>
-        <CardTitle>系統狀態</CardTitle>
-        <CardDescription>實時監控關鍵服務和配置狀態</CardDescription>
+        <CardTitle>系統状态</CardTitle>
+        <CardDescription>实时监控關鍵服務和配置状态</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {statusItems.map((item) => (
@@ -133,7 +133,7 @@ export function SystemStatus() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">最後更新</span>
+              <span className="text-xs text-muted-foreground">最后更新</span>
             </div>
             <span className="text-xs font-medium text-foreground">
               {lastUpdated.toLocaleTimeString("zh-TW", {

@@ -1,0 +1,129 @@
+在服務器上直接執行以下命令來創建 auth.ts 文件：
+
+===========================================
+方法 1: 使用 cat 命令直接創建
+===========================================
+
+cd ~/liaotian/saas-demo
+mkdir -p e2e/helpers
+
+cat > e2e/helpers/auth.ts << 'ENDOFFILE'
+/**
+ * E2E 測試認證輔助函數
+ */
+import { Page } from '@playwright/test';
+
+const DEFAULT_TEST_CREDENTIALS = {
+  username: 'admin@example.com',
+  password: 'testpass123',
+};
+
+export async function loginUser(
+  page: Page,
+  credentials: { username: string; password: string } = DEFAULT_TEST_CREDENTIALS
+) {
+  await page.goto('/login');
+  await page.waitForSelector('input[type="email"], input[name="username"], input[placeholder*="郵箱"], input[placeholder*="email"]', {
+    timeout: 5000,
+  }).catch(() => {});
+  const usernameInput = page.locator('input[type="email"], input[name="username"], input[placeholder*="郵箱"], input[placeholder*="email"]').first();
+  if (await usernameInput.isVisible().catch(() => false)) {
+    await usernameInput.fill(credentials.username);
+  }
+  const passwordInput = page.locator('input[type="password"], input[name="password"]').first();
+  if (await passwordInput.isVisible().catch(() => false)) {
+    await passwordInput.fill(credentials.password);
+  }
+  const loginButton = page.locator('button[type="submit"], button:has-text("登錄"), button:has-text("登入"), button:has-text("Login")').first();
+  if (await loginButton.isVisible().catch(() => false)) {
+    await loginButton.click();
+    await page.waitForURL(/^(?!.*\/login)/, { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+  }
+}
+
+export async function loginViaAPI(
+  page: Page,
+  credentials: { username: string; password: string } = DEFAULT_TEST_CREDENTIALS
+) {
+  const apiBaseUrl = process.env.PLAYWRIGHT_API_BASE_URL || 'http://localhost:8000';
+  const formData = new URLSearchParams();
+  formData.append('username', credentials.username);
+  formData.append('password', credentials.password);
+  const response = await page.request.post(`${apiBaseUrl}/api/v1/auth/login`, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    data: formData.toString(),
+  });
+  if (response.ok()) {
+    const tokenData = await response.json();
+    const token = tokenData.access_token;
+    await page.goto('/');
+    await page.evaluate((t) => {
+      localStorage.setItem('auth_token', t);
+      localStorage.setItem('token', t);
+    }, token);
+    await page.reload();
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+  } else {
+    throw new Error(`登錄失敗: ${response.status()} ${response.statusText()}`);
+  }
+}
+
+export async function isLoggedIn(page: Page): Promise<boolean> {
+  const currentUrl = page.url();
+  if (currentUrl.includes('/login')) {
+    return false;
+  }
+  const hasToken = await page.evaluate(() => {
+    return !!(localStorage.getItem('auth_token') || localStorage.getItem('token'));
+  });
+  return hasToken;
+}
+
+export async function ensureLoggedIn(page: Page) {
+  const loggedIn = await isLoggedIn(page);
+  if (loggedIn) {
+    return;
+  }
+  try {
+    await loginViaAPI(page);
+    const stillLoggedIn = await isLoggedIn(page);
+    if (!stillLoggedIn) {
+      throw new Error('API 登錄後驗證失敗');
+    }
+  } catch (error) {
+    console.log('API 登錄失敗，嘗試 UI 登錄:', error);
+    try {
+      await loginUser(page);
+      const stillLoggedIn = await isLoggedIn(page);
+      if (!stillLoggedIn) {
+        throw new Error('UI 登錄後驗證失敗');
+      }
+    } catch (uiError) {
+      throw new Error(`登錄失敗: API 和 UI 登錄都失敗。API錯誤: ${error}, UI錯誤: ${uiError}`);
+    }
+  }
+}
+ENDOFFILE
+
+echo "✅ 文件已創建"
+ls -la e2e/helpers/auth.ts
+
+===========================================
+方法 2: 使用腳本文件
+===========================================
+
+如果上面的方法不行，可以：
+1. 將 "在服务器上创建auth.ts.sh" 文件上傳到服務器
+2. 執行: bash 在服务器上创建auth.ts.sh
+
+===========================================
+驗證
+===========================================
+
+創建後執行：
+ls -la e2e/helpers/auth.ts
+head -n 5 e2e/helpers/auth.ts
+
+然後運行測試：
+npm run test:e2e

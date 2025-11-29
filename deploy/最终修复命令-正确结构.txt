@@ -1,0 +1,72 @@
+最终修复命令 - 正确standalone结构
+
+========================================
+问题分析
+========================================
+
+从Dockerfile可以看到，Next.js standalone模式的正确结构应该是：
+- standalone目录包含server.js
+- standalone/.next/static 包含静态文件
+- standalone/.next/BUILD_ID 包含构建ID
+
+当前问题：
+- BUILD_ID已复制到.next目录 ✅
+- static已复制到.next目录 ✅
+- 但服务仍然启动失败 ❌
+
+可能的原因：
+- .next目录中缺少其他必要文件
+- 或者server.js期望的路径不同
+
+========================================
+一键修复命令（直接复制执行）
+========================================
+
+cd /home/ubuntu/liaotian/saas-demo && sudo systemctl stop liaotian-frontend && rm -rf .next/standalone/liaotian/saas-demo/.next && mkdir -p .next/standalone/liaotian/saas-demo/.next && cp .next/BUILD_ID .next/standalone/liaotian/saas-demo/.next/ && cp -r .next/static .next/standalone/liaotian/saas-demo/.next/ && echo "文件已复制" && ls -la .next/standalone/liaotian/saas-demo/.next/ | head -10 && cd .next/standalone/liaotian/saas-demo && export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm use 20 && timeout 3 node server.js 2>&1 | head -10 && cd /home/ubuntu/liaotian/saas-demo && sudo systemctl start liaotian-frontend && sleep 5 && sudo systemctl status liaotian-frontend --no-pager | head -15
+
+========================================
+或者使用脚本
+========================================
+
+bash /tmp/fix_correct.sh
+
+========================================
+分步执行（如果一键执行失败）
+========================================
+
+# 步骤1：进入目录并停止服务
+cd /home/ubuntu/liaotian/saas-demo
+sudo systemctl stop liaotian-frontend
+
+# 步骤2：删除旧的.next目录
+rm -rf .next/standalone/liaotian/saas-demo/.next
+
+# 步骤3：创建.next目录并复制BUILD_ID
+mkdir -p .next/standalone/liaotian/saas-demo/.next
+cp .next/BUILD_ID .next/standalone/liaotian/saas-demo/.next/
+
+# 步骤4：复制static目录
+cp -r .next/static .next/standalone/liaotian/saas-demo/.next/
+
+# 步骤5：验证文件已复制
+ls -la .next/standalone/liaotian/saas-demo/.next/ | head -10
+cat .next/standalone/liaotian/saas-demo/.next/BUILD_ID
+
+# 步骤6：手动测试服务器启动
+cd .next/standalone/liaotian/saas-demo
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+nvm use 20
+timeout 3 node server.js 2>&1
+
+# 步骤7：如果测试成功，重启服务
+cd /home/ubuntu/liaotian/saas-demo
+sudo systemctl start liaotian-frontend
+sleep 5
+
+# 步骤8：检查服务状态
+sudo systemctl status liaotian-frontend --no-pager | head -15
+
+# 步骤9：如果仍然失败，查看错误日志
+sudo journalctl -u liaotian-frontend -n 10 --no-pager | tail -10
+

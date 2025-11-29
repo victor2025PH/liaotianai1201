@@ -26,9 +26,10 @@ export function useDashboardData(): UseDashboardDataReturn {
       }
       return result.data;
     },
-    staleTime: 30 * 1000, // 30 秒
-    gcTime: 5 * 60 * 1000, // 5 分鐘
-    refetchInterval: 10 * 1000, // 每 10 秒自動刷新
+    staleTime: 60 * 1000, // 1 分鐘（延長避免頻繁請求）
+    gcTime: 10 * 60 * 1000, // 10 分鐘
+    refetchInterval: 30 * 1000, // 每 30 秒自動刷新（減少頻率）
+    refetchOnWindowFocus: false, // 切換視窗時不自動刷新
     placeholderData: (previousData) => previousData,
     retry: 1,
     retryDelay: 1000,

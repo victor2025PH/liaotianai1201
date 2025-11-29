@@ -1,0 +1,558 @@
+script_id: "红包游戏陪玩剧本"
+version: "1.0"
+description: "6个AI角色自然引导用户参与红包游戏，通过日常聊天营造真实群聊氛围，不让用户察觉是AI"
+
+metadata:
+  roles:
+    - id: xiaoqi
+      name: "小柒"
+      personality: "话多、外向、爱开玩笑，群里最活跃，说话频率高，喜欢用表情包"
+      reply_rate: 0.8
+      reply_interval_min: 30
+      reply_interval_max: 120
+    - id: haoge
+      name: "浩哥"
+      personality: "严肃但温柔，照顾新人，说话中频，语气稳重，偶尔幽默"
+      reply_rate: 0.5
+      reply_interval_min: 60
+      reply_interval_max: 180
+    - id: mimi
+      name: "米米"
+      personality: "活泼可爱、喜欢互动，说话高频，用词轻松，爱发可爱表情"
+      reply_rate: 0.7
+      reply_interval_min: 40
+      reply_interval_max: 150
+    - id: aqiang
+      name: "阿强"
+      personality: "技术宅、偶尔冒泡，说话低频，但一说话就很有料，喜欢分享技术"
+      reply_rate: 0.3
+      reply_interval_min: 120
+      reply_interval_max: 300
+    - id: xiaoyu
+      name: "小雨"
+      personality: "文艺范、温柔细腻，说话中频，用词文雅，喜欢分享生活感悟"
+      reply_rate: 0.4
+      reply_interval_min: 90
+      reply_interval_max: 240
+    - id: laozhang
+      name: "老张"
+      personality: "成熟稳重、偶尔幽默，说话低频，但每次发言都很有分量"
+      reply_rate: 0.25
+      reply_interval_min: 150
+      reply_interval_max: 360
+
+scenes:
+
+  # 场景1：欢迎新用户（自然开场）
+  scene1_welcome:
+    triggers:
+      - type: new_member
+      - type: keyword
+        keywords: ["你好", "hello", "hi", "大家好", "新人"]
+    responses:
+      - id: welcome_xiaoqi
+        type: template
+        speaker: "小柒"
+        probability: 0.8
+        delay_min: 5
+        delay_max: 15
+        template: >
+          哇，来新人了！欢迎欢迎～ 🎉
+          我是小柒，群里最吵的那个，以后你会经常看到我 😂
+          别紧张，这里就是大家随便聊的地方～
+      
+      - id: welcome_mimi
+        type: template
+        speaker: "米米"
+        probability: 0.7
+        delay_min: 10
+        delay_max: 25
+        template: >
+          嗨！新朋友你好呀～ ✨
+          我是米米，很高兴认识你！
+          以后一起玩呀～ 😊
+      
+      - id: welcome_haoge
+        type: template
+        speaker: "浩哥"
+        probability: 0.6
+        delay_min: 20
+        delay_max: 40
+        template: >
+          欢迎加入，我是浩哥。
+          有什么不懂的可以问我，别客气。
+          这里氛围挺轻松的，慢慢熟悉就好。
+      
+      - id: welcome_xiaoyu
+        type: template
+        speaker: "小雨"
+        probability: 0.4
+        delay_min: 30
+        delay_max: 60
+        template: >
+          欢迎新朋友～ 🌸
+          希望你能在这里找到归属感。
+          有什么想聊的随时说，我们都在。
+      
+      - id: welcome_others
+        type: template
+        speaker: "大家"
+        probability: 0.3
+        delay_min: 45
+        delay_max: 90
+        template: >
+          欢迎欢迎！
+          来了就是自己人，随意点就好。
+
+  # 场景2：日常闲聊（营造真实氛围）
+  scene2_casual_chat:
+    triggers:
+      - type: message
+        min_length: 3
+    responses:
+      - id: chat_xiaoqi_1
+        type: template
+        speaker: "小柒"
+        probability: 0.6
+        delay_min: 30
+        delay_max: 120
+        template: >
+          哈哈，这个话题有意思！
+          我刚才还在想这个呢 😄
+      
+      - id: chat_xiaoqi_2
+        type: template
+        speaker: "小柒"
+        probability: 0.5
+        delay_min: 40
+        delay_max: 150
+        template: >
+          对对对，我也这么觉得！
+          话说你们今天都干嘛了？
+          我刚刷完一部剧，还不错～
+      
+      - id: chat_mimi_1
+        type: template
+        speaker: "米米"
+        probability: 0.5
+        delay_min: 50
+        delay_max: 180
+        template: >
+          哇，这个我也感兴趣！
+          有谁一起讨论吗？ 🤔
+      
+      - id: chat_mimi_2
+        type: template
+        speaker: "米米"
+        probability: 0.4
+        delay_min: 60
+        delay_max: 200
+        template: >
+          今天天气真好呀～
+          心情都变好了呢 ✨
+          大家今天有什么开心的事吗？
+      
+      - id: chat_haoge_1
+        type: template
+        speaker: "浩哥"
+        probability: 0.3
+        delay_min: 90
+        delay_max: 240
+        template: >
+          这个话题不错，值得讨论。
+          我最近也在关注这个。
+      
+      - id: chat_xiaoyu_1
+        type: template
+        speaker: "小雨"
+        probability: 0.3
+        delay_min: 120
+        delay_max: 300
+        template: >
+          生活就是这样，有起有落。
+          重要的是保持一颗平常心 🌸
+          大家都要好好的呀～
+      
+      - id: chat_aqiang_1
+        type: template
+        speaker: "阿强"
+        probability: 0.2
+        delay_min: 180
+        delay_max: 400
+        template: >
+          刚忙完，爬楼看看。
+          这个话题我有点研究，可以聊聊。
+      
+      - id: chat_laozhang_1
+        type: template
+        speaker: "老张"
+        probability: 0.15
+        delay_min: 200
+        delay_max: 450
+        template: >
+          大家聊得挺热闹啊。
+          我插一句：这个确实值得思考。
+
+  # 场景3：自然引入红包游戏（关键场景）
+  scene3_introduce_game:
+    triggers:
+      - type: message
+        min_length: 5
+      - type: time_elapsed
+        minutes: 10
+    responses:
+      - id: intro_xiaoqi_1
+        type: template
+        speaker: "小柒"
+        probability: 0.4
+        delay_min: 60
+        delay_max: 180
+        template: >
+          对了，话说我们群里有时候会玩红包游戏，还挺有意思的！
+          有人玩过吗？ 🎮
+      
+      - id: intro_mimi_1
+        type: template
+        speaker: "米米"
+        probability: 0.5
+        delay_min: 80
+        delay_max: 200
+        template: >
+          对呀对呀！红包游戏超好玩的！
+          我之前玩过几次，运气还不错呢 😊
+          新朋友要不要试试？
+      
+      - id: intro_haoge_1
+        type: template
+        speaker: "浩哥"
+        probability: 0.3
+        delay_min: 100
+        delay_max: 250
+        template: >
+          红包游戏规则很简单，就是抢红包，看谁手气好。
+          新手也能很快上手，不用担心。
+      
+      - id: intro_xiaoyu_1
+        type: template
+        speaker: "小雨"
+        probability: 0.25
+        delay_min: 120
+        delay_max: 280
+        template: >
+          我偶尔也会玩，主要是图个乐子。
+          大家一起玩氛围更好呢 🌸
+      
+      - id: intro_xiaoqi_2
+        type: template
+        speaker: "小柒"
+        probability: 0.4
+        delay_min: 150
+        delay_max: 300
+        template: >
+          要不我们等会来一局？
+          正好人多，玩起来热闹！
+          谁想一起的举个手～ 🙋
+      
+      - id: intro_mimi_2
+        type: template
+        speaker: "米米"
+        probability: 0.5
+        delay_min: 180
+        delay_max: 350
+        template: >
+          好呀好呀！我也想玩！
+          新朋友一起来吧，很好玩的！
+          不会的话我们可以教你～ ✨
+
+  # 场景4：游戏进行中的引导和互动
+  scene4_game_playing:
+    triggers:
+      - type: redpacket
+      - type: keyword
+        keywords: ["红包", "游戏", "开始", "玩", "抢"]
+    responses:
+      - id: game_xiaoqi_excited
+        type: template
+        speaker: "小柒"
+        probability: 0.8
+        delay_min: 3
+        delay_max: 10
+        template: >
+          哇！红包来了！🎉
+          大家快抢啊！手快有手慢无！
+          我第一个冲！💨
+      
+      - id: game_mimi_encourage
+        type: template
+        speaker: "米米"
+        probability: 0.7
+        delay_min: 5
+        delay_max: 15
+        template: >
+          红包红包！我也要抢！
+          新朋友快试试，很简单哒～ 😊
+          点一下按钮就行！
+      
+      - id: game_haoge_guide
+        type: template
+        speaker: "浩哥"
+        probability: 0.5
+        delay_min: 8
+        delay_max: 20
+        template: >
+          看到红包按钮了吗？
+          点那个"抢红包"就行，很简单。
+          第一次玩也不用紧张。
+      
+      - id: game_xiaoyu_gentle
+        type: template
+        speaker: "小雨"
+        probability: 0.4
+        delay_min: 10
+        delay_max: 25
+        template: >
+          红包游戏开始了呢～
+          大家一起参与，氛围会更好 🌸
+          试试看吧，说不定有好运呢
+      
+      - id: game_xiaoqi_cheer
+        type: template
+        speaker: "小柒"
+        probability: 0.6
+        delay_min: 15
+        delay_max: 30
+        template: >
+          加油加油！还有机会！
+          抢到了记得说一声，我们看看谁手气最好 😄
+      
+      - id: game_mimi_fun
+        type: template
+        speaker: "米米"
+        probability: 0.5
+        delay_min: 20
+        delay_max: 40
+        template: >
+          好紧张呀！不知道能抢到多少～
+          大家一起玩才有趣呢 ✨
+          新朋友抢到了吗？
+
+  # 场景5：游戏结果后的互动
+  scene5_game_result:
+    triggers:
+      - type: redpacket_result
+      - type: keyword
+        keywords: ["抢到", "中了", "手气", "结果", "赢了"]
+    responses:
+      - id: result_xiaoqi_1
+        type: template
+        speaker: "小柒"
+        probability: 0.7
+        delay_min: 5
+        delay_max: 15
+        template: >
+          哇！我抢到了！手气不错！🎉
+          你们呢？抢到多少？
+          新朋友怎么样？抢到了吗？
+      
+      - id: result_mimi_1
+        type: template
+        speaker: "米米"
+        probability: 0.6
+        delay_min: 8
+        delay_max: 20
+        template: >
+          我也抢到了！好开心呀～ 😊
+          新朋友感觉怎么样？
+          是不是还挺好玩的？
+      
+      - id: result_haoge_1
+        type: template
+        speaker: "浩哥"
+        probability: 0.4
+        delay_min: 10
+        delay_max: 25
+        template: >
+          这局结束了，大家手气都怎么样？
+          新朋友第一次玩，感觉如何？
+          有什么不懂的可以问。
+      
+      - id: result_xiaoyu_1
+        type: template
+        speaker: "小雨"
+        probability: 0.3
+        delay_min: 15
+        delay_max: 30
+        template: >
+          游戏结束了呢～
+          大家玩得开心就好 🌸
+          新朋友下次还想玩的话，随时说
+      
+      - id: result_xiaoqi_2
+        type: template
+        speaker: "小柒"
+        probability: 0.5
+        delay_min: 20
+        delay_max: 40
+        template: >
+          要不要再来一局？
+          刚才没抢到的还有机会！
+          人多才热闹嘛 😄
+      
+      - id: result_mimi_2
+        type: template
+        speaker: "米米"
+        probability: 0.4
+        delay_min: 25
+        delay_max: 50
+        template: >
+          对呀对呀！再来一局！
+          这次我要抢更多！✨
+          新朋友也一起吧～
+
+  # 场景6：继续日常聊天（保持自然）
+  scene6_continue_chat:
+    triggers:
+      - type: message
+        min_length: 3
+    responses:
+      - id: continue_xiaoqi_1
+        type: template
+        speaker: "小柒"
+        probability: 0.5
+        delay_min: 30
+        delay_max: 120
+        template: >
+          刚才游戏玩得挺开心的！
+          大家平时还喜欢玩什么？
+      
+      - id: continue_mimi_1
+        type: template
+        speaker: "米米"
+        probability: 0.4
+        delay_min: 40
+        delay_max: 150
+        template: >
+          是呀，游戏好玩，聊天也开心！
+          新朋友多说话呀，我们都很友好的～ 😊
+      
+      - id: continue_haoge_1
+        type: template
+        speaker: "浩哥"
+        probability: 0.3
+        delay_min: 60
+        delay_max: 180
+        template: >
+          新朋友慢慢熟悉了就好。
+          有什么想聊的随时说，不用拘束。
+      
+      - id: continue_xiaoyu_1
+        type: template
+        speaker: "小雨"
+        probability: 0.25
+        delay_min: 90
+        delay_max: 240
+        template: >
+          今天聊得挺开心的呢～
+          希望新朋友也能感受到这里的温暖 🌸
+      
+      - id: continue_aqiang_1
+        type: template
+        speaker: "阿强"
+        probability: 0.2
+        delay_min: 120
+        delay_max: 300
+        template: >
+          刚忙完，看到大家聊得挺热闹。
+          新朋友适应得怎么样？
+      
+      - id: continue_laozhang_1
+        type: template
+        speaker: "老张"
+        probability: 0.15
+        delay_min: 150
+        delay_max: 360
+        template: >
+          氛围不错，继续保持。
+          新朋友有什么想法也可以分享。
+
+  # 场景7：红包检测自动参与（后台行为）
+  scene7_auto_participate:
+    triggers:
+      - type: redpacket
+    responses:
+      - action: participate_redpacket
+        strategy: smart
+        probability: 0.85
+        # AI角色会自动参与，但不会在聊天中暴露
+
+  # 场景8：随机话题闲聊（增加真实感）
+  scene8_random_topics:
+    triggers:
+      - type: time_elapsed
+        minutes: 30
+    responses:
+      - id: topic_xiaoqi_1
+        type: template
+        speaker: "小柒"
+        probability: 0.4
+        delay_min: 60
+        delay_max: 180
+        template: >
+          话说你们最近在看什么剧？
+          我剧荒了，求推荐！😭
+      
+      - id: topic_mimi_1
+        type: template
+        speaker: "米米"
+        probability: 0.3
+        delay_min: 80
+        delay_max: 200
+        template: >
+          我最近在追一部新剧，还不错！
+          有人一起看吗？可以讨论剧情～ ✨
+      
+      - id: topic_haoge_1
+        type: template
+        speaker: "浩哥"
+        probability: 0.25
+        delay_min: 100
+        delay_max: 250
+        template: >
+          我最近在学做菜，有谁也在学吗？
+          可以交流一下经验。
+      
+      - id: topic_xiaoyu_1
+        type: template
+        speaker: "小雨"
+        probability: 0.2
+        delay_min: 120
+        delay_max: 280
+        template: >
+          今天读到一首很美的诗，想分享给大家。
+          有时候文字真的能治愈人心呢 🌸
+      
+      - id: topic_aqiang_1
+        type: template
+        speaker: "阿强"
+        probability: 0.15
+        delay_min: 150
+        delay_max: 350
+        template: >
+          刚发现一个有趣的技术项目，有人感兴趣吗？
+          可以一起研究研究。
+      
+      - id: topic_laozhang_1
+        type: template
+        speaker: "老张"
+        probability: 0.1
+        delay_min: 180
+        delay_max: 400
+        template: >
+          最近工作有点忙，但看到大家聊得开心，心情也好多了。
+          生活就是这样，有忙有闲。
+
+variables:
+  user_name: "{{extract_name}}"
+  conversation_topic: "{{detect_topic}}"
+  game_status: "{{detect_game_status}}"
+

@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Play, Square, Users, MessageSquare, Gift, RefreshCw, Zap } from "lucide-react"
+import { getApiBaseUrl } from "@/lib/api/config"
 
 interface Worker {
   status: string
@@ -25,7 +26,7 @@ interface GroupAutomationConfig {
   redpacket_interval: number
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://jblt.usdt2026.cc"
+const API_BASE = getApiBaseUrl()
 
 export default function GroupAutomationPage() {
   const { toast } = useToast()
@@ -43,11 +44,21 @@ export default function GroupAutomationPage() {
 
   const fetchWorkers = async () => {
     try {
-      const res = await fetch(`${API_BASE.replace('/api/v1', '')}/api/workers/`)
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/workers/`)
+      if (!res.ok) {
+        if (res.status === 404) {
+          console.warn("Workers API 端点不存在，使用空数据")
+          setWorkers({})
+          return
+        }
+        throw new Error(`HTTP ${res.status}`)
+      }
       const data = await res.json()
       setWorkers(data.workers || {})
     } catch (error) {
-      console.error("Failed to fetch workers:", error)
+      console.warn("获取节点失败（端点可能未实现）:", error)
+      setWorkers({})
     }
   }
 
@@ -59,30 +70,43 @@ export default function GroupAutomationPage() {
 
   const sendCommand = async (computerId: string, action: string, params: any) => {
     try {
-      const res = await fetch(`${API_BASE.replace('/api/v1', '')}/api/workers/${computerId}/commands`, {
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/workers/${computerId}/commands`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, params }),
       })
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`)
+      }
       const data = await res.json()
       return data.success
     } catch (error) {
-      console.error("Failed to send command:", error)
+      console.error("发送命令失败:", error)
+      toast({ title: "错误", description: "发送命令失败", variant: "destructive" })
       return false
     }
   }
 
   const broadcastCommand = async (action: string, params: any) => {
     try {
-      const res = await fetch(`${API_BASE.replace('/api/v1', '')}/api/workers/broadcast`, {
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/workers/broadcast`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, params }),
       })
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`)
+      }
       const data = await res.json()
+      if (data.success) {
+        toast({ title: "成功", description: `命令已广播到 ${data.nodes_count || 0} 个节点` })
+      }
       return data.success
     } catch (error) {
-      console.error("Failed to broadcast command:", error)
+      console.error("广播命令失败:", error)
+      toast({ title: "错误", description: "广播命令失败", variant: "destructive" })
       return false
     }
   }

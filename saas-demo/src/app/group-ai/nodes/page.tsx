@@ -15,7 +15,10 @@ import {
   Zap, Wifi, WifiOff, MessageSquare, Gift, Loader2, Plus
 } from "lucide-react"
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://jblt.usdt2026.cc/api/v1"
+import { getApiBaseUrl } from "@/lib/api/config"
+import { useI18n } from "@/lib/i18n"
+
+const API_BASE = getApiBaseUrl()
 
 interface Worker {
   status: string
@@ -34,6 +37,7 @@ interface AutomationConfig {
 
 export default function NodesPage() {
   const { toast } = useToast()
+  const { t } = useI18n()
   const [workers, setWorkers] = useState<Record<string, Worker>>({})
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("all")
@@ -51,11 +55,27 @@ export default function NodesPage() {
   const fetchWorkers = async () => {
     try {
       setLoading(true)
-      const res = await fetch(`${API_BASE.replace('/api/v1', '')}/api/workers/`)
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/workers/`)
+      if (!res.ok) {
+        if (res.status === 404) {
+          // 端点不存在，使用空数据
+          console.warn("Workers API 端点不存在，使用空数据")
+          setWorkers({})
+          return
+        }
+        if (res.status === 401) {
+          console.warn("未授权，可能需要登录")
+          setWorkers({})
+          return
+        }
+        throw new Error(`HTTP ${res.status}`)
+      }
       const data = await res.json()
       setWorkers(data.workers || {})
     } catch (error) {
-      console.error("獲取節點失敗:", error)
+      console.warn("獲取节点失败（端点可能未实现）:", error)
+      setWorkers({})
     } finally {
       setLoading(false)
     }
@@ -63,46 +83,56 @@ export default function NodesPage() {
 
   useEffect(() => {
     fetchWorkers()
-    const interval = setInterval(fetchWorkers, 10000)
+    // 优化：延長輪詢間隔到 30 秒
+    const interval = setInterval(fetchWorkers, 30000)
     return () => clearInterval(interval)
   }, [])
 
   const sendCommand = async (computerId: string, action: string, params: any = {}) => {
     try {
-      const res = await fetch(`${API_BASE.replace('/api/v1', '')}/api/workers/${computerId}/commands`, {
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/workers/${computerId}/commands`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, params }),
       })
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`)
+      }
       const data = await res.json()
       return data.success
     } catch (error) {
-      console.error("發送命令失敗:", error)
+      console.error("發送命令失败:", error)
+      toast({ title: "错误", description: "發送命令失败", variant: "destructive" })
       return false
     }
   }
 
   const broadcastCommand = async (action: string, params: any = {}) => {
     try {
-      const res = await fetch(`${API_BASE.replace('/api/v1', '')}/api/workers/broadcast`, {
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/workers/broadcast`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, params }),
       })
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`)
+      }
       const data = await res.json()
       if (data.success) {
-        toast({ title: "成功", description: `命令已廣播到所有節點` })
+        toast({ title: "成功", description: `命令已廣播到 ${data.nodes_count || 0} 个节点` })
       }
       return data.success
     } catch (error) {
-      toast({ title: "錯誤", description: "廣播命令失敗", variant: "destructive" })
+      toast({ title: "错误", description: "廣播命令失败", variant: "destructive" })
       return false
     }
   }
 
   const handleCreateGroup = async () => {
     if (!groupTitle || !selectedCreator) {
-      toast({ title: "錯誤", description: "請填寫群組名稱並選擇創建者", variant: "destructive" })
+      toast({ title: "错误", description: "請填寫群组名称並选择创建者", variant: "destructive" })
       return
     }
     setLoading(true)
@@ -110,14 +140,14 @@ export default function NodesPage() {
     const success = await sendCommand(computerId, "create_group", {
       creator_phone: phone,
       title: groupTitle,
-      description: "AI 自動聊天群組",
+      description: "AI 自动聊天群组",
     })
     if (success) {
-      toast({ title: "成功", description: "創建群組命令已發送" })
+      toast({ title: "成功", description: "创建群组命令已發送" })
       setGroupTitle("")
       setSelectedCreator("")
     } else {
-      toast({ title: "失敗", description: "發送命令失敗", variant: "destructive" })
+      toast({ title: "失败", description: "發送命令失败", variant: "destructive" })
     }
     setLoading(false)
   }
@@ -134,10 +164,26 @@ export default function NodesPage() {
 
   // 統計
   const workerList = Object.entries(workers)
-  const localNodes = workerList.filter(([id]) => !id.startsWith("server_"))
-  const serverNodes = workerList.filter(([id]) => id.startsWith("server_"))
+  // 识别本地电脑：不是以"server_"开头的都是本地电脑
+  // 包括：computer_xxx, 计算机_xxx, computer-xxx 等格式
+  const localNodes = workerList.filter(([id]) => {
+    const lowerId = id.toLowerCase()
+    return !lowerId.startsWith("server_") && !lowerId.startsWith("server-")
+  })
+  const serverNodes = workerList.filter(([id]) => {
+    const lowerId = id.toLowerCase()
+    return lowerId.startsWith("server_") || lowerId.startsWith("server-")
+  })
   const onlineNodes = workerList.filter(([, w]) => w.status === "online").length
+  const onlineLocalNodes = localNodes.filter(([, w]) => w.status === "online").length
+  const onlineServerNodes = serverNodes.filter(([, w]) => w.status === "online").length
   const totalAccounts = workerList.reduce((sum, [, w]) => sum + (w.accounts?.length || 0), 0)
+  const onlineAccounts = workerList.reduce((sum, [, w]) => {
+    if (w.status === "online" && w.accounts) {
+      return sum + w.accounts.filter((acc: any) => acc.status === "online").length
+    }
+    return sum
+  }, 0)
 
   const filteredNodes = activeTab === "all" ? workerList 
     : activeTab === "local" ? localNodes 
@@ -158,9 +204,9 @@ export default function NodesPage() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Monitor className="h-6 w-6" />
-            節點管理
+            节点管理
           </h1>
-          <p className="text-sm text-muted-foreground">管理本地電腦和遠程服務器</p>
+          <p className="text-sm text-muted-foreground">管理本地电脑和远程服务器</p>
         </div>
         <Button onClick={fetchWorkers} variant="outline" size="sm" disabled={loading}>
           <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -168,13 +214,13 @@ export default function NodesPage() {
         </Button>
       </div>
 
-      {/* 統計 + 創建群組 */}
+      {/* 統計 + 创建群组 */}
       <div className="grid gap-4 md:grid-cols-5">
         <Card className="md:col-span-1">
           <CardContent className="pt-4">
             <div className="text-2xl font-bold">{workerList.length}</div>
-            <p className="text-xs text-muted-foreground">{onlineNodes} 在線</p>
-            <p className="text-xs font-medium mt-1">總節點</p>
+            <p className="text-xs text-muted-foreground">{onlineNodes} {t.common.online}</p>
+            <p className="text-xs font-medium mt-1">{t.nodes.totalNodes}</p>
           </CardContent>
         </Card>
         <Card className="md:col-span-1">
@@ -183,8 +229,8 @@ export default function NodesPage() {
               <Laptop className="h-4 w-4 text-blue-500" />
               {localNodes.length}
             </div>
-            <p className="text-xs text-muted-foreground">{localNodes.filter(([,w]) => w.status === "online").length} 在線</p>
-            <p className="text-xs font-medium mt-1">本地電腦</p>
+            <p className="text-xs text-muted-foreground">{onlineLocalNodes} {t.common.online}</p>
+            <p className="text-xs font-medium mt-1">{t.nodes.localComputers}</p>
           </CardContent>
         </Card>
         <Card className="md:col-span-1">
@@ -193,8 +239,8 @@ export default function NodesPage() {
               <Cloud className="h-4 w-4 text-purple-500" />
               {serverNodes.length}
             </div>
-            <p className="text-xs text-muted-foreground">{serverNodes.filter(([,w]) => w.status === "online").length} 在線</p>
-            <p className="text-xs font-medium mt-1">服務器</p>
+            <p className="text-xs text-muted-foreground">{onlineServerNodes} {t.common.online}</p>
+            <p className="text-xs font-medium mt-1">{t.nodes.servers}</p>
           </CardContent>
         </Card>
         <Card className="md:col-span-1">
@@ -203,22 +249,22 @@ export default function NodesPage() {
               <Users className="h-4 w-4 text-green-500" />
               {totalAccounts}
             </div>
-            <p className="text-xs text-muted-foreground">分布 {onlineNodes} 節點</p>
-            <p className="text-xs font-medium mt-1">總賬號</p>
+            <p className="text-xs text-muted-foreground">{onlineAccounts} {t.common.online} / {t.nodes.distributed} {onlineNodes} {t.nodes.totalNodes}</p>
+            <p className="text-xs font-medium mt-1">{t.nodes.totalAccounts}</p>
           </CardContent>
         </Card>
-        {/* 快速創建群組 */}
+        {/* 快速创建群组 */}
         <Card className="md:col-span-1 border-blue-500/30">
           <CardContent className="pt-4 space-y-2">
             <Input
               value={groupTitle}
               onChange={(e) => setGroupTitle(e.target.value)}
-              placeholder="群組名稱"
+              placeholder="群组名称"
               className="h-8 text-sm"
             />
             <Select value={selectedCreator} onValueChange={setSelectedCreator}>
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="選擇創建者" />
+                <SelectValue placeholder="选择创建者" />
               </SelectTrigger>
               <SelectContent>
                 {allAccounts.map((acc) => (
@@ -230,23 +276,23 @@ export default function NodesPage() {
             </Select>
             <Button onClick={handleCreateGroup} disabled={loading} size="sm" className="w-full h-8">
               <Plus className="mr-1 h-3 w-3" />
-              創建群組
+              创建群组
             </Button>
           </CardContent>
         </Card>
       </div>
 
-      {/* 自動化控制 - 緊湊版 */}
+      {/* 自动化控制 - 緊湊版 */}
       <Card>
         <CardHeader className="py-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
               <Zap className="h-4 w-4 text-yellow-500" />
-              自動化控制
+              自动化控制
             </CardTitle>
             <div className="flex gap-2">
               <Button onClick={handleStartAutoChat} size="sm" className="h-7 bg-green-600 hover:bg-green-700">
-                <Play className="mr-1 h-3 w-3" /> 啟動
+                <Play className="mr-1 h-3 w-3" /> 启动
               </Button>
               <Button onClick={handleStopAutoChat} size="sm" variant="destructive" className="h-7">
                 <Square className="mr-1 h-3 w-3" /> 停止
@@ -257,7 +303,7 @@ export default function NodesPage() {
         <CardContent className="pt-0 pb-3">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
-              <Label className="text-xs whitespace-nowrap">聊天間隔</Label>
+              <Label className="text-xs whitespace-nowrap">聊天间隔</Label>
               <Input
                 type="number"
                 value={config.chat_interval_min}
@@ -274,7 +320,7 @@ export default function NodesPage() {
               <span className="text-xs text-muted-foreground">秒</span>
             </div>
             <div className="flex items-center gap-2">
-              <Label className="text-xs whitespace-nowrap">紅包間隔</Label>
+              <Label className="text-xs whitespace-nowrap">红包间隔</Label>
               <Input
                 type="number"
                 value={config.redpacket_interval}
@@ -298,21 +344,21 @@ export default function NodesPage() {
                   onCheckedChange={(v) => setConfig({ ...config, redpacket_enabled: v })}
                   className="scale-75"
                 />
-                <Label className="text-xs">紅包</Label>
+                <Label className="text-xs">红包</Label>
               </div>
             </div>
             <Button onClick={handleUpdateConfig} size="sm" variant="outline" className="h-7">
-              應用配置
+              应用配置
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* 節點列表 */}
+      {/* 节点列表 */}
       <Card>
         <CardHeader className="py-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">節點列表</CardTitle>
+            <CardTitle className="text-base">节点列表</CardTitle>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="h-7">
                 <TabsTrigger value="all" className="text-xs h-6 px-2">全部 ({workerList.length})</TabsTrigger>
@@ -320,7 +366,7 @@ export default function NodesPage() {
                   <Laptop className="mr-1 h-3 w-3" />本地 ({localNodes.length})
                 </TabsTrigger>
                 <TabsTrigger value="server" className="text-xs h-6 px-2">
-                  <Cloud className="mr-1 h-3 w-3" />服務器 ({serverNodes.length})
+                  <Cloud className="mr-1 h-3 w-3" />服务器 ({serverNodes.length})
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -328,7 +374,7 @@ export default function NodesPage() {
         </CardHeader>
         <CardContent className="pt-0">
           {filteredNodes.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-sm">暫無節點</div>
+            <div className="text-center py-8 text-muted-foreground text-sm">暫无节点</div>
           ) : (
             <div className="space-y-3">
               {filteredNodes.map(([nodeId, worker]) => (
@@ -342,15 +388,15 @@ export default function NodesPage() {
                       )}
                       <span className="font-medium">{nodeId}</span>
                       <span className="text-xs text-muted-foreground">
-                        最後心跳: {worker.last_heartbeat ? new Date(worker.last_heartbeat).toLocaleTimeString() : "N/A"}
+                        最后心跳: {worker.last_heartbeat ? new Date(worker.last_heartbeat).toLocaleTimeString() : "N/A"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant={worker.status === "online" ? "default" : "destructive"} className={`text-xs ${worker.status === "online" ? "bg-green-500" : ""}`}>
                         {worker.status === "online" ? <Wifi className="mr-1 h-3 w-3" /> : <WifiOff className="mr-1 h-3 w-3" />}
-                        {worker.status === "online" ? "在線" : "離線"}
+                        {worker.status === "online" ? "在線" : "离线"}
                       </Badge>
-                      <Badge variant="outline" className="text-xs">{worker.accounts?.length || 0} 賬號</Badge>
+                      <Badge variant="outline" className="text-xs">{worker.accounts?.length || 0} 账号</Badge>
                     </div>
                   </div>
                   {worker.accounts && worker.accounts.length > 0 && (
@@ -364,7 +410,7 @@ export default function NodesPage() {
                       ))}
                     </div>
                   )}
-                  {/* 節點操作 */}
+                  {/* 节点操作 */}
                   <div className="flex gap-2 mt-2 pt-2 border-t">
                     <Button 
                       size="sm" 
@@ -372,7 +418,7 @@ export default function NodesPage() {
                       className="h-6 text-xs"
                       onClick={() => sendCommand(nodeId, "start_auto_chat", { group_id: 0 })}
                     >
-                      <Play className="mr-1 h-3 w-3" /> 啟動聊天
+                      <Play className="mr-1 h-3 w-3" /> 启动聊天
                     </Button>
                     <Button 
                       size="sm" 

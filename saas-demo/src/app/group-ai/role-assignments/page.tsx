@@ -51,36 +51,36 @@ import Link from "next/link"
 const workflowSteps: Step[] = [
   {
     number: 1,
-    title: "劇本管理",
-    description: "創建和管理 AI 對話劇本（必需）",
+    title: "剧本管理",
+    description: "创建和管理 AI 对话剧本（必需）",
     href: "/group-ai/scripts",
     status: "completed",
   },
   {
     number: 2,
-    title: "賬號管理",
-    description: "創建和管理 Telegram 賬號，關聯劇本",
+    title: "账号管理",
+    description: "创建和管理 Telegram 账号，关联剧本",
     href: "/group-ai/accounts",
     status: "completed",
   },
   {
     number: 3,
     title: "角色分配",
-    description: "從劇本提取角色並分配給賬號（可選）",
+    description: "從剧本提取角色並分配給账号（可选）",
     href: "/group-ai/role-assignments",
     status: "current",
   },
   {
     number: 4,
     title: "分配方案",
-    description: "保存和重用角色分配方案（可選）",
+    description: "保存和重用角色分配方案（可选）",
     href: "/group-ai/role-assignment-schemes",
     status: "optional",
   },
   {
     number: 5,
-    title: "自動化任務",
-    description: "配置自動化執行任務（可選）",
+    title: "自动化任务",
+    description: "配置自动化执行任务（可选）",
     href: "/group-ai/automation-tasks",
     status: "optional",
   },
@@ -201,14 +201,14 @@ export default function RoleAssignmentsPage() {
     try {
       const data = await getScripts()
       setScripts(data || [])
-      // 移除空列表警告，因為空列表不代表錯誤（可能只是尚未創建劇本）
+      // 移除空列表警告，因為空列表不代表错误（可能只是尚未创建剧本）
     } catch (err) {
-      console.error("[角色分配] 加載劇本列表失敗:", err)
-      // 設置空數組而不是顯示錯誤，避免干擾用戶
+      console.error("[角色分配] 加载剧本列表失败:", err)
+      // 设置空數組而不是顯示错误，避免干擾用户
       setScripts([])
-      // 只在明確的錯誤情況下顯示錯誤消息
+      // 只在明確的错误情況下顯示错误消息
       if (err instanceof Error && !err.message.includes("fetch") && !err.message.includes("HTTP 500")) {
-        showError("加載失敗", err.message)
+        showError("加载失败", err.message)
       }
     }
   }
@@ -218,21 +218,21 @@ export default function RoleAssignmentsPage() {
       const data = await getAccounts()
       const accountList = Array.isArray(data) ? data : (data as any)?.items || []
       setAccounts(accountList)
-      // 移除空列表警告，因為空列表不代表錯誤（可能只是尚未創建賬號）
+      // 移除空列表警告，因為空列表不代表错误（可能只是尚未创建账号）
     } catch (err) {
-      console.error("[角色分配] 加載帳號列表失敗:", err)
-      // 設置空數組而不是顯示錯誤，避免干擾用戶
+      console.error("[角色分配] 加载账号列表失败:", err)
+      // 设置空數組而不是顯示错误，避免干擾用户
       setAccounts([])
-      // 只在明確的錯誤情況下顯示錯誤消息
+      // 只在明確的错误情況下顯示错误消息
       if (err instanceof Error && !err.message.includes("fetch") && !err.message.includes("HTTP 500")) {
-        showError("加載失敗", err.message)
+        showError("加载失败", err.message)
       }
     }
   }
 
   const handleExtractRoles = async () => {
     if (!selectedScriptId) {
-      showError("錯誤", "請先選擇劇本")
+      showError("错误", "請先选择剧本")
       return
     }
 
@@ -241,9 +241,9 @@ export default function RoleAssignmentsPage() {
       const response = await extractRoles(selectedScriptId)
       setRoles(response.roles)
       setRolesSaved(false) // 标记为未保存，需要用户确认
-      showSuccess("提取成功", `成功提取 ${response.total_roles} 個角色，請點擊「確認保存」按鈕保存數據`)
+      showSuccess("提取成功", `成功提取 ${response.total_roles} 个角色，請点击「确认保存」按鈕保存数据`)
     } catch (err) {
-      showError("提取失敗", err instanceof Error ? err.message : "無法提取角色")
+      showError("提取失败", err instanceof Error ? err.message : "无法提取角色")
     } finally {
       setLoadingRoles(false)
     }
@@ -252,24 +252,24 @@ export default function RoleAssignmentsPage() {
   // 确认保存提取的角色数据
   const handleConfirmSaveRoles = () => {
     if (roles.length === 0) {
-      showError("錯誤", "沒有可保存的角色數據")
+      showError("错误", "沒有可保存的角色数據")
       return
     }
     
     try {
       localStorage.setItem(STORAGE_KEYS.EXTRACTED_ROLES, JSON.stringify(roles))
       setRolesSaved(true)
-      showSuccess("保存成功", "角色數據已保存，切換菜單不會丟失")
+      showSuccess("保存成功", "角色数據已保存，切換菜單不會丟失")
     } catch (err) {
-      showError("保存失敗", "無法保存角色數據到本地存儲")
+      showError("保存失败", "无法保存角色数據到本地存儲")
     }
   }
 
   // 清除保存的数据
   const handleClearSavedData = () => {
     showConfirm(
-      "確認清除",
-      "確定要清除所有已保存的數據嗎？此操作不可恢復。",
+      "确认清除",
+      "确定要清除所有已保存的数据嗎？此操作不可恢复。",
       () => {
         localStorage.removeItem(STORAGE_KEYS.SELECTED_SCRIPT_ID)
         localStorage.removeItem(STORAGE_KEYS.EXTRACTED_ROLES)
@@ -286,24 +286,24 @@ export default function RoleAssignmentsPage() {
         setAssignmentPlan(null)
         setRolesSaved(false)
         
-        showSuccess("清除成功", "所有數據已清除")
+        showSuccess("清除成功", "所有数据已清除")
       }
     )
   }
 
   const handleCreateAssignment = async () => {
     if (!selectedScriptId) {
-      showError("錯誤", "請先選擇劇本")
+      showError("错误", "請先选择剧本")
       return
     }
 
     if (selectedAccountIds.length === 0) {
-      showError("錯誤", "請至少選擇一個帳號")
+      showError("错误", "請至少选择一个账号")
       return
     }
 
     if (roles.length === 0) {
-      showError("錯誤", "請先提取角色")
+      showError("错误", "請先提取角色")
       return
     }
 
@@ -316,9 +316,9 @@ export default function RoleAssignmentsPage() {
         manual_assignments: assignmentMode === "manual" ? manualAssignments : undefined,
       })
       setAssignmentPlan(response)
-      showSuccess("創建成功", "分配方案已生成")
+      showSuccess("创建成功", "分配方案已生成")
     } catch (err) {
-      showError("創建失敗", err instanceof Error ? err.message : "無法創建分配方案")
+      showError("创建失败", err instanceof Error ? err.message : "无法创建分配方案")
     } finally {
       setCreatingAssignment(false)
     }
@@ -326,7 +326,7 @@ export default function RoleAssignmentsPage() {
 
   const handleApplyAssignment = async () => {
     if (!assignmentPlan) {
-      showError("錯誤", "沒有可應用的分配方案")
+      showError("错误", "沒有可應用的分配方案")
       return
     }
 
@@ -336,17 +336,17 @@ export default function RoleAssignmentsPage() {
     })
 
     showConfirm(
-      "確認應用",
-      `確定要應用分配方案到 ${assignmentPlan.assignments.length} 個角色嗎？`,
+      "确认應用",
+      `确定要應用分配方案到 ${assignmentPlan.assignments.length} 个角色嗎？`,
       async () => {
         try {
           setApplyingAssignment(true)
           const result = await applyAssignment(selectedScriptId, assignments)
           showSuccess("應用成功", result.message)
-          // 刷新帳號列表
+          // 刷新账号列表
           await fetchAccounts()
         } catch (err) {
-          showError("應用失敗", err instanceof Error ? err.message : "無法應用分配方案")
+          showError("應用失败", err instanceof Error ? err.message : "无法應用分配方案")
         } finally {
           setApplyingAssignment(false)
         }
@@ -395,7 +395,7 @@ export default function RoleAssignmentsPage() {
           <div>
             <h1 className="text-3xl font-bold">角色分配管理</h1>
             <p className="text-muted-foreground mt-2">
-              自動或手動分配劇本角色到帳號
+              自动或手动分配剧本角色到账号
             </p>
           </div>
           <Button
@@ -405,7 +405,7 @@ export default function RoleAssignmentsPage() {
             className="text-red-600 hover:text-red-700 hover:bg-red-50"
           >
             <XCircle className="mr-2 h-4 w-4" />
-            清除數據
+            清除数据
           </Button>
         </div>
 
@@ -420,17 +420,17 @@ export default function RoleAssignmentsPage() {
         <TabsContent value="extract">
           <Card>
             <CardHeader>
-              <CardTitle>從劇本提取角色</CardTitle>
+              <CardTitle>從剧本提取角色</CardTitle>
               <CardDescription>
-                選擇劇本並提取其中的角色列表
+                选择剧本並提取其中的角色列表
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>選擇劇本</Label>
+                <Label>选择剧本</Label>
                 <Select value={selectedScriptId} onValueChange={setSelectedScriptId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="選擇劇本" />
+                    <SelectValue placeholder="选择剧本" />
                   </SelectTrigger>
                   <SelectContent>
                     {scripts.map((script) => (
@@ -482,7 +482,7 @@ export default function RoleAssignmentsPage() {
                         className="bg-green-600 hover:bg-green-700"
                       >
                         <CheckCircle2 className="mr-2 h-4 w-4" />
-                        確認保存
+                        确认保存
                       </Button>
                     )}
                   </div>
@@ -509,7 +509,7 @@ export default function RoleAssignmentsPage() {
                   {rolesSaved && (
                     <div className="text-sm text-muted-foreground bg-green-50 dark:bg-green-950 p-2 rounded">
                       <CheckCircle2 className="inline mr-1 h-3 w-3 text-green-600" />
-                      數據已保存，切換菜單不會丟失
+                      数据已保存，切換菜單不會丟失
                     </div>
                   )}
                 </div>
@@ -522,14 +522,14 @@ export default function RoleAssignmentsPage() {
         <TabsContent value="assign">
           <Card>
             <CardHeader>
-              <CardTitle>創建分配方案</CardTitle>
+              <CardTitle>创建分配方案</CardTitle>
               <CardDescription>
-                選擇帳號並創建角色分配方案
+                选择账号並创建角色分配方案
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>選擇帳號</Label>
+                <Label>选择账号</Label>
                 <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border rounded-md p-2">
                   {accounts.map((account) => (
                     <label key={account.account_id} className="flex items-center space-x-2 cursor-pointer">
@@ -553,7 +553,7 @@ export default function RoleAssignmentsPage() {
                   ))}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  已選擇 {selectedAccountIds.length} 個帳號
+                  已选择 {selectedAccountIds.length} 个账号
                 </p>
               </div>
 
@@ -564,15 +564,15 @@ export default function RoleAssignmentsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="auto">自動分配</SelectItem>
-                    <SelectItem value="manual">手動分配</SelectItem>
+                    <SelectItem value="auto">自动分配</SelectItem>
+                    <SelectItem value="manual">手动分配</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               {assignmentMode === "manual" && roles.length > 0 && (
                 <div className="space-y-2">
-                  <Label>手動分配角色</Label>
+                  <Label>手动分配角色</Label>
                   <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-2">
                     {roles.map((role) => (
                       <div key={role.role_id} className="flex items-center space-x-2">
@@ -582,7 +582,7 @@ export default function RoleAssignmentsPage() {
                           onValueChange={(v) => handleManualAssignmentChange(role.role_id, v)}
                         >
                           <SelectTrigger className="flex-1">
-                            <SelectValue placeholder="選擇帳號" />
+                            <SelectValue placeholder="选择账号" />
                           </SelectTrigger>
                           <SelectContent>
                             {selectedAccountIds.map((accountId) => (
@@ -607,12 +607,12 @@ export default function RoleAssignmentsPage() {
                   {creatingAssignment ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      創建中...
+                      创建中...
                     </>
                   ) : (
                     <>
                       <CheckCircle2 className="mr-2 h-4 w-4" />
-                      創建分配方案
+                      创建分配方案
                     </>
                   )}
                 </Button>
@@ -627,13 +627,13 @@ export default function RoleAssignmentsPage() {
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>分配方案詳情</CardTitle>
+                  <CardTitle>分配方案详情</CardTitle>
                   <CardDescription>
                     審查分配方案並應用
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* 驗證結果 */}
+                  {/* 验证結果 */}
                   <div className={`p-4 rounded-lg border ${
                     assignmentPlan.validation.is_valid 
                       ? "bg-green-50 border-green-200" 
@@ -665,7 +665,7 @@ export default function RoleAssignmentsPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>角色</TableHead>
-                          <TableHead>帳號</TableHead>
+                          <TableHead>账号</TableHead>
                           <TableHead>負載權重</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -681,14 +681,14 @@ export default function RoleAssignmentsPage() {
                     </Table>
                   </div>
 
-                  {/* 帳號負載統計 */}
+                  {/* 账号負載統計 */}
                   <div>
-                    <h3 className="text-lg font-semibold mb-2">帳號負載統計</h3>
+                    <h3 className="text-lg font-semibold mb-2">账号負載統計</h3>
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>帳號</TableHead>
-                          <TableHead>角色數量</TableHead>
+                          <TableHead>账号</TableHead>
+                          <TableHead>角色数量</TableHead>
                           <TableHead>總負載</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -729,14 +729,14 @@ export default function RoleAssignmentsPage() {
           ) : (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground">
-                請先在「分配方案」標籤頁創建分配方案
+                請先在「分配方案」標籤页创建分配方案
               </CardContent>
             </Card>
           )}
         </TabsContent>
       </Tabs>
 
-      {/* 錯誤對話框 */}
+      {/* 错误对话框 */}
       <AlertDialog open={errorDialogOpen} onOpenChange={setErrorDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -747,12 +747,12 @@ export default function RoleAssignmentsPage() {
             <AlertDialogDescription>{errorDialogMessage}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setErrorDialogOpen(false)}>確定</AlertDialogAction>
+            <AlertDialogAction onClick={() => setErrorDialogOpen(false)}>确定</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* 成功對話框 */}
+      {/* 成功对话框 */}
       <AlertDialog open={successDialogOpen} onOpenChange={setSuccessDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -763,12 +763,12 @@ export default function RoleAssignmentsPage() {
             <AlertDialogDescription>{successDialogMessage}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setSuccessDialogOpen(false)}>確定</AlertDialogAction>
+            <AlertDialogAction onClick={() => setSuccessDialogOpen(false)}>确定</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* 確認對話框 */}
+      {/* 确认对话框 */}
       <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -783,7 +783,7 @@ export default function RoleAssignmentsPage() {
               }
               setConfirmDialogOpen(false)
             }}>
-              確定
+              确定
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,0 +1,50 @@
+# 在服务器上直接执行以下命令（不需要上传脚本）
+
+# ============================================================
+# 方法 1：最简单（推荐）- 直接执行
+# ============================================================
+
+# 创建目录和文件
+sudo mkdir -p /home/ubuntu/admin-backend
+
+# 创建 .env 文件并添加 CORS 配置
+echo "CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:8080,http://aikz.usdt2026.cc" | sudo tee /home/ubuntu/admin-backend/.env
+
+# 验证配置
+sudo cat /home/ubuntu/admin-backend/.env
+
+# 重启服务
+sudo systemctl restart liaotian-backend
+
+# 等待并检查状态
+sleep 2
+sudo systemctl status liaotian-backend --no-pager | head -10
+
+# ============================================================
+# 方法 2：如果已存在 CORS_ORIGINS，更新它
+# ============================================================
+
+# 先检查是否存在
+sudo grep CORS_ORIGINS /home/ubuntu/admin-backend/.env
+
+# 如果存在，更新（替换整行）
+sudo sed -i 's|CORS_ORIGINS=.*|CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:8080,http://aikz.usdt2026.cc|' /home/ubuntu/admin-backend/.env
+
+# 如果不存在，添加
+if ! sudo grep -q "CORS_ORIGINS" /home/ubuntu/admin-backend/.env 2>/dev/null; then
+    echo "CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:8080,http://aikz.usdt2026.cc" | sudo tee -a /home/ubuntu/admin-backend/.env
+fi
+
+# ============================================================
+# 验证修复
+# ============================================================
+
+# 检查配置
+sudo grep CORS_ORIGINS /home/ubuntu/admin-backend/.env
+
+# 检查服务状态
+sudo systemctl is-active liaotian-backend
+
+# 检查后端日志
+sudo journalctl -u liaotian-backend -n 20 | grep -i cors
+

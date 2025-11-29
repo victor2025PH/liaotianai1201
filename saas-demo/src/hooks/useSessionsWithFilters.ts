@@ -33,25 +33,33 @@ export function useSessionsWithFilters(
   const queryOptions: UseQueryOptions<SessionList, Error> = {
     queryKey,
     queryFn: async () => {
-      const result = await getSessionsWithFilters(page, pageSize, q, range, startDate, endDate);
-      
-      if (!result.ok || result.error) {
-        // 如果有 mock 數據，使用 mock 數據
-        if (result._isMock && result.data) {
-          return result.data;
+      try {
+        const result = await getSessionsWithFilters(page, pageSize, q, range, startDate, endDate);
+        
+        if (!result.ok || result.error) {
+          // 如果有 mock 數據，使用 mock 數據
+          if (result._isMock && result.data) {
+            return result.data;
+          }
+          // API 不可用時返回空數據而不是拋出錯誤
+          console.warn("會話 API 不可用:", result.error?.message);
+          return { items: [], total: 0, page: 1, page_size: pageSize };
         }
-        throw new Error(result.error?.message || "無法載入會話列表");
+        
+        if (!result.data) {
+          return { items: [], total: 0, page: 1, page_size: pageSize };
+        }
+        
+        return result.data;
+      } catch (err) {
+        // 網絡錯誤或其他異常時返回空數據
+        console.warn("獲取會話列表失敗:", err);
+        return { items: [], total: 0, page: 1, page_size: pageSize };
       }
-      
-      if (!result.data) {
-        throw new Error("未返回數據");
-      }
-      
-      return result.data;
     },
     staleTime: 30 * 1000, // 30 秒內數據被認為是新鮮的
     gcTime: 5 * 60 * 1000, // 5 分鐘後未使用的數據被垃圾回收
-    retry: 1, // 失敗時重試 1 次
+    retry: 0, // 不重試（API 可能不存在）
     refetchOnWindowFocus: false, // 窗口聚焦時不自動重新獲取
   };
 

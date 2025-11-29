@@ -13,8 +13,8 @@ from app.schemas.auth import TokenPayload
 from app.models.user import User
 
 # 使用 auto_error=False 允許在 get_current_user 中手動處理認證
-# 這樣可以更好地控制錯誤信息和處理邏輯
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=True)
+# 這樣可以更好地控制錯誤信息和處理邏輯，特別是在禁用認證時
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 http_bearer = HTTPBearer(auto_error=False)  # 保留作為備用
 
 
@@ -24,7 +24,7 @@ def get_db_session() -> Generator[Session, None, None]:
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),  # auto_error=True 时，token 不会是 None
+    token: Optional[str] = Depends(oauth2_scheme),  # auto_error=False 时，token 可能为 None
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(http_bearer),
     db: Session = Depends(get_db_session)
 ):
@@ -45,7 +45,7 @@ def get_current_user(
         return None
     
     # 從 OAuth2 或 HTTP Bearer 獲取 token
-    # 当 auto_error=True 时，oauth2_scheme 已经确保 token 存在
+    # 当 auto_error=False 时，需要手动检查 token 是否存在
     auth_token = token
     if not auth_token and credentials:
         auth_token = credentials.credentials

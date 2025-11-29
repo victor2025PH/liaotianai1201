@@ -1,5 +1,5 @@
 /**
- * 權限管理頁面
+ * 权限管理页面
  */
 "use client"
 
@@ -62,8 +62,8 @@ export default function PermissionsPage() {
       setPermissions(data)
     } catch (err) {
       toast({
-        title: "錯誤",
-        description: err instanceof Error ? err.message : "加載權限列表失敗",
+        title: "错误",
+        description: err instanceof Error ? err.message : "加载权限列表失败",
         variant: "destructive",
       })
     } finally {
@@ -79,8 +79,8 @@ export default function PermissionsPage() {
     try {
       if (!formData.code.trim()) {
         toast({
-          title: "錯誤",
-          description: "權限代碼不能為空",
+          title: "错误",
+          description: "权限代码不能為空",
           variant: "destructive",
         })
         return
@@ -89,15 +89,15 @@ export default function PermissionsPage() {
       await createPermission(formData)
       toast({
         title: "成功",
-        description: "權限創建成功",
+        description: "權限创建成功",
       })
       setIsCreateDialogOpen(false)
       setFormData({ code: "", description: "" })
       loadPermissions()
     } catch (err) {
       toast({
-        title: "錯誤",
-        description: err instanceof Error ? err.message : "創建權限失敗",
+        title: "错误",
+        description: err instanceof Error ? err.message : "创建權限失败",
         variant: "destructive",
       })
     }
@@ -143,15 +143,15 @@ export default function PermissionsPage() {
       loadPermissions()
     } catch (err) {
       toast({
-        title: "錯誤",
-        description: err instanceof Error ? err.message : "更新權限失敗",
+        title: "错误",
+        description: err instanceof Error ? err.message : "更新權限失败",
         variant: "destructive",
       })
     }
   }
 
   const handleDelete = async (permission: Permission) => {
-    if (!confirm(`確定要刪除權限 "${permission.code}" 嗎？`)) {
+    if (!confirm(`确定要删除權限 "${permission.code}" 嗎？`)) {
       return
     }
 
@@ -159,20 +159,20 @@ export default function PermissionsPage() {
       await deletePermission(permission.id)
       toast({
         title: "成功",
-        description: "權限刪除成功",
+        description: "權限删除成功",
       })
       loadPermissions()
     } catch (err) {
       toast({
-        title: "錯誤",
-        description: err instanceof Error ? err.message : "刪除權限失敗",
+        title: "错误",
+        description: err instanceof Error ? err.message : "删除權限失败",
         variant: "destructive",
       })
     }
   }
 
   const handleInit = async () => {
-    if (!confirm("確定要初始化系統權限嗎？這將創建所有預定義權限和角色。")) {
+    if (!confirm("确定要初始化系統權限嗎？這將创建所有預定義權限和角色。")) {
       return
     }
 
@@ -180,13 +180,13 @@ export default function PermissionsPage() {
       const result = await initPermissions()
       toast({
         title: "成功",
-        description: `初始化完成：創建了 ${result.permissions_created} 個權限和 ${result.roles_created} 個角色`,
+        description: `初始化完成：创建了 ${result.permissions_created} 个權限和 ${result.roles_created} 个角色`,
       })
       loadPermissions()
     } catch (err) {
       toast({
-        title: "錯誤",
-        description: err instanceof Error ? err.message : "初始化權限失敗",
+        title: "错误",
+        description: err instanceof Error ? err.message : "初始化权限失败",
         variant: "destructive",
       })
     }
@@ -198,7 +198,7 @@ export default function PermissionsPage() {
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <Shield className="h-8 w-8" />
-            權限管理
+            权限管理
           </h1>
           <p className="text-muted-foreground mt-2">
             管理系統權限和角色權限分配
@@ -217,7 +217,7 @@ export default function PermissionsPage() {
             onClick={() => router.push("/permissions/users")}
           >
             <Users className="h-4 w-4 mr-2" />
-            用戶角色管理
+            用户角色管理
           </Button>
           <PermissionGuard permission="permission:view">
             <Button
@@ -226,7 +226,7 @@ export default function PermissionsPage() {
               disabled={loading}
             >
               <RefreshCw className="h-4 w-4 mr-2" />
-              初始化權限
+              初始化权限
             </Button>
           </PermissionGuard>
           <PermissionGuard permission="permission:create">
@@ -234,19 +234,19 @@ export default function PermissionsPage() {
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
-                  創建權限
+                  创建權限
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>創建權限</DialogTitle>
+                  <DialogTitle>创建權限</DialogTitle>
                   <DialogDescription>
-                    創建一個新的權限
+                    创建一个新的權限
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="code">權限代碼</Label>
+                    <Label htmlFor="code">权限代码</Label>
                     <Input
                       id="code"
                       value={formData.code}
@@ -275,7 +275,7 @@ export default function PermissionsPage() {
                   >
                     取消
                   </Button>
-                  <Button onClick={handleCreate}>創建</Button>
+                  <Button onClick={handleCreate}>创建</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -285,14 +285,14 @@ export default function PermissionsPage() {
 
       <PermissionGuard permission="permission:view">
         {loading ? (
-          <div className="text-center py-8">加載中...</div>
+          <div className="text-center py-8">加载中...</div>
         ) : (
           <div className="border rounded-lg">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>ID</TableHead>
-                  <TableHead>權限代碼</TableHead>
+                  <TableHead>权限代码</TableHead>
                   <TableHead>描述</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
@@ -301,7 +301,7 @@ export default function PermissionsPage() {
                 {permissions.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="text-center py-8">
-                      沒有權限數據，請先初始化權限
+                      没有权限数据，請先初始化权限
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -345,14 +345,14 @@ export default function PermissionsPage() {
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>編輯權限</DialogTitle>
+              <DialogTitle>编辑權限</DialogTitle>
               <DialogDescription>
                 更新權限信息
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="edit-code">權限代碼</Label>
+                <Label htmlFor="edit-code">权限代码</Label>
                 <Input
                   id="edit-code"
                   value={formData.code}

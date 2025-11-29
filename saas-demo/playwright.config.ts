@@ -25,13 +25,15 @@ export default defineConfig({
   /* 共享設置 */
   use: {
     /* 基礎 URL */
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3001',
     /* 收集失敗時的跟踪信息 */
     trace: 'on-first-retry',
     /* 截圖配置 */
     screenshot: 'only-on-failure',
-    /* 視頻配置 */
+    /* 視頻配置（僅在失敗時保留，WebKit 使用 'off' 以避免路徑問題） */
     video: 'retain-on-failure',
+    /* 存儲認證狀態 */
+    storageState: undefined, // 可以設置為持久化認證狀態文件
   },
 
   /* 配置項目 */
@@ -48,7 +50,11 @@ export default defineConfig({
 
     {
       name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      use: { 
+        ...devices['Desktop Safari'],
+        // 禁用視頻錄製以避免路徑過長問題
+        video: 'off',
+      },
     },
 
     /* 移動設備測試（可選） */
@@ -65,7 +71,7 @@ export default defineConfig({
   /* 本地開發服務器配置 */
   webServer: {
     command: 'npm run dev',
-    url: 'http://localhost:3000',
+    url: 'http://localhost:3001',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
   },

@@ -1,6 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { memo, useState, useEffect, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
 import {
   Card,
   CardContent,
@@ -27,14 +29,14 @@ import {
   Zap,
   Users,
   RefreshCw,
+  Eye,
+  ArrowRight,
+  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ResponseTimeChart } from "@/components/dashboard/response-time-chart";
-import { SystemStatus } from "@/components/dashboard/system-status";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { getSessions, getSessionDetail, SessionDetail } from "@/lib/api";
-import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -44,12 +46,30 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Eye, BookOpen, UserPlus, UserCog, Settings as SettingsIcon, ArrowRight, Info } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import Link from "next/link";
+import { useI18n } from "@/lib/i18n";
+
+// 懶加載圖表組件（非首屏關鍵）
+const ResponseTimeChart = dynamic(
+  () => import("@/components/dashboard/response-time-chart").then(m => ({ default: m.ResponseTimeChart })),
+  { 
+    ssr: false,
+    loading: () => <Card className="h-[300px] animate-pulse bg-muted" />
+  }
+);
+
+const SystemStatus = dynamic(
+  () => import("@/components/dashboard/system-status").then(m => ({ default: m.SystemStatus })),
+  { 
+    ssr: false,
+    loading: () => <Card className="h-[200px] animate-pulse bg-muted" />
+  }
+);
 
 export default function Dashboard() {
   const router = useRouter();
+  const { t, language } = useI18n();
   const { data, loading, error, isMock: isMockDashboard, refetch } = useDashboardData();
   const [recentSessions, setRecentSessions] = useState<any[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
@@ -67,12 +87,10 @@ export default function Dashboard() {
         const result = await getSessions(1, 10);
         
         if (!result.ok || result.error) {
-          // 如果有 mock 數據，使用 mock 數據
           if (result._isMock && result.data && Array.isArray(result.data.items)) {
             setRecentSessions(result.data.items.slice(0, 10));
             setIsUsingMockSessions(true);
           } else {
-            // 使用 dashboard 數據作為 fallback
             if (data?.recent_sessions && Array.isArray(data.recent_sessions)) {
               setRecentSessions(data.recent_sessions);
             } else {
@@ -80,17 +98,14 @@ export default function Dashboard() {
             }
           }
         } else if (result.data && Array.isArray(result.data.items)) {
-          // 確保 items 是數組後再 slice
           setRecentSessions(result.data.items.slice(0, 10));
           setIsUsingMockSessions(result._isMock || false);
         } else {
-          // 數據結構異常，使用空數組
           setRecentSessions([]);
         }
       } catch (err) {
         console.error("Failed to fetch recent sessions:", err);
         setIsUsingMockSessions(true);
-        // 使用 dashboard 數據作為 fallback
         if (data?.recent_sessions && Array.isArray(data.recent_sessions)) {
           setRecentSessions(data.recent_sessions);
         } else {
@@ -123,7 +138,6 @@ export default function Dashboard() {
       const result = await getSessionDetail(sessionId);
       
       if (result.error) {
-        // 如果失敗，至少顯示基本信息
         const session = recentSessions.find((s) => s.id === sessionId);
         if (session) {
           setSelectedSession({
@@ -136,7 +150,6 @@ export default function Dashboard() {
       }
     } catch (err) {
       console.error("Failed to load session detail:", err);
-      // 如果失敗，至少顯示基本信息
       const session = recentSessions.find((s) => s.id === sessionId);
       if (session) {
         setSelectedSession({
@@ -147,6 +160,20 @@ export default function Dashboard() {
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  // 获取状态文本
+  const getStatusText = (status: string) => {
+    if (status === "completed") return t.common.completed;
+    if (status === "active") return t.common.active;
+    return t.common.failed;
+  };
+
+  // 获取严重度文本
+  const getSeverityText = (severity: string) => {
+    if (severity === "high") return language === "en" ? "High" : language === "zh-TW" ? "高" : "高";
+    if (severity === "medium") return language === "en" ? "Medium" : language === "zh-TW" ? "中" : "中";
+    return language === "en" ? "Low" : language === "zh-TW" ? "低" : "低";
   };
 
   if (loading) {
@@ -180,15 +207,15 @@ export default function Dashboard() {
       <div className="flex-1 space-y-6 p-6">
         <Card className="border-destructive">
           <CardHeader>
-            <CardTitle className="text-destructive">載入失敗</CardTitle>
+            <CardTitle className="text-destructive">{t.common.error}</CardTitle>
             <CardDescription>
-              {error.message || "無法連接到後端服務器，請檢查後端服務是否正在運行"}
+              {error.message || (language === "en" ? "Unable to connect to backend server" : language === "zh-TW" ? "無法連接到後端伺服器" : "无法连接到后端服务器")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button onClick={refetch} variant="outline">
               <RefreshCw className="mr-2 h-4 w-4" />
-              重試
+              {language === "en" ? "Retry" : language === "zh-TW" ? "重試" : "重试"}
             </Button>
           </CardContent>
         </Card>
@@ -201,8 +228,8 @@ export default function Dashboard() {
       <div className="container mx-auto py-6">
         <Card>
           <CardHeader>
-            <CardTitle>數據載入中...</CardTitle>
-            <CardDescription>正在獲取儀表板數據</CardDescription>
+            <CardTitle>{t.common.loading}</CardTitle>
+            <CardDescription>{language === "en" ? "Loading dashboard data" : language === "zh-TW" ? "正在獲取儀表板數據" : "正在获取仪表板数据"}</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -211,42 +238,42 @@ export default function Dashboard() {
 
   const stats = [
     {
-      label: "今日會話量",
+      label: t.dashboard.todaySessions,
       value: (data.stats?.today_sessions || 0).toLocaleString(),
       change: data.stats?.sessions_change || "0%",
       icon: MessageSquare,
       trend: (data.stats?.sessions_change || "0%").startsWith("+") ? "up" : "down",
     },
     {
-      label: "成功率",
+      label: t.dashboard.successRate,
       value: `${((data.stats?.success_rate || 0)).toFixed(1)}%`,
       change: data.stats?.success_rate_change || "0%",
       icon: TrendingUp,
       trend: (data.stats?.success_rate_change || "0%").startsWith("+") ? "up" : "down",
     },
     {
-      label: "Token 用量",
+      label: t.dashboard.tokenUsage,
       value: `${((data.stats?.token_usage || 0) / 1000000).toFixed(1)}M`,
       change: data.stats?.token_usage_change || "0%",
       icon: Zap,
       trend: (data.stats?.token_usage_change || "0%").startsWith("+") ? "up" : "down",
     },
     {
-      label: "錯誤數",
+      label: t.dashboard.errorCount,
       value: (data.stats?.error_count || 0).toString(),
       change: data.stats?.error_count_change || "0%",
       icon: AlertCircle,
       trend: (data.stats?.error_count_change || "0%").startsWith("-") ? "down" : "up",
     },
     {
-      label: "平均響應時間",
+      label: t.dashboard.avgResponseTime,
       value: `${((data.stats?.avg_response_time || 0)).toFixed(1)}s`,
       change: data.stats?.response_time_change || "0%",
       icon: Clock,
       trend: (data.stats?.response_time_change || "0%").startsWith("-") ? "down" : "up",
     },
     {
-      label: "活躍用戶",
+      label: t.dashboard.activeUsers,
       value: (data.stats?.active_users || 0).toLocaleString(),
       change: data.stats?.active_users_change || "0%",
       icon: Users,
@@ -260,15 +287,15 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            總覽儀表板
+            {t.dashboard.title}
           </h1>
           <p className="text-muted-foreground mt-2">
-            監控聊天 AI 系統的關鍵指標和實時狀態
+            {t.dashboard.subtitle}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="px-3 py-1">
-            Production
+            {t.header.production}
           </Badge>
           <Button variant="ghost" size="icon" onClick={refetch}>
             <RefreshCw className="h-4 w-4" />
@@ -279,10 +306,10 @@ export default function Dashboard() {
       {/* 操作引導卡片 */}
       <Alert className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30">
         <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-        <AlertTitle className="text-blue-900 dark:text-blue-100">快速操作指南</AlertTitle>
+        <AlertTitle className="text-blue-900 dark:text-blue-100">{t.dashboard.quickGuide}</AlertTitle>
         <AlertDescription className="mt-2 space-y-3">
           <p className="text-sm text-blue-800 dark:text-blue-200">
-            按照以下步驟順序操作，確保系統正常運行：
+            {t.dashboard.quickGuideDesc}
           </p>
           <div className="grid gap-2 md:grid-cols-5">
             <Link 
@@ -293,8 +320,8 @@ export default function Dashboard() {
                 ①
               </div>
               <div className="flex-1">
-                <div className="text-xs font-semibold text-blue-900 dark:text-blue-100">劇本管理</div>
-                <div className="text-xs text-blue-600 dark:text-blue-400">創建劇本</div>
+                <div className="text-xs font-semibold text-blue-900 dark:text-blue-100">{t.nav.scriptManagement}</div>
+                <div className="text-xs text-blue-600 dark:text-blue-400">{t.scripts.createScript}</div>
               </div>
               <ArrowRight className="h-4 w-4 text-blue-400" />
             </Link>
@@ -306,8 +333,8 @@ export default function Dashboard() {
                 ②
               </div>
               <div className="flex-1">
-                <div className="text-xs font-semibold text-blue-900 dark:text-blue-100">賬號管理</div>
-                <div className="text-xs text-blue-600 dark:text-blue-400">創建賬號</div>
+                <div className="text-xs font-semibold text-blue-900 dark:text-blue-100">{t.nav.accountManagement}</div>
+                <div className="text-xs text-blue-600 dark:text-blue-400">{t.accounts.addAccount}</div>
               </div>
               <ArrowRight className="h-4 w-4 text-blue-400" />
             </Link>
@@ -319,8 +346,8 @@ export default function Dashboard() {
                 ③
               </div>
               <div className="flex-1">
-                <div className="text-xs font-semibold text-blue-900 dark:text-blue-100">角色分配</div>
-                <div className="text-xs text-blue-600 dark:text-blue-400">可選步驟</div>
+                <div className="text-xs font-semibold text-blue-900 dark:text-blue-100">{t.nav.roleAssignment}</div>
+                <div className="text-xs text-blue-600 dark:text-blue-400">{t.nav.optional}</div>
               </div>
               <ArrowRight className="h-4 w-4 text-blue-400" />
             </Link>
@@ -332,8 +359,8 @@ export default function Dashboard() {
                 ④
               </div>
               <div className="flex-1">
-                <div className="text-xs font-semibold text-blue-900 dark:text-blue-100">分配方案</div>
-                <div className="text-xs text-blue-600 dark:text-blue-400">可選步驟</div>
+                <div className="text-xs font-semibold text-blue-900 dark:text-blue-100">{t.nav.allocationScheme}</div>
+                <div className="text-xs text-blue-600 dark:text-blue-400">{t.nav.optional}</div>
               </div>
               <ArrowRight className="h-4 w-4 text-blue-400" />
             </Link>
@@ -345,13 +372,13 @@ export default function Dashboard() {
                 ⑤
               </div>
               <div className="flex-1">
-                <div className="text-xs font-semibold text-blue-900 dark:text-blue-100">自動化任務</div>
-                <div className="text-xs text-blue-600 dark:text-blue-400">可選步驟</div>
+                <div className="text-xs font-semibold text-blue-900 dark:text-blue-100">{t.nav.automationTasks}</div>
+                <div className="text-xs text-blue-600 dark:text-blue-400">{t.nav.optional}</div>
               </div>
             </Link>
           </div>
           <p className="text-xs text-blue-700 dark:text-blue-300">
-            💡 <strong>重要提示：</strong>必須先完成 ① 劇本管理和 ② 賬號管理，才能啟動賬號。如果啟動失敗提示"無法加載劇本"，請檢查賬號關聯的劇本是否存在。
+            💡 <strong>{t.dashboard.importantNote}：</strong>{t.dashboard.mustComplete} ① {t.nav.scriptManagement} {t.dashboard.and} ② {t.nav.accountManagement}{t.dashboard.thenStart} {t.dashboard.checkScript}
           </p>
         </AlertDescription>
       </Alert>
@@ -360,15 +387,15 @@ export default function Dashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {stats.map((stat) => {
           const isClickable =
-            stat.label === "今日會話量" ||
-            stat.label === "錯誤數" ||
-            stat.label === "平均響應時間";
+            stat.label === t.dashboard.todaySessions ||
+            stat.label === t.dashboard.errorCount ||
+            stat.label === t.dashboard.avgResponseTime;
           const clickHandler = () => {
-            if (stat.label === "今日會話量") {
+            if (stat.label === t.dashboard.todaySessions) {
               handleCardClick("sessions", { range: "24h" });
-            } else if (stat.label === "錯誤數") {
+            } else if (stat.label === t.dashboard.errorCount) {
               handleCardClick("logs", { level: "error", range: "24h" });
-            } else if (stat.label === "平均響應時間") {
+            } else if (stat.label === t.dashboard.avgResponseTime) {
               handleCardClick("sessions", { sort: "response_time" });
             }
           };
@@ -417,22 +444,22 @@ export default function Dashboard() {
         {/* 最近會話列表 */}
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle>最近 10 條會話</CardTitle>
+            <CardTitle>{t.dashboard.recentSessions}</CardTitle>
             <CardDescription>
-              查看最新的會話記錄和處理狀態
+              {language === "en" ? "View latest session records and status" : language === "zh-TW" ? "查看最新的會話記錄和處理狀態" : "查看最新的会话记录和处理状态"}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>會話 ID</TableHead>
-                  <TableHead>用戶</TableHead>
-                  <TableHead>訊息數</TableHead>
-                  <TableHead>狀態</TableHead>
-                  <TableHead>持續時間</TableHead>
-                  <TableHead className="text-right">時間</TableHead>
-                  <TableHead className="w-16">操作</TableHead>
+                  <TableHead>{t.sessions.sessionId}</TableHead>
+                  <TableHead>{t.sessions.user}</TableHead>
+                  <TableHead>{t.sessions.messageCount}</TableHead>
+                  <TableHead>{t.common.status}</TableHead>
+                  <TableHead>{t.sessions.duration}</TableHead>
+                  <TableHead className="text-right">{t.common.createdAt}</TableHead>
+                  <TableHead className="w-16">{t.common.actions}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -464,18 +491,14 @@ export default function Dashboard() {
                           }
                           className="text-xs"
                         >
-                          {session.status === "completed"
-                            ? "已完成"
-                            : session.status === "active"
-                            ? "進行中"
-                            : "失敗"}
+                          {getStatusText(session.status)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {session.duration}
                       </TableCell>
                       <TableCell className="text-right text-xs text-muted-foreground">
-                        {new Date(session.started_at || session.timestamp).toLocaleString("zh-TW")}
+                        {new Date(session.started_at || session.timestamp).toLocaleString(language === "en" ? "en-US" : language === "zh-TW" ? "zh-TW" : "zh-CN")}
                       </TableCell>
                       <TableCell>
                         <Button
@@ -494,7 +517,7 @@ export default function Dashboard() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      暫無會話記錄
+                      {t.sessions.noSessions}
                     </TableCell>
                   </TableRow>
                 )}
@@ -508,9 +531,9 @@ export default function Dashboard() {
           {/* 最近錯誤/警告 */}
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle>最近錯誤與警告</CardTitle>
+              <CardTitle>{t.dashboard.recentErrors}</CardTitle>
               <CardDescription>
-                系統異常和需要關注的事件
+                {language === "en" ? "System exceptions and events requiring attention" : language === "zh-TW" ? "系統異常和需要關注的事件" : "系统异常和需要关注的事件"}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -533,11 +556,7 @@ export default function Dashboard() {
                             }
                             className="text-xs"
                           >
-                            {error.severity === "high"
-                              ? "高"
-                              : error.severity === "medium"
-                              ? "中"
-                              : "低"}
+                            {getSeverityText(error.severity)}
                           </Badge>
                           <span className="text-xs font-medium text-foreground">
                             {error.type}
@@ -554,7 +573,7 @@ export default function Dashboard() {
                   ))
                 ) : (
                   <div className="text-center py-4 text-sm text-muted-foreground">
-                    暫無錯誤記錄
+                    {t.logs.noLogs}
                   </div>
                 )}
               </div>
@@ -572,9 +591,9 @@ export default function Dashboard() {
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-w-3xl max-h-[80vh]">
           <DialogHeader>
-            <DialogTitle>會話詳情</DialogTitle>
+            <DialogTitle>{t.common.details}</DialogTitle>
             <DialogDescription>
-              查看完整的會話信息和消息記錄
+              {language === "en" ? "View complete session information and message records" : language === "zh-TW" ? "查看完整的會話資訊和訊息記錄" : "查看完整的会话信息和消息记录"}
             </DialogDescription>
           </DialogHeader>
           {detailLoading ? (
@@ -586,17 +605,17 @@ export default function Dashboard() {
               <div className="space-y-4">
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-muted-foreground">會話 ID</span>
+                    <span className="text-sm font-medium text-muted-foreground">{t.sessions.sessionId}</span>
                     <span className="text-sm font-mono">{selectedSession.id}</span>
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-muted-foreground">用戶</span>
+                    <span className="text-sm font-medium text-muted-foreground">{t.sessions.user}</span>
                     <span className="text-sm">{selectedSession.user}</span>
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-muted-foreground">狀態</span>
+                    <span className="text-sm font-medium text-muted-foreground">{t.common.status}</span>
                     <Badge
                       variant={
                         selectedSession.status === "completed"
@@ -606,23 +625,19 @@ export default function Dashboard() {
                           : "destructive"
                       }
                     >
-                      {selectedSession.status === "completed"
-                        ? "已完成"
-                        : selectedSession.status === "active"
-                        ? "進行中"
-                        : "失敗"}
+                      {getStatusText(selectedSession.status)}
                     </Badge>
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-muted-foreground">持續時間</span>
+                    <span className="text-sm font-medium text-muted-foreground">{t.sessions.duration}</span>
                     <span className="text-sm">{selectedSession.duration}</span>
                   </div>
                   {selectedSession.token_usage && (
                     <>
                       <Separator />
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-muted-foreground">Token 用量</span>
+                        <span className="text-sm font-medium text-muted-foreground">{t.sessions.tokenUsage}</span>
                         <span className="text-sm">{selectedSession.token_usage.toLocaleString()}</span>
                       </div>
                     </>
@@ -631,7 +646,7 @@ export default function Dashboard() {
                     <>
                       <Separator />
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-muted-foreground">模型</span>
+                        <span className="text-sm font-medium text-muted-foreground">{t.sessions.model}</span>
                         <span className="text-sm">{selectedSession.model}</span>
                       </div>
                     </>
@@ -640,7 +655,7 @@ export default function Dashboard() {
                     <>
                       <Separator />
                       <div className="space-y-2">
-                        <span className="text-sm font-medium text-muted-foreground">錯誤信息</span>
+                        <span className="text-sm font-medium text-muted-foreground">{t.common.error}</span>
                         <p className="text-sm text-destructive bg-destructive/10 p-2 rounded">
                           {selectedSession.error_message}
                         </p>
@@ -649,7 +664,7 @@ export default function Dashboard() {
                   )}
                   <Separator />
                   <div className="space-y-2">
-                    <span className="text-sm font-medium text-muted-foreground">消息記錄</span>
+                    <span className="text-sm font-medium text-muted-foreground">{language === "en" ? "Messages" : language === "zh-TW" ? "訊息記錄" : "消息记录"}</span>
                     {selectedSession.messages && selectedSession.messages.length > 0 ? (
                       <div className="space-y-2">
                         {selectedSession.messages.map((msg) => (
@@ -663,10 +678,10 @@ export default function Dashboard() {
                           >
                             <div className="flex items-center justify-between mb-1">
                               <Badge variant={msg.role === "user" ? "default" : "secondary"}>
-                                {msg.role === "user" ? "用戶" : msg.role === "assistant" ? "助手" : "系統"}
+                                {msg.role === "user" ? (language === "en" ? "User" : language === "zh-TW" ? "使用者" : "用户") : msg.role === "assistant" ? (language === "en" ? "Assistant" : language === "zh-TW" ? "助手" : "助手") : (language === "en" ? "System" : language === "zh-TW" ? "系統" : "系统")}
                               </Badge>
                               <span className="text-xs text-muted-foreground">
-                                {new Date(msg.timestamp).toLocaleString("zh-TW")}
+                                {new Date(msg.timestamp).toLocaleString(language === "en" ? "en-US" : language === "zh-TW" ? "zh-TW" : "zh-CN")}
                               </span>
                             </div>
                             <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
@@ -674,7 +689,7 @@ export default function Dashboard() {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">暫無消息記錄</p>
+                      <p className="text-sm text-muted-foreground">{t.common.noData}</p>
                     )}
                   </div>
                 </div>

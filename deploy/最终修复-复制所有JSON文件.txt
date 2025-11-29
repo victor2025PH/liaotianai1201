@@ -1,0 +1,55 @@
+最终修复 - 复制所有JSON文件（一键执行）
+
+========================================
+问题确认
+========================================
+
+错误信息：
+Error: ENOENT: no such file or directory, open '/home/ubuntu/liaotian/saas-demo/.next/standalone/liaotian/saas-demo/.next/routes-manifest.json'
+
+缺少文件：routes-manifest.json（可能还需要其他JSON文件）
+
+========================================
+一键修复命令（直接复制执行）
+========================================
+
+cd /home/ubuntu/liaotian/saas-demo && sudo systemctl stop liaotian-frontend && cp .next/*.json .next/standalone/liaotian/saas-demo/.next/ 2>&1 && echo "JSON文件已复制" && ls -la .next/standalone/liaotian/saas-demo/.next/*.json 2>&1 | head -10 && cd .next/standalone/liaotian/saas-demo && export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm use 20 && timeout 5 node server.js 2>&1 | head -10 && cd /home/ubuntu/liaotian/saas-demo && sudo systemctl start liaotian-frontend && sleep 5 && sudo systemctl status liaotian-frontend --no-pager | head -15 && curl -I http://localhost:3000/_next/static/chunks/adc3be135379192a.js 2>&1 | head -5
+
+========================================
+或者使用脚本
+========================================
+
+bash /tmp/fix_routes_manifest.sh
+
+========================================
+分步执行（如果一键执行失败）
+========================================
+
+# 步骤1：进入目录并停止服务
+cd /home/ubuntu/liaotian/saas-demo
+sudo systemctl stop liaotian-frontend
+
+# 步骤2：复制所有JSON文件
+cp .next/*.json .next/standalone/liaotian/saas-demo/.next/
+
+# 步骤3：验证文件已复制
+ls -la .next/standalone/liaotian/saas-demo/.next/*.json
+
+# 步骤4：手动测试服务器启动
+cd .next/standalone/liaotian/saas-demo
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+nvm use 20
+timeout 5 node server.js 2>&1
+
+# 步骤5：如果测试成功，重启服务
+cd /home/ubuntu/liaotian/saas-demo
+sudo systemctl start liaotian-frontend
+sleep 5
+
+# 步骤6：检查服务状态
+sudo systemctl status liaotian-frontend --no-pager | head -15
+
+# 步骤7：测试静态文件访问
+curl -I http://localhost:3000/_next/static/chunks/adc3be135379192a.js
+

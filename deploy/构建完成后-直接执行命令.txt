@@ -1,0 +1,39 @@
+构建完成后 - 直接执行命令（无需脚本文件）
+
+========================================
+步骤1：检查构建是否完成
+========================================
+
+cd /home/ubuntu/liaotian/saas-demo
+ls -la .next/standalone
+
+如果看到standalone目录，说明构建已完成。
+
+========================================
+步骤2：继续部署（构建完成后，直接复制整行执行）
+========================================
+
+cd /home/ubuntu/liaotian/saas-demo && mkdir -p .next/standalone/liaotian/saas-demo/.next/server && cp .next/BUILD_ID .next/standalone/liaotian/saas-demo/.next/ && cp .next/*.json .next/standalone/liaotian/saas-demo/.next/ && cp -r .next/server/* .next/standalone/liaotian/saas-demo/.next/server/ && cp -r .next/static .next/standalone/liaotian/saas-demo/.next/ && echo "文件已复制" && ls -la .next/standalone/liaotian/saas-demo/.next/server/pages-manifest.json && sudo systemctl start liaotian-frontend && sleep 5 && sudo systemctl status liaotian-frontend --no-pager | head -15
+
+========================================
+步骤3：验证部署
+========================================
+
+# 检查服务状态
+sudo systemctl status liaotian-frontend --no-pager | head -15
+
+# 检查文件
+ls -la .next/standalone/liaotian/saas-demo/.next/server/pages-manifest.json
+
+# 测试服务
+curl -I http://localhost:3000/group-ai/accounts
+
+========================================
+如果构建还在进行中
+========================================
+
+等待构建完成（通常需要几分钟），然后执行步骤2。
+
+可以通过以下命令检查构建进程：
+ps aux | grep "npm run build" | grep -v grep
+

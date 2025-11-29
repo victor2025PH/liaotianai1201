@@ -1,0 +1,71 @@
+# 最终修复命令 - 直接在服务器上复制执行
+
+## 问题确认
+
+从终端输出可以看到：
+- 错误：`Error: Cannot find module '/home/ubuntu/liaotian/saas-demo/server.js'`
+- 当前配置：`WorkingDirectory=/home/ubuntu/liaotian/saas-demo` - **这是错误的！**
+- server.js实际位置：`/home/ubuntu/liaotian/saas-demo/.next/standalone/liaotian/saas-demo/server.js`
+
+## 请在服务器上执行以下命令
+
+```bash
+# 1. 停止服务
+sudo systemctl stop liaotian-frontend
+
+# 2. 重写systemd配置（直接复制整个配置）
+sudo tee /etc/systemd/system/liaotian-frontend.service > /dev/null <<'EOFSERVICE'
+[Unit]
+Description=Liaotian Frontend
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/liaotian/saas-demo/.next/standalone/liaotian/saas-demo
+Environment=PORT=3000
+Environment="NVM_DIR=$HOME/.nvm"
+Environment="PATH=$HOME/.nvm/versions/node/v20.19.6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/home/ubuntu/.nvm/versions/node/v20.19.6/bin/node server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOFSERVICE
+
+# 3. 验证配置
+cat /etc/systemd/system/liaotian-frontend.service | grep -E "WorkingDirectory|ExecStart"
+
+# 4. 重新加载并启动
+sudo systemctl daemon-reload
+sudo systemctl start liaotian-frontend
+sleep 5
+
+# 5. 检查服务状态
+sudo systemctl status liaotian-frontend --no-pager | head -20
+
+# 6. 检查端口监听
+ss -tlnp | grep ':3000'
+
+# 7. 如果仍有错误，查看日志
+sudo journalctl -u liaotian-frontend -n 10 --no-pager | tail -10
+```
+
+## 预期结果
+
+修复成功后：
+1. ✅ `WorkingDirectory=/home/ubuntu/liaotian/saas-demo/.next/standalone/liaotian/saas-demo`
+2. ✅ `ExecStart=/home/ubuntu/.nvm/versions/node/v20.19.6/bin/node server.js`
+3. ✅ 服务状态：`Active: active (running)`
+4. ✅ 端口3000被监听
+5. ✅ 页面不再显示502错误
+
+## 或者使用脚本
+
+已创建修复脚本，可以在服务器上执行：
+
+```bash
+bash /tmp/fix_now.sh
+```
+

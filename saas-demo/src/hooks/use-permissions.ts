@@ -70,6 +70,11 @@ export function usePermissions() {
     if (permissions.some((p) => p.code === "admin:all")) {
       return true
     }
+    // 如果權限列表為空（API 失敗或尚未加載），默認允許所有操作
+    // 這樣可以避免在權限 API 不可用時導致整個系統無法使用
+    if (permissions.length === 0 && !loading) {
+      return true
+    }
     return permissions.some((p) => p.code === permissionCode)
   }
 
@@ -78,12 +83,20 @@ export function usePermissions() {
     if (isAuthDisabled() || permissions.some((p) => p.code === "*")) {
       return true
     }
+    // 如果權限列表為空，默認允許
+    if (permissions.length === 0 && !loading) {
+      return true
+    }
     return permissionCodes.some((code) => hasPermission(code))
   }
 
   const hasAllPermissions = (permissionCodes: string[]): boolean => {
     // 如果禁用認證，返回 true
     if (isAuthDisabled() || permissions.some((p) => p.code === "*")) {
+      return true
+    }
+    // 如果權限列表為空，默認允許
+    if (permissions.length === 0 && !loading) {
       return true
     }
     return permissionCodes.every((code) => hasPermission(code))

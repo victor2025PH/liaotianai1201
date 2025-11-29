@@ -60,9 +60,9 @@ export default function MonitoringPage() {
       <div className="flex-1 space-y-6 p-6">
         <Card className="border-destructive">
           <CardHeader>
-            <CardTitle className="text-destructive">載入失敗</CardTitle>
+            <CardTitle className="text-destructive">加载失败</CardTitle>
             <CardDescription>
-              {error.message || "無法連接到後端服務器，請檢查後端服務是否正在運行"}
+              {error.message || "无法连接到後端服务器，請检查後端服務是否正在運行"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -76,15 +76,15 @@ export default function MonitoringPage() {
     );
   }
 
-  // 防禦式邏輯：確保數據結構完整
+  // 防禦式邏輯：確保数据結構完整
   if (!data) {
     return (
       <div className="flex-1 space-y-6 p-6">
         <Card className="border-destructive">
           <CardHeader>
-            <CardTitle className="text-destructive">無法載入數據</CardTitle>
+            <CardTitle className="text-destructive">无法加载数据</CardTitle>
             <CardDescription>
-              暫時無法獲取系統監控數據，請稍後重試
+              暫時无法獲取系统监控数据，請稍後重試
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -98,7 +98,7 @@ export default function MonitoringPage() {
     );
   }
 
-  // 安全地提取數據，使用默認值
+  // 安全地提取数据，使用默認值
   const health = data.health || {
     status: "unknown",
     uptime_seconds: 0,
@@ -122,9 +122,9 @@ export default function MonitoringPage() {
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     if (days > 0) {
-      return `${days} 天 ${hours} 小時`;
+      return `${days} 天 ${hours} 小时`;
     } else if (hours > 0) {
-      return `${hours} 小時 ${minutes} 分鐘`;
+      return `${hours} 小时 ${minutes} 分鐘`;
     } else {
       return `${minutes} 分鐘`;
     }
@@ -153,7 +153,7 @@ export default function MonitoringPage() {
       case "degraded":
         return <Badge variant="default">降級</Badge>;
       default:
-        return <Badge variant="destructive">異常</Badge>;
+        return <Badge variant="destructive">异常</Badge>;
     }
   };
 
@@ -162,7 +162,7 @@ export default function MonitoringPage() {
       <div className="flex-1 space-y-6 p-6">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>您沒有權限查看系統監控</AlertDescription>
+          <AlertDescription>您沒有權限查看系统监控</AlertDescription>
         </Alert>
       </div>
     }>
@@ -170,10 +170,10 @@ export default function MonitoringPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">
-              系統監控
+              系统监控
             </h1>
             <p className="text-muted-foreground mt-2">
-              實時監控系統健康狀態和資源使用情況
+              实时监控系統健康状态和资源使用情况
             </p>
           </div>
           <PermissionGuard permission="monitor:view">
@@ -184,25 +184,25 @@ export default function MonitoringPage() {
           </PermissionGuard>
         </div>
 
-      {/* Mock 數據提示 */}
+      {/* Mock 数据提示 */}
       {isMock && (
         <Alert className="border-amber-500/50 bg-amber-500/10">
           <Info className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <AlertDescription className="text-amber-600 dark:text-amber-400">
-            當前使用模擬監控數據。後端服務器不可用，已自動切換到模擬數據模式。
+            当前使用模擬监控数据。後端服务器不可用，已自动切換到模擬数据模式。
           </AlertDescription>
         </Alert>
       )}
 
-      {/* 系統健康狀態 */}
+      {/* 系統健康状态 */}
       <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Activity className="h-5 w-5" />
-            系統健康狀態
+            系統健康状态
           </CardTitle>
           <CardDescription>
-            最後更新: {new Date(health.timestamp).toLocaleString("zh-TW")}
+            最后更新: {new Date(health.timestamp).toLocaleString("zh-TW")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -211,8 +211,8 @@ export default function MonitoringPage() {
               <div className="flex items-center gap-3">
                 {getStatusIcon(health.status)}
                 <div>
-                  <p className="text-sm font-medium">系統狀態</p>
-                  <p className="text-xs text-muted-foreground">整體健康度</p>
+                  <p className="text-sm font-medium">系統状态</p>
+                  <p className="text-xs text-muted-foreground">整体健康度</p>
                 </div>
               </div>
               {getStatusBadge(health.status)}
@@ -221,8 +221,8 @@ export default function MonitoringPage() {
               <div className="flex items-center gap-3">
                 <Server className="h-4 w-4 text-muted-foreground" />
                 <div>
-                  <p className="text-sm font-medium">運行時間</p>
-                  <p className="text-xs text-muted-foreground">服務持續運行</p>
+                  <p className="text-sm font-medium">運行时间</p>
+                  <p className="text-xs text-muted-foreground">服务持续运行</p>
                 </div>
               </div>
               <span className="text-sm font-semibold">
@@ -234,7 +234,7 @@ export default function MonitoringPage() {
                 <Activity className="h-4 w-4 text-muted-foreground" />
                 <div>
                   <p className="text-sm font-medium">版本</p>
-                  <p className="text-xs text-muted-foreground">當前版本號</p>
+                  <p className="text-xs text-muted-foreground">当前版本号</p>
                 </div>
               </div>
               <Badge variant="outline">{health.version}</Badge>
@@ -243,15 +243,15 @@ export default function MonitoringPage() {
         </CardContent>
       </Card>
 
-      {/* 資源使用情況 */}
+      {/* 资源使用情况 */}
       <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Cpu className="h-5 w-5" />
-            資源使用情況
+            资源使用情况
           </CardTitle>
           <CardDescription>
-            最後更新: {new Date(metrics.timestamp).toLocaleString("zh-TW")}
+            最后更新: {new Date(metrics.timestamp).toLocaleString("zh-TW")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -316,7 +316,7 @@ export default function MonitoringPage() {
             <div className="flex items-center justify-between rounded-lg border border-border/60 bg-card p-4">
               <div className="flex items-center gap-2">
                 <Network className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">活躍連接數</span>
+                <span className="text-sm font-medium">活跃连接數</span>
               </div>
               <span className="text-sm font-semibold">
                 {metrics.active_connections}
@@ -335,14 +335,14 @@ export default function MonitoringPage() {
         </CardContent>
       </Card>
 
-      {/* 服務狀態 */}
+      {/* 服務状态 */}
       <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Server className="h-5 w-5" />
-            服務狀態
+            服務状态
           </CardTitle>
-          <CardDescription>各個服務組件的運行狀態</CardDescription>
+          <CardDescription>各个服務組件的運行状态</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3">
@@ -360,11 +360,11 @@ export default function MonitoringPage() {
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {serviceData.status === "running" && serviceData.uptime
-                        ? `運行時間: ${formatUptime(serviceData.uptime)}`
+                        ? `運行时间: ${formatUptime(serviceData.uptime)}`
                         : serviceData.status === "connected" && serviceData.response_time_ms
-                        ? `響應時間: ${serviceData.response_time_ms}ms`
+                        ? `響應时间: ${serviceData.response_time_ms}ms`
                         : serviceData.active_sessions
-                        ? `活躍會話: ${serviceData.active_sessions}`
+                        ? `活跃会话: ${serviceData.active_sessions}`
                         : ""}
                     </p>
                   </div>
@@ -375,7 +375,7 @@ export default function MonitoringPage() {
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <Server className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">暫無服務狀態數據</p>
+                <p className="text-sm">暫无服務状态数据</p>
               </div>
             )}
           </div>

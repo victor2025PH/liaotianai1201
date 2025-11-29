@@ -81,36 +81,36 @@ import Link from "next/link"
 const workflowSteps: Step[] = [
   {
     number: 1,
-    title: "劇本管理",
-    description: "創建和管理 AI 對話劇本（必需）",
+    title: "剧本管理",
+    description: "创建和管理 AI 对话剧本（必需）",
     href: "/group-ai/scripts",
     status: "completed",
   },
   {
     number: 2,
-    title: "賬號管理",
-    description: "創建和管理 Telegram 賬號，關聯劇本",
+    title: "账号管理",
+    description: "创建和管理 Telegram 账号，关联剧本",
     href: "/group-ai/accounts",
     status: "completed",
   },
   {
     number: 3,
     title: "角色分配",
-    description: "從劇本提取角色並分配給賬號（可選）",
+    description: "從剧本提取角色並分配給账号（可选）",
     href: "/group-ai/role-assignments",
     status: "completed",
   },
   {
     number: 4,
     title: "分配方案",
-    description: "保存和重用角色分配方案（可選）",
+    description: "保存和重用角色分配方案（可选）",
     href: "/group-ai/role-assignment-schemes",
     status: "current",
   },
   {
     number: 5,
-    title: "自動化任務",
-    description: "配置自動化執行任務（可選）",
+    title: "自动化任务",
+    description: "配置自动化执行任务（可选）",
     href: "/group-ai/automation-tasks",
     status: "optional",
   },
@@ -133,18 +133,18 @@ export default function RoleAssignmentSchemesPage() {
     sort_order?: "asc" | "desc"
   }>({})
   
-  // 對話框狀態
+  // 对话框状态
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [applyDialogOpen, setApplyDialogOpen] = useState(false)
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
   
-  // 當前操作的方案
+  // 当前操作的方案
   const [currentScheme, setCurrentScheme] = useState<RoleAssignmentScheme | null>(null)
   const [historyRecords, setHistoryRecords] = useState<AssignmentHistory[]>([])
   
-  // 表單狀態
+  // 表單状态
   const [formData, setFormData] = useState<SchemeCreateRequest>({
     name: "",
     description: "",
@@ -156,7 +156,7 @@ export default function RoleAssignmentSchemesPage() {
   const [creating, setCreating] = useState(false)
   const [applying, setApplying] = useState(false)
 
-  // 加載數據
+  // 加载数据
   useEffect(() => {
     loadSchemes()
     loadScripts()
@@ -175,8 +175,8 @@ export default function RoleAssignmentSchemesPage() {
       setSchemes(data.items || [])
     } catch (error: any) {
       toast({
-        title: "加載失敗",
-        description: error.message || "無法加載分配方案列表",
+        title: "加载失败",
+        description: error.message || "无法加载分配方案列表",
         variant: "destructive",
       })
     } finally {
@@ -189,7 +189,7 @@ export default function RoleAssignmentSchemesPage() {
       const data = await getScripts()
       setScripts(data)
     } catch (error: any) {
-      console.error("加載劇本失敗:", error)
+      console.error("加载剧本失败:", error)
     }
   }
 
@@ -198,7 +198,7 @@ export default function RoleAssignmentSchemesPage() {
       const data = await getAccounts()
       setAccounts(Array.isArray(data) ? data : [])
     } catch (error: any) {
-      console.error("加載賬號失敗:", error)
+      console.error("加载账号失败:", error)
     }
   }
 
@@ -213,8 +213,8 @@ export default function RoleAssignmentSchemesPage() {
         setRoles(rolesData.roles || [])
       } catch (error: any) {
         toast({
-          title: "提取角色失敗",
-          description: error.message || "無法從劇本中提取角色",
+          title: "提取角色失败",
+          description: error.message || "无法從剧本中提取角色",
           variant: "destructive",
         })
       }
@@ -224,15 +224,15 @@ export default function RoleAssignmentSchemesPage() {
   const handleCreateAssignment = async () => {
     if (!formData.script_id || formData.account_ids.length === 0) {
       toast({
-        title: "參數不完整",
-        description: "請選擇劇本和賬號",
+        title: "参数不完整",
+        description: "請选择剧本和账号",
         variant: "destructive",
       })
       return
     }
 
     try {
-      // 首先創建方案，然後應用
+      // 首先创建方案，然後應用
       const scheme = await createRoleAssignmentScheme({
         name: formData.name || `方案_${Date.now()}`,
         description: formData.description,
@@ -248,13 +248,13 @@ export default function RoleAssignmentSchemesPage() {
       })
       setAssignmentResult(result)
       toast({
-        title: "分配方案創建成功",
-        description: `已應用方案，影響 ${result.applied_count || 0} 個賬號`,
+        title: "分配方案创建成功",
+        description: `已應用方案，影響 ${result.applied_count || 0} 个账号`,
       })
     } catch (error: any) {
       toast({
-        title: "創建分配方案失敗",
-        description: error.message || "無法創建分配方案",
+        title: "创建分配方案失败",
+        description: error.message || "无法创建分配方案",
         variant: "destructive",
       })
     }
@@ -263,8 +263,8 @@ export default function RoleAssignmentSchemesPage() {
   const handleCreateScheme = async () => {
     if (!formData.name || !formData.script_id || formData.assignments.length === 0) {
       toast({
-        title: "參數不完整",
-        description: "請填寫方案名稱、選擇劇本並創建分配方案",
+        title: "参数不完整",
+        description: "請填寫方案名稱、选择剧本並创建分配方案",
         variant: "destructive",
       })
       return
@@ -274,8 +274,8 @@ export default function RoleAssignmentSchemesPage() {
       setCreating(true)
       await createRoleAssignmentScheme(formData)
       toast({
-        title: "創建成功",
-        description: "分配方案已創建",
+        title: "创建成功",
+        description: "分配方案已创建",
       })
       setCreateDialogOpen(false)
       setFormData({
@@ -289,8 +289,8 @@ export default function RoleAssignmentSchemesPage() {
       loadSchemes()
     } catch (error: any) {
       toast({
-        title: "創建失敗",
-        description: error.message || "無法創建分配方案",
+        title: "创建失败",
+        description: error.message || "无法创建分配方案",
         variant: "destructive",
       })
     } finally {
@@ -333,8 +333,8 @@ export default function RoleAssignmentSchemesPage() {
       loadSchemes()
     } catch (error: any) {
       toast({
-        title: "更新失敗",
-        description: error.message || "無法更新分配方案",
+        title: "更新失败",
+        description: error.message || "无法更新分配方案",
         variant: "destructive",
       })
     } finally {
@@ -343,21 +343,21 @@ export default function RoleAssignmentSchemesPage() {
   }
 
   const handleDelete = async (scheme: RoleAssignmentScheme) => {
-    if (!confirm(`確定要刪除分配方案 "${scheme.name}" 嗎？`)) {
+    if (!confirm(`确定要删除分配方案 "${scheme.name}" 嗎？`)) {
       return
     }
 
     try {
       await deleteRoleAssignmentScheme(scheme.id)
       toast({
-        title: "刪除成功",
-        description: "分配方案已刪除",
+        title: "删除成功",
+        description: "分配方案已删除",
       })
       loadSchemes()
     } catch (error: any) {
       toast({
-        title: "刪除失敗",
-        description: error.message || "無法刪除分配方案",
+        title: "删除失败",
+        description: error.message || "无法删除分配方案",
         variant: "destructive",
       })
     }
@@ -371,8 +371,8 @@ export default function RoleAssignmentSchemesPage() {
       setApplyDialogOpen(true)
     } catch (error: any) {
       toast({
-        title: "加載失敗",
-        description: error.message || "無法加載分配方案詳情",
+        title: "加载失败",
+        description: error.message || "无法加载分配方案详情",
         variant: "destructive",
       })
       // 如果获取详情失败，使用列表中的数据
@@ -390,14 +390,14 @@ export default function RoleAssignmentSchemesPage() {
       const result = await applyRoleAssignmentScheme(currentScheme.id, request)
       toast({
         title: "應用成功",
-        description: result.message || `已應用 ${result.applied_count} 個賬號`,
+        description: result.message || `已應用 ${result.applied_count} 个账号`,
       })
       setApplyDialogOpen(false)
       loadSchemes()
     } catch (error: any) {
       toast({
-        title: "應用失敗",
-        description: error.message || "無法應用分配方案",
+        title: "應用失败",
+        description: error.message || "无法應用分配方案",
         variant: "destructive",
       })
     } finally {
@@ -413,8 +413,8 @@ export default function RoleAssignmentSchemesPage() {
       setHistoryDialogOpen(true)
     } catch (error: any) {
       toast({
-        title: "加載歷史失敗",
-        description: error.message || "無法加載應用歷史",
+        title: "加载历史失败",
+        description: error.message || "无法加载應用历史",
         variant: "destructive",
       })
     }
@@ -427,8 +427,8 @@ export default function RoleAssignmentSchemesPage() {
       setViewDialogOpen(true)
     } catch (error: any) {
       toast({
-        title: "加載失敗",
-        description: error.message || "無法加載方案詳情",
+        title: "加载失败",
+        description: error.message || "无法加载方案详情",
         variant: "destructive",
       })
     }
@@ -441,13 +441,13 @@ export default function RoleAssignmentSchemesPage() {
         <div>
           <h1 className="text-3xl font-bold">角色分配方案管理</h1>
           <p className="text-muted-foreground mt-2">
-            保存和管理角色分配方案，支持方案重用和歷史記錄
+            保存和管理角色分配方案，支持方案重用和历史記錄
           </p>
         </div>
         <PermissionGuard permission="role_assignment_scheme:create">
           <Button onClick={() => setCreateDialogOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            創建方案
+            创建方案
           </Button>
         </PermissionGuard>
       </div>
@@ -484,10 +484,10 @@ export default function RoleAssignmentSchemesPage() {
             }}
           >
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="全部劇本" />
+              <SelectValue placeholder="全部剧本" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">全部劇本</SelectItem>
+              <SelectItem value="__all__">全部剧本</SelectItem>
               {scripts.map((script) => (
                 <SelectItem key={script.script_id} value={script.script_id}>
                   {script.name}
@@ -508,8 +508,8 @@ export default function RoleAssignmentSchemesPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">全部模式</SelectItem>
-              <SelectItem value="auto">自動</SelectItem>
-              <SelectItem value="manual">手動</SelectItem>
+              <SelectItem value="auto">自动</SelectItem>
+              <SelectItem value="manual">手动</SelectItem>
             </SelectContent>
           </Select>
           {(searchFilters.search || searchFilters.script_id || searchFilters.mode) && (
@@ -534,14 +534,14 @@ export default function RoleAssignmentSchemesPage() {
       ) : schemes.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">暫無分配方案</p>
+            <p className="text-muted-foreground">暫无分配方案</p>
             <PermissionGuard permission="role_assignment_scheme:create">
               <Button
                 className="mt-4"
                 onClick={() => setCreateDialogOpen(true)}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                創建第一個方案
+                创建第一个方案
               </Button>
             </PermissionGuard>
           </CardContent>
@@ -552,18 +552,18 @@ export default function RoleAssignmentSchemesPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>分配方案列表</CardTitle>
-                <CardDescription>共 {schemes.length} 個方案</CardDescription>
+                <CardDescription>共 {schemes.length} 个方案</CardDescription>
               </div>
               <PermissionGuard permission="export:role_assignment_scheme">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" disabled={loading || schemes.length === 0}>
                       <Download className="mr-2 h-4 w-4" />
-                      導出
+                      导出
                     </Button>
                   </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>選擇導出格式</DropdownMenuLabel>
+                  <DropdownMenuLabel>选择导出格式</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={async () => {
@@ -571,11 +571,11 @@ export default function RoleAssignmentSchemesPage() {
                         const blob = await exportSchemes("csv")
                         const filename = `分配方案列表_${new Date().toISOString().slice(0, 10)}.csv`
                         downloadBlob(blob, filename)
-                        toast({ title: "導出成功", description: "分配方案列表已導出為 CSV" })
+                        toast({ title: "导出成功", description: "分配方案列表已导出為 CSV" })
                       } catch (error: any) {
                         toast({
-                          title: "導出失敗",
-                          description: error.message || "無法導出分配方案列表",
+                          title: "导出失败",
+                          description: error.message || "无法导出分配方案列表",
                           variant: "destructive",
                         })
                       }
@@ -589,11 +589,11 @@ export default function RoleAssignmentSchemesPage() {
                         const blob = await exportSchemes("excel")
                         const filename = `分配方案列表_${new Date().toISOString().slice(0, 10)}.xlsx`
                         downloadBlob(blob, filename)
-                        toast({ title: "導出成功", description: "分配方案列表已導出為 Excel" })
+                        toast({ title: "导出成功", description: "分配方案列表已导出為 Excel" })
                       } catch (error: any) {
                         toast({
-                          title: "導出失敗",
-                          description: error.message || "無法導出分配方案列表",
+                          title: "导出失败",
+                          description: error.message || "无法导出分配方案列表",
                           variant: "destructive",
                         })
                       }
@@ -607,11 +607,11 @@ export default function RoleAssignmentSchemesPage() {
                         const blob = await exportSchemes("pdf")
                         const filename = `分配方案列表_${new Date().toISOString().slice(0, 10)}.pdf`
                         downloadBlob(blob, filename)
-                        toast({ title: "導出成功", description: "分配方案列表已導出為 PDF" })
+                        toast({ title: "导出成功", description: "分配方案列表已导出為 PDF" })
                       } catch (error: any) {
                         toast({
-                          title: "導出失敗",
-                          description: error.message || "無法導出分配方案列表",
+                          title: "导出失败",
+                          description: error.message || "无法导出分配方案列表",
                           variant: "destructive",
                         })
                       }
@@ -629,10 +629,10 @@ export default function RoleAssignmentSchemesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>方案名稱</TableHead>
-                  <TableHead>劇本</TableHead>
+                  <TableHead>剧本</TableHead>
                   <TableHead>分配模式</TableHead>
-                  <TableHead>賬號數量</TableHead>
-                  <TableHead>創建時間</TableHead>
+                  <TableHead>账号數量</TableHead>
+                  <TableHead>创建时间</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -645,7 +645,7 @@ export default function RoleAssignmentSchemesPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={scheme.mode === "auto" ? "default" : "secondary"}>
-                        {scheme.mode === "auto" ? "自動" : "手動"}
+                        {scheme.mode === "auto" ? "自动" : "手动"}
                       </Badge>
                     </TableCell>
                     <TableCell>{scheme.account_ids.length}</TableCell>
@@ -709,13 +709,13 @@ export default function RoleAssignmentSchemesPage() {
         </Card>
       )}
 
-      {/* 創建方案對話框 */}
+      {/* 创建方案对话框 */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>創建分配方案</DialogTitle>
+            <DialogTitle>创建分配方案</DialogTitle>
             <DialogDescription>
-              創建一個新的角色分配方案，可以保存並重複使用
+              创建一个新的角色分配方案，可以保存並重複使用
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -727,7 +727,7 @@ export default function RoleAssignmentSchemesPage() {
                 onChange={(e) =>
                   setFormData({ ...formData, name: e.target.value })
                 }
-                placeholder="輸入方案名稱"
+                placeholder="输入方案名稱"
               />
             </div>
             <div>
@@ -738,18 +738,18 @@ export default function RoleAssignmentSchemesPage() {
                 onChange={(e) =>
                   setFormData({ ...formData, description: e.target.value })
                 }
-                placeholder="輸入方案描述（可選）"
+                placeholder="输入方案描述（可选）"
                 rows={3}
               />
             </div>
             <div>
-              <Label htmlFor="script">選擇劇本 *</Label>
+              <Label htmlFor="script">选择剧本 *</Label>
               <Select
                 value={selectedScriptId}
                 onValueChange={handleScriptChange}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="選擇劇本" />
+                  <SelectValue placeholder="选择剧本" />
                 </SelectTrigger>
                 <SelectContent>
                   {scripts.map((script) => (
@@ -763,7 +763,7 @@ export default function RoleAssignmentSchemesPage() {
             {selectedScriptId && (
               <>
                 <div>
-                  <Label htmlFor="accounts">選擇賬號 *</Label>
+                  <Label htmlFor="accounts">选择账号 *</Label>
                   <div className="border rounded-md p-4 max-h-48 overflow-y-auto">
                     {accounts.map((account) => (
                       <div key={account.account_id} className="flex items-center space-x-2 py-1">
@@ -809,8 +809,8 @@ export default function RoleAssignmentSchemesPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="auto">自動分配</SelectItem>
-                      <SelectItem value="manual">手動分配</SelectItem>
+                      <SelectItem value="auto">自动分配</SelectItem>
+                      <SelectItem value="manual">手动分配</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -829,7 +829,7 @@ export default function RoleAssignmentSchemesPage() {
                     {assignmentResult && (
                       <div className="border rounded-md p-4 space-y-2">
                         <div className="text-sm text-muted-foreground">
-                          驗證狀態:{" "}
+                          验证状态:{" "}
                           <Badge
                             variant={
                               assignmentResult.validation?.is_valid
@@ -839,19 +839,19 @@ export default function RoleAssignmentSchemesPage() {
                           >
                             {assignmentResult.validation?.is_valid
                               ? "有效"
-                              : "無效"}
+                              : "无效"}
                           </Badge>
                         </div>
                         {assignmentResult.summary && (
                           <div className="text-sm space-y-1">
-                            <p>總角色數: {assignmentResult.summary.total_roles}</p>
+                            <p>總角色数: {assignmentResult.summary.total_roles}</p>
                             <p>已分配: {assignmentResult.summary.assigned_roles}</p>
                             <p>未分配: {assignmentResult.summary.unassigned_roles}</p>
                           </div>
                         )}
                         {formData.assignments.length > 0 && (
                           <div className="mt-4">
-                            <p className="text-sm font-medium mb-2">分配詳情:</p>
+                            <p className="text-sm font-medium mb-2">分配详情:</p>
                             <div className="space-y-1 max-h-32 overflow-y-auto">
                               {formData.assignments.map((assignment, index) => (
                                 <div
@@ -884,18 +884,18 @@ export default function RoleAssignmentSchemesPage() {
             <PermissionGuard permission="role_assignment_scheme:create">
               <Button onClick={handleCreateScheme} disabled={creating}>
                 {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                創建
+                创建
               </Button>
             </PermissionGuard>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* 編輯方案對話框 */}
+      {/* 编辑方案对话框 */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>編輯分配方案</DialogTitle>
+            <DialogTitle>编辑分配方案</DialogTitle>
             <DialogDescription>
               修改分配方案的名稱、描述和分配配置
             </DialogDescription>
@@ -924,7 +924,7 @@ export default function RoleAssignmentSchemesPage() {
             </div>
             {formData.assignments.length > 0 && (
               <div>
-                <Label>分配詳情</Label>
+                <Label>分配详情</Label>
                 <div className="border rounded-md p-4 space-y-2 max-h-48 overflow-y-auto">
                   {formData.assignments.map((assignment, index) => (
                     <div
@@ -971,29 +971,29 @@ export default function RoleAssignmentSchemesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 應用方案對話框 */}
+      {/* 應用方案对话框 */}
       <Dialog open={applyDialogOpen} onOpenChange={setApplyDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>應用分配方案</DialogTitle>
             <DialogDescription>
-              確定要應用方案 "{currentScheme?.name}" 到賬號嗎？
+              确定要應用方案 "{currentScheme?.name}" 到账号嗎？
             </DialogDescription>
           </DialogHeader>
           {currentScheme && (
             <div className="space-y-2">
               <p className="text-sm">
-                劇本: {currentScheme.script_name || currentScheme.script_id}
+                剧本: {currentScheme.script_name || currentScheme.script_id}
               </p>
               <p className="text-sm">
-                賬號數量: {currentScheme.account_ids?.length || 0}
+                账号數量: {currentScheme.account_ids?.length || 0}
               </p>
               <p className="text-sm">
                 分配數量: {currentScheme.assignments?.length || 0}
               </p>
               {(!currentScheme.assignments || currentScheme.assignments.length === 0) && (
                 <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded text-sm text-yellow-800 dark:text-yellow-200">
-                  ⚠️ 警告：此方案沒有分配數據，請先編輯方案並創建分配關係
+                  ⚠️ 警告：此方案沒有分配数据，請先编辑方案並创建分配關係
                 </div>
               )}
             </div>
@@ -1015,11 +1015,11 @@ export default function RoleAssignmentSchemesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 查看詳情對話框 */}
+      {/* 查看详情对话框 */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>方案詳情</DialogTitle>
+            <DialogTitle>方案详情</DialogTitle>
             <DialogDescription>
               {currentScheme?.name}
             </DialogDescription>
@@ -1029,11 +1029,11 @@ export default function RoleAssignmentSchemesPage() {
               <div>
                 <Label>描述</Label>
                 <p className="text-sm text-muted-foreground">
-                  {currentScheme.description || "無描述"}
+                  {currentScheme.description || "无描述"}
                 </p>
               </div>
               <div>
-                <Label>劇本</Label>
+                <Label>剧本</Label>
                 <p className="text-sm">
                   {currentScheme.script_name || currentScheme.script_id}
                 </p>
@@ -1041,11 +1041,11 @@ export default function RoleAssignmentSchemesPage() {
               <div>
                 <Label>分配模式</Label>
                 <Badge variant={currentScheme.mode === "auto" ? "default" : "secondary"}>
-                  {currentScheme.mode === "auto" ? "自動" : "手動"}
+                  {currentScheme.mode === "auto" ? "自动" : "手动"}
                 </Badge>
               </div>
               <div>
-                <Label>分配詳情</Label>
+                <Label>分配详情</Label>
                 <div className="border rounded-md p-4 space-y-2 max-h-64 overflow-y-auto">
                   {currentScheme.assignments.map((assignment, index) => (
                     <div
@@ -1068,23 +1068,23 @@ export default function RoleAssignmentSchemesPage() {
             </div>
           )}
           <DialogFooter>
-            <Button onClick={() => setViewDialogOpen(false)}>關閉</Button>
+            <Button onClick={() => setViewDialogOpen(false)}>关闭</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* 查看歷史對話框 */}
+      {/* 查看历史对话框 */}
       <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>應用歷史</DialogTitle>
+            <DialogTitle>應用历史</DialogTitle>
             <DialogDescription>
-              方案 "{currentScheme?.name}" 的應用歷史記錄
+              方案 "{currentScheme?.name}" 的應用历史記錄
             </DialogDescription>
           </DialogHeader>
           {historyRecords.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              暫無應用歷史
+              暫无應用历史
             </p>
           ) : (
             <div className="space-y-2">
@@ -1096,7 +1096,7 @@ export default function RoleAssignmentSchemesPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium">
-                        賬號: {accounts.find((a) => a.account_id === record.account_id)?.display_name || record.account_id}
+                        账号: {accounts.find((a) => a.account_id === record.account_id)?.display_name || record.account_id}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         角色: {record.role_id}
@@ -1118,7 +1118,7 @@ export default function RoleAssignmentSchemesPage() {
             </div>
           )}
           <DialogFooter>
-            <Button onClick={() => setHistoryDialogOpen(false)}>關閉</Button>
+            <Button onClick={() => setHistoryDialogOpen(false)}>关闭</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

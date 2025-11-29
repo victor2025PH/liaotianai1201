@@ -5,6 +5,7 @@ from app.api import auth, users
 from app.api import group_ai, permissions, roles, user_roles, audit_logs, notifications, performance
 from app.api.system import optimization
 from app.api import telegram_registration
+from app.api import workers
 
 router = APIRouter()
 router.include_router(auth.router)
@@ -19,4 +20,5 @@ router.include_router(notifications.router)
 router.include_router(performance.router)
 router.include_router(optimization.router)
 router.include_router(telegram_registration.router)
+router.include_router(workers.router)
 

@@ -1,0 +1,23 @@
+# 在服务器上执行以下命令验证修复结果
+
+# 1. 检查 location 配置
+sudo grep -A 3 'location /api/' /etc/nginx/sites-available/aikz.usdt2026.cc
+
+# 2. 检查 proxy_pass（应该不包含路径）
+sudo grep 'proxy_pass.*8000' /etc/nginx/sites-available/aikz.usdt2026.cc | grep '/api/'
+
+# 3. 检查 location 数量（应该各为 1）
+sudo grep -c 'location /api/v1/notifications/ws' /etc/nginx/sites-available/aikz.usdt2026.cc
+sudo grep -c 'location /api/' /etc/nginx/sites-available/aikz.usdt2026.cc
+sudo grep -c 'location / {' /etc/nginx/sites-available/aikz.usdt2026.cc
+
+# 4. 测试 API 端点（应该返回 JSON，不是 HTML）
+curl http://localhost/api/v1/dashboard
+curl http://localhost/api/v1/users/me
+
+# 5. 检查后端服务
+sudo systemctl status liaotian-backend --no-pager | head -10
+
+# 6. 检查 Nginx 状态
+sudo systemctl status nginx --no-pager | head -10
+

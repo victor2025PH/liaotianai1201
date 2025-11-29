@@ -1,0 +1,66 @@
+诊断并修复 - 完整流程
+
+========================================
+问题分析
+========================================
+
+从错误信息可以看到：
+1. `cp: cannot stat '.next/BUILD_ID': No such file or directory` - 构建可能未完成
+2. 之前执行了 `rm -rf .next/standalone`，所以standalone目录被删除了
+3. 需要先检查构建状态，然后重新构建或完成部署
+
+========================================
+步骤1：检查构建状态（在服务器上执行）
+========================================
+
+cd /home/ubuntu/liaotian/saas-demo
+ls -la .next/BUILD_ID
+ls -la .next/standalone
+
+如果 BUILD_ID 不存在，说明构建未完成或失败。
+
+========================================
+步骤2：检查构建进程（在服务器上执行）
+========================================
+
+ps aux | grep "npm run build" | grep -v grep
+
+如果看到构建进程，说明正在构建中，请等待完成。
+
+========================================
+步骤3：如果构建未完成，重新构建（在服务器上执行）
+========================================
+
+cd /home/ubuntu/liaotian/saas-demo
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+nvm use 20
+npm run build
+
+等待构建完成（通常需要几分钟）。
+
+========================================
+步骤4：构建完成后，完成部署（在服务器上执行）
+========================================
+
+cd /home/ubuntu/liaotian/saas-demo && mkdir -p .next/standalone/liaotian/saas-demo/.next/server && cp .next/BUILD_ID .next/standalone/liaotian/saas-demo/.next/ && cp .next/*.json .next/standalone/liaotian/saas-demo/.next/ && cp -r .next/server/* .next/standalone/liaotian/saas-demo/.next/server/ && cp -r .next/static .next/standalone/liaotian/saas-demo/.next/ && echo "✅ 文件已复制" && ls -la .next/standalone/liaotian/saas-demo/.next/server/pages-manifest.json && sudo systemctl start liaotian-frontend && sleep 5 && sudo systemctl status liaotian-frontend --no-pager | head -15
+
+========================================
+步骤5：验证部署（在服务器上执行）
+========================================
+
+# 检查服务状态
+sudo systemctl status liaotian-frontend --no-pager | head -15
+
+# 检查文件
+ls -la .next/standalone/liaotian/saas-demo/.next/server/pages-manifest.json
+
+# 测试服务
+curl -I http://localhost:3000/group-ai/accounts
+
+========================================
+一键执行（如果构建已完成）
+========================================
+
+cd /home/ubuntu/liaotian/saas-demo && if [ -f '.next/BUILD_ID' ]; then echo '✅ 构建已完成' && mkdir -p .next/standalone/liaotian/saas-demo/.next/server && cp .next/BUILD_ID .next/standalone/liaotian/saas-demo/.next/ && cp .next/*.json .next/standalone/liaotian/saas-demo/.next/ && cp -r .next/server/* .next/standalone/liaotian/saas-demo/.next/server/ && cp -r .next/static .next/standalone/liaotian/saas-demo/.next/ && echo '✅ 文件已复制' && ls -la .next/standalone/liaotian/saas-demo/.next/server/pages-manifest.json && sudo systemctl start liaotian-frontend && sleep 5 && sudo systemctl status liaotian-frontend --no-pager | head -15; else echo '❌ 构建未完成，需要先执行: npm run build'; fi
+

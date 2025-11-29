@@ -122,6 +122,39 @@ app.add_middleware(
     slow_request_threshold_ms=1000.0  # 超過 1000ms 的請求視為慢請求
 )
 
+# 添加请求日志中间件，记录所有 PUT 请求到 /accounts
+@app.middleware("http")
+async def log_accounts_requests(request: Request, call_next):
+    import logging
+    import json
+    logger = logging.getLogger(__name__)
+    
+    # 记录 PUT 请求到 /accounts
+    if request.method == "PUT" and "/accounts/" in str(request.url.path):
+        client_host = request.client.host if request.client else 'unknown'
+        logger.info(f"[MIDDLEWARE] PUT 请求到达: {request.url.path}, client={client_host}, headers={dict(request.headers)}")
+        
+        # 读取请求体并记录（需要恢复请求体以便后续处理）
+        body_bytes = await request.body()
+        if body_bytes:
+            try:
+                body_dict = json.loads(body_bytes)
+                logger.info(f"[MIDDLEWARE] 请求体: {json.dumps(body_dict, ensure_ascii=False)[:500]}")
+            except Exception as e:
+                logger.warning(f"[MIDDLEWARE] 无法解析请求体: {e}")
+        
+        # 恢复请求体（FastAPI 需要可迭代的 body）
+        async def receive():
+            return {"type": "http.request", "body": body_bytes}
+        request._receive = receive
+    
+    response = await call_next(request)
+    
+    if request.method == "PUT" and "/accounts/" in str(request.url.path):
+        logger.info(f"[MIDDLEWARE] PUT 响应状态: {response.status_code}, path={request.url.path}")
+    
+    return response
+
 app.include_router(api_router, prefix="/api/v1")
 
 

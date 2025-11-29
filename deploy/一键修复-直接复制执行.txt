@@ -1,0 +1,69 @@
+一键修复静态文件 - 直接复制整个命令块执行
+
+========================================
+方法1：使用脚本（推荐）
+========================================
+
+在服务器上执行：
+bash /tmp/fix_static_final.sh
+
+或者上传并执行：
+scp deploy/一键修复-直接复制执行.sh ubuntu@165.154.233.55:/tmp/fix.sh
+ssh ubuntu@165.154.233.55 "chmod +x /tmp/fix.sh && bash /tmp/fix.sh"
+
+========================================
+方法2：直接复制整个命令块（一键执行）
+========================================
+
+在服务器上，直接复制以下整个命令块并执行：
+
+cd /home/ubuntu/liaotian/saas-demo && sudo systemctl stop liaotian-frontend && if [ ! -f ".next/static/chunks/adc3be135379192a.js" ]; then echo "源文件不存在，重新构建..." && rm -rf .next node_modules/.cache && export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm use 20 && npm run build; fi && rm -rf .next/standalone/liaotian/saas-demo/.next && mkdir -p .next/standalone/liaotian/saas-demo/.next && cp -r .next/static .next/standalone/liaotian/saas-demo/.next/ && ls -la .next/standalone/liaotian/saas-demo/.next/static/chunks/adc3be135379192a.js && sudo systemctl start liaotian-frontend && sleep 5 && sudo systemctl status liaotian-frontend --no-pager | head -15 && curl -I http://localhost:3000/_next/static/chunks/adc3be135379192a.js 2>&1 | head -5
+
+========================================
+方法3：分步执行（如果一键执行失败）
+========================================
+
+如果上面的命令太长，可以分步执行：
+
+# 步骤1：进入目录并停止服务
+cd /home/ubuntu/liaotian/saas-demo
+sudo systemctl stop liaotian-frontend
+
+# 步骤2：检查源文件，如果不存在则重新构建
+if [ ! -f ".next/static/chunks/adc3be135379192a.js" ]; then
+    echo "源文件不存在，重新构建..."
+    rm -rf .next node_modules/.cache
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+    nvm use 20
+    npm run build
+fi
+
+# 步骤3：删除旧的静态文件目录
+rm -rf .next/standalone/liaotian/saas-demo/.next
+
+# 步骤4：创建.next目录并复制静态文件
+mkdir -p .next/standalone/liaotian/saas-demo/.next
+cp -r .next/static .next/standalone/liaotian/saas-demo/.next/
+
+# 步骤5：验证文件已复制
+ls -la .next/standalone/liaotian/saas-demo/.next/static/chunks/adc3be135379192a.js
+
+# 步骤6：重启服务
+sudo systemctl start liaotian-frontend
+sleep 5
+
+# 步骤7：检查服务状态
+sudo systemctl status liaotian-frontend --no-pager | head -15
+
+# 步骤8：测试静态文件访问
+curl -I http://localhost:3000/_next/static/chunks/adc3be135379192a.js
+
+========================================
+说明
+========================================
+
+- 方法1和方法2都是一键执行，推荐使用方法1（脚本方式）
+- 方法3是分步执行，如果一键执行遇到问题可以使用
+- 所有命令都会自动检查源文件是否存在，如果不存在会自动重新构建
+

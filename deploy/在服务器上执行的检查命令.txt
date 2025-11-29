@@ -1,0 +1,98 @@
+# 在服务器上执行以下命令来检查和修复
+
+# ============================================================
+# 步骤 1: 查看所有 location 块的位置
+# ============================================================
+sudo grep -n 'location /api/v1/notifications/ws' /etc/nginx/sites-available/aikz.usdt2026.cc
+
+# ============================================================
+# 步骤 2: 查看所有 location 块的内容
+# ============================================================
+sudo grep -B 2 -A 20 'location /api/v1/notifications/ws' /etc/nginx/sites-available/aikz.usdt2026.cc
+
+# ============================================================
+# 步骤 3: 如果还有 2 个，使用 Python 脚本精确删除第二个
+# ============================================================
+sudo python3 << 'PYEOF'
+import re
+
+with open('/etc/nginx/sites-available/aikz.usdt2026.cc', 'r', encoding='utf-8') as f:
+    lines = f.readlines()
+
+# 找到所有 location 行
+location_indices = []
+for i, line in enumerate(lines):
+    if 'location /api/v1/notifications/ws' in line:
+        location_indices.append(i)
+
+print(f'找到 {len(location_indices)} 个 location 定义')
+
+if len(location_indices) > 1:
+    # 第二个 location 的位置
+    second_start = location_indices[1]
+    
+    # 向前查找注释（最多向前 3 行）
+    block_start = second_start
+    for i in range(max(0, second_start-3), second_start):
+        if '# WebSocket' in lines[i] or '# WebSocket' in lines[i].strip():
+            block_start = i
+            break
+    
+    # 向后查找结束的 }
+    brace_count = 0
+    block_end = second_start
+    found_open = False
+    
+    for i in range(second_start, len(lines)):
+        line = lines[i]
+        if '{' in line:
+            brace_count += line.count('{')
+            found_open = True
+        if '}' in line:
+            brace_count -= line.count('}')
+            if found_open and brace_count == 0:
+                block_end = i
+                break
+    
+    print(f'删除行 {block_start+1} 到 {block_end+1}')
+    print('删除内容预览:')
+    for i in range(block_start, min(block_end+1, block_start+5)):
+        print(f'  {i+1}: {lines[i].rstrip()}')
+    
+    # 删除
+    new_lines = lines[:block_start] + lines[block_end+1:]
+    
+    # 备份
+    with open('/etc/nginx/sites-available/aikz.usdt2026.cc.bak.python', 'w', encoding='utf-8') as f:
+        f.writelines(lines)
+    
+    with open('/etc/nginx/sites-available/aikz.usdt2026.cc', 'w', encoding='utf-8') as f:
+        f.writelines(new_lines)
+    
+    print(f'已删除 {block_end - block_start + 1} 行')
+    print('重复的 location 块已删除')
+else:
+    print('未发现重复配置')
+PYEOF
+
+# ============================================================
+# 步骤 4: 验证删除结果
+# ============================================================
+sudo grep -c 'location /api/v1/notifications/ws' /etc/nginx/sites-available/aikz.usdt2026.cc
+# 应该输出: 1
+
+# ============================================================
+# 步骤 5: 测试配置
+# ============================================================
+sudo nginx -t
+
+# ============================================================
+# 步骤 6: 如果测试通过，重载 Nginx
+# ============================================================
+sudo systemctl reload nginx
+
+# ============================================================
+# 步骤 7: 查看最终配置
+# ============================================================
+sudo grep -A 15 'location /api/v1/notifications/ws' /etc/nginx/sites-available/aikz.usdt2026.cc
+

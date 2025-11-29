@@ -1,8 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { ensureLoggedIn } from './helpers/auth';
 
 test.describe('導航測試', () => {
   test.beforeEach(async ({ page }) => {
+    // 確保用戶已登錄
+    await ensureLoggedIn(page);
     await page.goto('/');
+    await page.waitForLoadState('networkidle');
   });
 
   test('應該能夠導航到 Dashboard', async ({ page }) => {

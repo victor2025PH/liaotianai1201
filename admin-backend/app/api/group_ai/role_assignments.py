@@ -18,7 +18,7 @@ from group_ai_service import ServiceManager
 from group_ai_service.script_parser import ScriptParser
 from app.api.group_ai.accounts import get_service_manager
 from app.db import get_db
-from app.models.group_ai import GroupAIScript
+from app.models.group_ai import GroupAIScript, GroupAIAccount
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -153,19 +153,40 @@ async def create_assignment(
 ):
     """創建角色分配方案"""
     try:
-        # 驗證帳號是否存在
+        # 驗證帳號是否存在（同時檢查運行時管理器和數據庫）
         available_accounts = []
+        missing_accounts = []
+        
         for account_id in request.account_ids:
+            # 先檢查運行時管理器
             if account_id in service_manager.account_manager.accounts:
                 available_accounts.append(account_id)
+                logger.info(f"帳號 {account_id} 在運行時管理器中找到")
             else:
-                logger.warning(f"帳號 {account_id} 不存在，將跳過")
+                # 如果不在運行時管理器中，檢查數據庫
+                db_account = db.query(GroupAIAccount).filter(
+                    GroupAIAccount.account_id == account_id
+                ).first()
+                
+                if db_account:
+                    # 帳號在數據庫中存在，也允許分配角色（可能是遠程服務器上的帳號）
+                    available_accounts.append(account_id)
+                    logger.info(f"帳號 {account_id} 在數據庫中找到（可能位於遠程服務器）")
+                else:
+                    # 帳號既不在運行時管理器中，也不在數據庫中
+                    missing_accounts.append(account_id)
+                    logger.warning(f"帳號 {account_id} 不存在於運行時管理器和數據庫中，將跳過")
         
         if not available_accounts:
+            error_detail = "沒有可用的帳號"
+            if missing_accounts:
+                error_detail += f"。請求的帳號ID: {', '.join(missing_accounts)}"
             raise HTTPException(
                 status_code=400,
-                detail="沒有可用的帳號"
+                detail=error_detail
             )
+        
+        logger.info(f"找到 {len(available_accounts)} 個可用帳號: {available_accounts}")
         
         # 從數據庫獲取劇本
         script_record = db.query(GroupAIScript).filter(

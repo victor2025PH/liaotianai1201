@@ -12,11 +12,32 @@ echo ""
 
 cd ~/liaotian
 
+# 加载仓库配置
+if [ -f "deploy/repo_config.sh" ]; then
+    source deploy/repo_config.sh
+elif [ -f "$(dirname "$0")/repo_config.sh" ]; then
+    source "$(dirname "$0")/repo_config.sh"
+else
+    # 默认配置
+    GITHUB_REPO_URL="https://github.com/victor2025PH/liaotianai1201.git"
+    DEFAULT_BRANCH="main"
+fi
+
 # 检查 Git 仓库
 if [ ! -d ".git" ]; then
     echo "✗ 当前目录不是 Git 仓库"
-    echo "  请先克隆仓库: git clone https://github.com/victor2025PH/loaotian1127.git ."
+    echo "  请先克隆仓库: git clone ${GITHUB_REPO_URL} ."
     exit 1
+fi
+
+# 检查并更新远程仓库地址（如果配置了）
+if [ -n "$GITHUB_REPO_URL" ]; then
+    CURRENT_REMOTE=$(git remote get-url origin 2>/dev/null || echo "")
+    if [ "$CURRENT_REMOTE" != "$GITHUB_REPO_URL" ]; then
+        echo "  更新远程仓库地址..."
+        git remote set-url origin "$GITHUB_REPO_URL" 2>/dev/null || git remote add origin "$GITHUB_REPO_URL"
+        echo "  ✓ 远程仓库已更新: $GITHUB_REPO_URL"
+    fi
 fi
 
 # 1. 备份当前代码
@@ -32,9 +53,44 @@ echo ""
 # 2. 从 GitHub 拉取最新代码
 echo "【步骤2】从 GitHub 拉取最新代码..."
 git fetch --all
-BRANCH=$(git branch --show-current 2>/dev/null || echo "master")
-echo "  当前分支: $BRANCH"
-git pull origin $BRANCH || git pull origin master || git pull origin main
+
+# 智能分支检测
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+echo "  当前分支: ${CURRENT_BRANCH:-未设置}"
+
+# 获取远程分支列表
+REMOTE_BRANCHES=$(git ls-remote --heads origin 2>/dev/null | sed 's/.*refs\/heads\///' || echo "")
+
+# 确定要拉取的分支
+TARGET_BRANCH=""
+if [ -n "$CURRENT_BRANCH" ] && echo "$REMOTE_BRANCHES" | grep -q "^$CURRENT_BRANCH$"; then
+    TARGET_BRANCH="$CURRENT_BRANCH"
+    echo "  ✓ 使用当前分支: $TARGET_BRANCH"
+elif echo "$REMOTE_BRANCHES" | grep -q "^main$"; then
+    TARGET_BRANCH="main"
+    echo "  ✓ 使用 main 分支"
+elif echo "$REMOTE_BRANCHES" | grep -q "^master$"; then
+    TARGET_BRANCH="master"
+    echo "  ✓ 使用 master 分支"
+elif [ -n "$REMOTE_BRANCHES" ]; then
+    TARGET_BRANCH=$(echo "$REMOTE_BRANCHES" | head -1)
+    echo "  ✓ 使用第一个可用分支: $TARGET_BRANCH"
+else
+    TARGET_BRANCH="${DEFAULT_BRANCH:-main}"
+    echo "  ⚠ 未检测到远程分支，使用默认分支: $TARGET_BRANCH"
+fi
+
+# 拉取代码
+echo "  正在拉取分支: $TARGET_BRANCH"
+git pull origin "$TARGET_BRANCH" || {
+    echo "  ⚠ 拉取 $TARGET_BRANCH 失败，尝试其他分支..."
+    for BRANCH in main master develop; do
+        if echo "$REMOTE_BRANCHES" | grep -q "^$BRANCH$"; then
+            echo "  尝试拉取: $BRANCH"
+            git pull origin "$BRANCH" && break
+        fi
+    done
+}
 
 # 2.1 修复拉取的脚本文件的行尾符（如果存在）
 if [ -f "deploy/从GitHub拉取并部署.sh" ]; then

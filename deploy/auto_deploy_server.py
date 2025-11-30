@@ -12,7 +12,7 @@ import time
 SERVER = "165.154.233.55"
 USERNAME = "ubuntu"
 PASSWORD = "Along2025!!!"
-GITHUB_REPO = "https://github.com/victor2025PH/loaotian1127.git"
+GITHUB_REPO = "https://github.com/victor2025PH/liaotianai1201.git"
 PROJECT_DIR = "/home/ubuntu/liaotian"
 
 def create_ssh_client():
@@ -83,9 +83,24 @@ node -v && npm -v
         
         run_command(client, f"""
 if [ -d "{PROJECT_DIR}" ]; then
-    cd {PROJECT_DIR} && git fetch --all && git reset --hard origin/master && git pull
+    cd {PROJECT_DIR} && git fetch --all
+    # 智能检测分支
+    REMOTE_BRANCHES=$(git ls-remote --heads origin | sed 's/.*refs\\/heads\\///')
+    if echo "$REMOTE_BRANCHES" | grep -q "^main$"; then
+        BRANCH="main"
+    elif echo "$REMOTE_BRANCHES" | grep -q "^master$"; then
+        BRANCH="master"
+    else
+        BRANCH=$(echo "$REMOTE_BRANCHES" | head -1)
+    fi
+    git reset --hard origin/$BRANCH && git pull origin $BRANCH
 else
     git clone {GITHUB_REPO} {PROJECT_DIR}
+    cd {PROJECT_DIR}
+    # 切换到 main 分支（如果存在）
+    if git ls-remote --heads origin | grep -q "refs/heads/main"; then
+        git checkout -b main origin/main 2>/dev/null || true
+    fi
 fi
 """, "克隆/更新代碼")
         

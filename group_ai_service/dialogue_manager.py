@@ -14,6 +14,7 @@ from group_ai_service.script_engine import ScriptEngine
 from group_ai_service.models.account import AccountConfig
 from group_ai_service.redpacket_handler import RedpacketHandler
 from group_ai_service.monitor_service import MonitorService
+from group_ai_service.message_analyzer import MessageAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,7 @@ class DialogueContext:
 class DialogueManager:
     """對話管理器"""
     
-    def __init__(self, max_contexts: int = 200, context_ttl: int = 3600, redpacket_handler=None):
+    def __init__(self, max_contexts: int = 200, context_ttl: int = 3600, redpacket_handler=None, coordination_manager=None):
         """
         初始化對話管理器
         
@@ -120,6 +121,7 @@ class DialogueManager:
             max_contexts: 最大上下文數量
             context_ttl: 上下文 TTL（秒）
             redpacket_handler: 紅包處理器（可選，如果提供則使用，否則創建新的）
+            coordination_manager: 協同管理器（可選，用於多賬號協同）
         """
         self.contexts: Dict[str, DialogueContext] = {}  # key: f"{account_id}:{group_id}"
         self.context_cache = LRUCache(max_size=max_contexts, ttl=context_ttl)  # LRU 緩存
@@ -127,6 +129,17 @@ class DialogueManager:
         self.max_contexts = max_contexts
         self.context_ttl = context_ttl
         self._cleanup_task: Optional[asyncio.Task] = None
+        
+        # 協同管理器（可選）
+        self.coordination_manager = coordination_manager
+        
+        # 消息分析器（用於多輪對話增強）
+        try:
+            self.message_analyzer = MessageAnalyzer()
+            logger.info("MessageAnalyzer 初始化成功")
+        except Exception as e:
+            logger.warning(f"MessageAnalyzer 初始化失敗: {e}，將使用基礎功能")
+            self.message_analyzer = None
         
         # 初始化服務（使用 try-except 避免初始化失敗）
         try:
@@ -152,15 +165,30 @@ class DialogueManager:
         self,
         account_id: str,
         script_engine: ScriptEngine,
-        group_ids: List[int]
+        group_ids: List[int],
+        role_id: Optional[str] = None
     ):
-        """初始化賬號的對話管理器"""
+        """
+        初始化賬號的對話管理器
+        
+        Args:
+            account_id: 賬號ID
+            script_engine: 劇本引擎
+            group_ids: 群組ID列表
+            role_id: 角色ID（可選，用於協同管理）
+        """
         self.script_engines[account_id] = script_engine
         
         # 為每個群組創建上下文
         for group_id in group_ids:
             context_key = f"{account_id}:{group_id}"
             self.contexts[context_key] = DialogueContext(account_id, group_id)
+            
+            # 註冊到協同管理器（如果啟用）
+            if self.coordination_manager:
+                self.coordination_manager.register_account_to_group(account_id, group_id)
+                if role_id:
+                    self.coordination_manager.register_account_role(account_id, role_id)
         
         logger.info(f"賬號 {account_id} 對話管理器已初始化（{len(group_ids)} 個群組）")
     
@@ -187,7 +215,18 @@ class DialogueManager:
         # 重置每日計數（如果需要）
         context.reset_daily_count()
         
-        # 檢查是否應該回復
+        # 檢查協同管理器（多賬號協同邏輯）
+        if self.coordination_manager:
+            should_reply, reason = await self.coordination_manager.should_reply(
+                account_id=account_id,
+                group_id=group_id,
+                message=message
+            )
+            if not should_reply:
+                logger.debug(f"協同管理器決定不回復（賬號: {account_id}, 群組: {group_id}）: {reason}")
+                return None
+        
+        # 檢查是否應該回復（原有邏輯）
         if not self._should_reply(message, context, account_config):
             logger.debug(f"跳過回復（賬號: {account_id}, 群組: {group_id}）")
             return None
@@ -262,6 +301,13 @@ class DialogueManager:
                     except Exception as e:
                         logger.error(f"參與紅包時發生錯誤: {e}", exc_info=True)
         
+        # 消息分析（多輪對話增強）
+        message_analysis = self._analyze_message(message)
+        
+        # 更新話題上下文
+        if message_analysis.get("topic") and message_analysis["topic"].get("topic"):
+            context.current_topic = message_analysis["topic"]["topic"]
+        
         # 構建上下文信息
         context_info = {
             "history": context.get_recent_history(account_config.max_replies_per_hour // 5),
@@ -269,6 +315,10 @@ class DialogueManager:
             "account_id": account_id,
             "is_new_member": self._check_new_member(message, context),
             "is_redpacket": is_redpacket,
+            "intent": message_analysis.get("intent"),
+            "topic": message_analysis.get("topic"),
+            "sentiment": message_analysis.get("sentiment"),
+            "current_topic": context.current_topic,
         }
         
         # 處理消息（使用劇本引擎）
@@ -296,6 +346,14 @@ class DialogueManager:
                     message_type="reply",
                     success=True
                 )
+                
+                # 通知協同管理器回復已生成
+                if self.coordination_manager:
+                    await self.coordination_manager.on_reply_sent(
+                        account_id=account_id,
+                        group_id=group_id,
+                        message_id=message.id
+                    )
                 
                 logger.info(f"生成回復（賬號: {account_id}, 群組: {group_id}）: {reply[:50]}...")
                 return reply
@@ -379,6 +437,26 @@ class DialogueManager:
                         return True
         
         return False
+    
+    def _analyze_message(self, message: Message) -> Dict[str, Any]:
+        """
+        分析消息（意圖、話題、情感）
+        
+        Returns:
+            分析結果字典
+        """
+        if not self.message_analyzer:
+            return {}
+        
+        try:
+            # 檢測語言（簡單實現，可擴展）
+            language = "zh"  # 默認中文，可以根據消息內容或配置動態檢測
+            
+            analysis = self.message_analyzer.analyze_message(message, language)
+            return analysis
+        except Exception as e:
+            logger.warning(f"消息分析失敗: {e}")
+            return {}
     
     async def _check_redpacket(self, message: Message) -> bool:
         """檢查是否為紅包消息"""

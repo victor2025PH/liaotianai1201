@@ -75,6 +75,83 @@ build/
 
 # 已归档的无用文件
 无用文件/
+archive/
+
+# 临时修复脚本和报告（项目根目录）
+修复*.sh
+修复*.md
+修复*.bat
+修复*.ps1
+全自动*.ps1
+全自动*.sh
+最终*.ps1
+最终*.md
+持续*.ps1
+持续*.py
+自动*.ps1
+自动*.sh
+一键*.bat
+一键*.sh
+启动*.ps1
+启动*.txt
+检查*.ps1
+查看*.ps1
+执行*.md
+执行*.txt
+诊断*.sh
+监控*.ps1
+本地*.py
+
+# deploy 目录中的重复修复脚本
+deploy/修复*.sh
+deploy/修复*.py
+deploy/修复*.md
+deploy/一键修复*.sh
+deploy/一键修复*.bat
+deploy/全自动*.py
+deploy/全自动*.bat
+deploy/全自动*.sh
+deploy/修复总结*.md
+deploy/修复成功*.md
+deploy/修复完成*.md
+deploy/*问题分析.md
+deploy/*问题诊断.md
+deploy/SSH*.md
+deploy/SSH*.txt
+deploy/WebSocket*.md
+deploy/Nginx*.md
+deploy/API*.md
+deploy/401*.md
+deploy/404*.md
+deploy/UPSERT*.md
+
+# 保留重要的 deploy 文件
+!deploy/repo_config.sh
+!deploy/从GitHub拉取并部署.sh
+!deploy/auto_deploy_server.py
+!deploy/创建GitHub部署脚本.py
+!deploy/docker-compose.yaml
+!deploy/k8s/
+
+# docs 目录中的重复报告（保留结构，忽略具体报告文件）
+docs/部署报告/*.md
+docs/测试报告/*.md
+
+# 开发笔记中的临时文档
+docs/开发笔记/*问题*.md
+docs/开发笔记/*修复*.md
+docs/开发笔记/*分析*.md
+docs/开发笔记/*错误*.md
+
+# 保留重要的文档
+!docs/开发笔记/CI_CD流程完善完成报告-20251130.md
+!docs/开发笔记/仓库拉取问题分析和修复方案.md
+!docs/开发笔记/上傳執行總結.md
+!docs/开发笔记/执行位置和文件清理指南.md
+!docs/开发笔记/仓库问题修复总结.md
+!docs/开发笔记/如何查看GitHub Actions*.md
+!docs/开发笔记/快速上传到新仓库.md
+!docs/开发笔记/上传到新仓库指南.md
 
 # 顶层数据库 / 表格（如果将来再出现）
 *.db

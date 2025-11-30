@@ -37,13 +37,38 @@ class ServiceManager:
             self.game_api_client = None
             self._init_game_api_client()
             
+            # 初始化協同管理器（用於多賬號協同）
+            try:
+                from group_ai_service.coordination_manager import CoordinationManager
+                self.coordination_manager = CoordinationManager()
+                logger.debug("CoordinationManager 初始化成功")
+            except Exception as e:
+                logger.warning(f"CoordinationManager 初始化失敗: {e}，多賬號協同功能將不可用")
+                self.coordination_manager = None
+            
+            # 初始化回復質量管理器（用於回復多樣化和防重複）
+            try:
+                from group_ai_service.reply_quality_manager import ReplyQualityManager
+                self.reply_quality_manager = ReplyQualityManager(
+                    max_history_per_account=50,
+                    duplicate_check_window=300,  # 5分鐘內不重複
+                    similarity_threshold=0.8
+                )
+                logger.debug("ReplyQualityManager 初始化成功")
+            except Exception as e:
+                logger.warning(f"ReplyQualityManager 初始化失敗: {e}，回復質量優化功能將不可用")
+                self.reply_quality_manager = None
+            
             # DialogueManager 初始化可能失敗，添加錯誤處理
             try:
                 # 傳入遊戲 API 客戶端給 RedpacketHandler
                 from group_ai_service.redpacket_handler import RedpacketHandler
                 redpacket_handler = RedpacketHandler(game_api_client=self.game_api_client)
                 
-                self.dialogue_manager = DialogueManager(redpacket_handler=redpacket_handler)
+                self.dialogue_manager = DialogueManager(
+                    redpacket_handler=redpacket_handler,
+                    coordination_manager=self.coordination_manager
+                )
                 logger.debug("DialogueManager 初始化成功")
             except Exception as e:
                 logger.error(f"DialogueManager 初始化失敗: {e}", exc_info=True)
@@ -69,6 +94,15 @@ class ServiceManager:
             
             self.session_pool: Optional[ExtendedSessionPool] = None
             self._scripts_cache: Dict[str, Script] = {}  # 緩存已加載的劇本
+            
+            # 啟動協同管理器
+            if self.coordination_manager:
+                try:
+                    asyncio.create_task(self.coordination_manager.start())
+                    logger.info("協同管理器已啟動")
+                except Exception as e:
+                    logger.warning(f"啟動協同管理器失敗: {e}")
+            
             logger.info("ServiceManager 初始化完成")
         except Exception as e:
             logger.exception(f"ServiceManager 初始化過程中發生錯誤: {e}", exc_info=True)
@@ -218,23 +252,32 @@ class ServiceManager:
                 logger.error(f"帳號 {account_id} 無法加載劇本: {account_config.script_id}")
                 return False
             
-            # 2. 創建或獲取劇本引擎
+            # 2. 創建或獲取劇本引擎（傳入回復質量管理器）
             if account_id not in self.script_engines:
-                script_engine = ScriptEngine()
+                script_engine = ScriptEngine(reply_quality_manager=self.reply_quality_manager)
                 script_engine.initialize_account(account_id, script)
                 self.script_engines[account_id] = script_engine
                 logger.info(f"帳號 {account_id} 劇本引擎已初始化")
             else:
                 script_engine = self.script_engines[account_id]
+                # 如果質量管理器已初始化，更新現有引擎
+                if self.reply_quality_manager and not script_engine.reply_quality_manager:
+                    script_engine.reply_quality_manager = self.reply_quality_manager
             
-            # 3. 初始化對話管理器
+            # 3. 獲取賬號的角色ID（從配置的 metadata 中）
+            role_id = None
+            if hasattr(account_config, 'metadata') and isinstance(account_config.metadata, dict):
+                role_id = account_config.metadata.get('assigned_role_id')
+            
+            # 4. 初始化對話管理器
             self.dialogue_manager.initialize_account(
                 account_id=account_id,
                 script_engine=script_engine,
-                group_ids=account_config.group_ids or []
+                group_ids=account_config.group_ids or [],
+                role_id=role_id
             )
             
-            logger.info(f"帳號 {account_id} 服務初始化完成")
+            logger.info(f"帳號 {account_id} 服務初始化完成（角色: {role_id or '未分配'}）")
             return True
             
         except Exception as e:
@@ -301,6 +344,62 @@ class ServiceManager:
         
         logger.info(f"帳號 {account_id} 已完全啟動（劇本引擎、對話管理器和消息監聽已初始化）")
         return True
+    
+    async def update_account_script(
+        self,
+        account_id: str,
+        new_script_id: Optional[str] = None,
+        new_script_yaml: Optional[str] = None,
+        preserve_state: bool = True
+    ) -> bool:
+        """
+        熱更新賬號的劇本（不重啟賬號）
+        
+        Args:
+            account_id: 賬號ID
+            new_script_id: 新劇本ID（如果提供，從緩存或文件系統加載）
+            new_script_yaml: 新劇本YAML內容（如果提供，直接解析）
+            preserve_state: 是否保留當前場景狀態
+        
+        Returns:
+            是否更新成功
+        """
+        if account_id not in self.account_manager.accounts:
+            logger.error(f"賬號 {account_id} 不存在")
+            return False
+        
+        account = self.account_manager.accounts[account_id]
+        
+        # 確定要使用的劇本ID
+        script_id_to_load = new_script_id or account.config.script_id
+        if not script_id_to_load:
+            logger.error(f"無法確定要加載的劇本ID")
+            return False
+        
+        # 加載新劇本
+        new_script = self.get_script(script_id_to_load, new_script_yaml)
+        if not new_script:
+            logger.error(f"無法加載劇本: {script_id_to_load}")
+            return False
+        
+        # 獲取劇本引擎
+        script_engine = self.script_engines.get(account_id)
+        if not script_engine:
+            logger.warning(f"賬號 {account_id} 沒有劇本引擎，將初始化")
+            return self.initialize_account_services(account_id, account.config, new_script_yaml)
+        
+        # 熱更新劇本
+        success = script_engine.update_script(account_id, new_script, preserve_state)
+        
+        if success:
+            # 更新賬號配置中的劇本ID（如果提供了新的）
+            if new_script_id:
+                account.config.script_id = new_script_id
+            logger.info(f"賬號 {account_id} 劇本熱更新成功（劇本: {script_id_to_load}）")
+        else:
+            logger.error(f"賬號 {account_id} 劇本熱更新失敗")
+        
+        return success
     
     async def stop_account(self, account_id: str) -> bool:
         """停止帳號"""

@@ -1,0 +1,74 @@
+# 在服务器上直接执行的修复命令
+
+## 完整命令（复制粘贴到服务器执行）
+
+```bash
+cd ~/liaotian && \
+echo "=== 步骤 1: 强制拉取代码 ===" && \
+git fetch origin && \
+git reset --hard origin/master && \
+git clean -fd && \
+echo "[✓] 代码拉取完成" && \
+echo "" && \
+echo "=== 步骤 2: 验证修复代码 ===" && \
+if grep -q "同時檢查運行時管理器和數據庫" admin-backend/app/api/group_ai/role_assignments.py; then echo "[✓] 找到修复代码"; else echo "[✗] 未找到修复代码"; fi && \
+echo "" && \
+echo "=== 步骤 3: 清除 Python 缓存 ===" && \
+find admin-backend -type d -name __pycache__ -exec rm -r {} + 2>/dev/null || true && \
+find admin-backend -name "*.pyc" -delete 2>/dev/null || true && \
+echo "[✓] Python 缓存已清除" && \
+echo "" && \
+echo "=== 步骤 4: 停止旧服务 ===" && \
+pkill -f "uvicorn.*app.main:app" || true && \
+sleep 5 && \
+echo "[✓] 旧服务已停止" && \
+echo "" && \
+echo "=== 步骤 5: 启动新服务 ===" && \
+cd admin-backend && \
+source .venv/bin/activate && \
+nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/backend.log 2>&1 & \
+sleep 10 && \
+echo "[✓] 新服务已启动" && \
+echo "" && \
+echo "=== 步骤 6: 验证服务 ===" && \
+curl -I http://localhost:8000/health && \
+echo "" && \
+echo "=== 修复完成 ==="
+```
+
+## 简化版本（单行命令）
+
+```bash
+cd ~/liaotian && git fetch origin && git reset --hard origin/master && git clean -fd && find admin-backend -type d -name __pycache__ -exec rm -r {} + 2>/dev/null || true && find admin-backend -name "*.pyc" -delete 2>/dev/null || true && pkill -f "uvicorn.*app.main:app" || true && sleep 5 && cd admin-backend && source .venv/bin/activate && nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/backend.log 2>&1 & sleep 10 && curl -I http://localhost:8000/health
+```
+
+## 分步执行版本
+
+```bash
+# 步骤 1
+cd ~/liaotian
+git fetch origin
+git reset --hard origin/master
+git clean -fd
+
+# 步骤 2
+grep -n "同時檢查運行時管理器和數據庫" admin-backend/app/api/group_ai/role_assignments.py
+
+# 步骤 3
+find admin-backend -type d -name __pycache__ -exec rm -r {} + 2>/dev/null || true
+find admin-backend -name "*.pyc" -delete 2>/dev/null || true
+
+# 步骤 4
+pkill -f "uvicorn.*app.main:app" || true
+sleep 5
+
+# 步骤 5
+cd admin-backend
+source .venv/bin/activate
+nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/backend.log 2>&1 &
+sleep 10
+
+# 步骤 6
+curl -I http://localhost:8000/health
+tail -20 /tmp/backend.log
+```

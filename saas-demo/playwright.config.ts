@@ -25,7 +25,7 @@ export default defineConfig({
   /* 共享設置 */
   use: {
     /* 基礎 URL */
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3001',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
     /* 收集失敗時的跟踪信息 */
     trace: 'on-first-retry',
     /* 截圖配置 */
@@ -71,7 +71,7 @@ export default defineConfig({
   /* 本地開發服務器配置 */
   webServer: {
     command: 'npm run dev',
-    url: 'http://localhost:3001',
+    url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
   },

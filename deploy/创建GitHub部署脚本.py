@@ -93,7 +93,7 @@ cd ~/liaotian
 # 检查 Git 仓库
 if [ ! -d ".git" ]; then
     echo "✗ 当前目录不是 Git 仓库"
-    echo "  请先克隆仓库: git clone https://github.com/victor2025PH/loaotian1127.git ."
+    echo "  请先克隆仓库: git clone https://github.com/victor2025PH/liaotianai1201.git ."
     exit 1
 fi
 

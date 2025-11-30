@@ -1736,3 +1736,80 @@ async def get_account_status(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"獲取賬號狀態失敗: {str(e)}")
+
+
+class ScriptHotUpdateRequest(BaseModel):
+    """劇本熱更新請求"""
+    script_id: Optional[str] = None  # 新劇本ID（可選，不提供則使用當前劇本的新版本）
+    script_yaml: Optional[str] = None  # 新劇本YAML內容（可選）
+    preserve_state: bool = True  # 是否保留當前場景狀態
+
+
+@router.post("/{account_id}/hot-update-script")
+async def hot_update_account_script(
+    account_id: str,
+    request: ScriptHotUpdateRequest,
+    current_user: User = Depends(get_current_active_user),
+    service_manager: ServiceManager = Depends(get_service_manager),
+    db: Session = Depends(get_db)
+):
+    """
+    熱更新賬號的劇本（不重啟賬號，需要 account:update 權限）
+    
+    這個端點允許在不停止賬號的情況下更新劇本，保留當前對話狀態。
+    """
+    check_permission(current_user, PermissionCode.ACCOUNT_UPDATE.value, db)
+    
+    try:
+        # 檢查賬號是否存在
+        if account_id not in service_manager.account_manager.accounts:
+            raise HTTPException(status_code=404, detail=f"賬號 {account_id} 不存在或未啟動")
+        
+        account = service_manager.account_manager.accounts[account_id]
+        
+        # 檢查賬號是否在線
+        if account.status.value != "online":
+            raise HTTPException(
+                status_code=400,
+                detail=f"賬號 {account_id} 不在線，無法熱更新劇本。請先啟動賬號。"
+            )
+        
+        # 執行熱更新
+        success = await service_manager.update_account_script(
+            account_id=account_id,
+            new_script_id=request.script_id,
+            new_script_yaml=request.script_yaml,
+            preserve_state=request.preserve_state
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=500,
+                detail=f"熱更新劇本失敗，請檢查劇本格式或查看日誌"
+            )
+        
+        # 更新數據庫記錄（如果提供了新的 script_id）
+        if request.script_id:
+            db_account = db.query(GroupAIAccount).filter(
+                GroupAIAccount.account_id == account_id
+            ).first()
+            
+            if db_account:
+                db_account.script_id = request.script_id
+                db.commit()
+        
+        return {
+            "message": f"賬號 {account_id} 劇本熱更新成功",
+            "account_id": account_id,
+            "script_id": request.script_id or account.config.script_id,
+            "preserve_state": request.preserve_state
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"熱更新賬號 {account_id} 劇本失敗: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"熱更新劇本失敗: {str(e)}"
+        )

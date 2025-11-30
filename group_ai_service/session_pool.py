@@ -110,10 +110,18 @@ class ExtendedSessionPool:
         
         client = account.client
         
+        from pyrogram import filters
+        
         @client.on_message()
         async def handle_message(client: Client, message: Message):
             """處理接收到的消息"""
             await self._handle_message(account, message, account_id)
+        
+        # 處理新成員加入事件
+        @client.on_message(filters.new_chat_members)
+        async def handle_new_members(client: Client, message: Message):
+            """處理新成員加入消息"""
+            await self._handle_new_members(account, message, account_id)
         
         # 處理 callback query（用於處理紅包按鈕點擊）
         @client.on_callback_query()
@@ -167,6 +175,58 @@ class ExtendedSessionPool:
             
         except Exception as e:
             logger.exception(f"處理消息失敗 (account={account_id}): {e}")
+            account.error_count += 1
+    
+    async def _handle_new_members(
+        self,
+        account: AccountInstance,
+        message: Message,
+        account_id: str
+    ):
+        """處理新成員加入消息"""
+        try:
+            # 只處理群組消息
+            if not message.chat or message.chat.type.name != "GROUP":
+                return
+            
+            # 檢查是否在監聽的群組列表中
+            if account.config.group_ids and message.chat.id not in account.config.group_ids:
+                return
+            
+            # 更新賬號活動時間
+            from datetime import datetime
+            account.last_activity = datetime.now()
+            account.message_count += 1
+            
+            logger.info(f"檢測到新成員加入（賬號: {account_id}, 群組: {message.chat.id}）")
+            
+            # 如果有對話管理器，處理新成員消息
+            if self.dialogue_manager:
+                try:
+                    # 確保消息被標記為新成員消息（設置標記以便 DialogueManager 檢測）
+                    # 如果消息還沒有 new_chat_members 屬性，我們可以通過其他方式標記
+                    if not hasattr(message, 'new_chat_members') or not message.new_chat_members:
+                        # 創建一個簡單的標記對象（如果 Pyrogram 沒有自動設置）
+                        # 這裡主要依賴 DialogueManager 的 _check_new_member 方法來檢測
+                        pass
+                    
+                    # 處理新成員消息（DialogueManager 會自動檢測並觸發歡迎邏輯）
+                    reply = await self.dialogue_manager.process_message(
+                        account_id=account.account_id,
+                        group_id=message.chat.id,
+                        message=message,
+                        account_config=account.config
+                    )
+                    if reply:
+                        await message.reply_text(reply)
+                        account.reply_count += 1
+                        logger.info(f"已發送新成員歡迎消息（賬號: {account.account_id}, 群組: {message.chat.id}）")
+                except Exception as e:
+                    logger.exception(f"處理新成員消息失敗: {e}")
+                    account.error_count += 1
+            
+        except Exception as e:
+            logger.exception(f"處理新成員加入失敗 (account={account_id}): {e}")
             account.error_count += 1
     
     async def _handle_callback_query(

@@ -3,8 +3,11 @@
 """
 import logging
 import random
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from datetime import datetime
+
+if TYPE_CHECKING:
+    from group_ai_service.reply_quality_manager import ReplyQualityManager
 
 from pyrogram.types import Message
 
@@ -12,6 +15,12 @@ from group_ai_service.script_parser import Script, Scene, Trigger, Response
 from group_ai_service.models.account import AccountStatusEnum
 from group_ai_service.variable_resolver import VariableResolver
 from group_ai_service.ai_generator import get_ai_generator
+
+# 避免循環導入
+try:
+    from group_ai_service.reply_quality_manager import ReplyQualityManager
+except ImportError:
+    ReplyQualityManager = None
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +61,10 @@ class ScriptState:
 class ScriptEngine:
     """劇本引擎"""
     
-    def __init__(self):
+    def __init__(self, reply_quality_manager: Optional['ReplyQualityManager'] = None):
         self.running_states: Dict[str, ScriptState] = {}
         self.variable_resolver = VariableResolver()
+        self.reply_quality_manager = reply_quality_manager
         logger.info("ScriptEngine 初始化完成")
     
     def initialize_account(self, account_id: str, script: Script, initial_scene: Optional[str] = None):
@@ -95,14 +105,31 @@ class ScriptEngine:
             logger.debug(f"消息未匹配任何觸發條件")
             return None
         
-        # 選擇回復
-        response = self._select_response(current_scene.responses)
+        # 選擇回復（傳遞賬號和群組ID用於質量管理）
+        group_id = context.get("group_id") if context else None
+        response = self._select_response(
+            current_scene.responses,
+            account_id=account_id,
+            group_id=group_id
+        )
         if not response:
             logger.warning(f"場景 {current_scene.id} 沒有可用的回復")
             return None
         
         # 生成回復內容
         reply_text = await self._generate_reply(response, message, context, state)
+        
+        # 記錄回復到質量管理器（如果啟用）
+        if reply_text and self.reply_quality_manager:
+            group_id = context.get("group_id") if context else None
+            if group_id:
+                template_id = getattr(response, 'template_id', None) or getattr(response, 'id', None)
+                self.reply_quality_manager.record_reply(
+                    account_id=account_id,
+                    group_id=group_id,
+                    reply_text=reply_text,
+                    template_id=template_id
+                )
         
         # 切換場景（如果有）
         if current_scene.next_scene:
@@ -142,12 +169,39 @@ class ScriptEngine:
         
         return None
     
-    def _select_response(self, responses: list[Response]) -> Optional[Response]:
-        """選擇回復模板"""
+    def _select_response(
+        self,
+        responses: list[Response],
+        account_id: Optional[str] = None,
+        group_id: Optional[int] = None
+    ) -> Optional[Response]:
+        """
+        選擇回復模板（優化：使用回復質量管理器避免重複）
+        
+        Args:
+            responses: 回復模板列表
+            account_id: 賬號ID（用於質量管理）
+            group_id: 群組ID（用於質量管理）
+        
+        Returns:
+            選中的回復模板
+        """
         if not responses:
             return None
         
-        # 簡單隨機選擇（後續可以實現更複雜的策略）
+        # 如果啟用了回復質量管理器，使用智能選擇
+        if self.reply_quality_manager and account_id and group_id:
+            selected = self.reply_quality_manager.select_best_response(
+                account_id=account_id,
+                group_id=group_id,
+                responses=responses,
+                get_template_id=lambda r: getattr(r, 'template_id', None) or getattr(r, 'id', None)
+            )
+            if selected:
+                return selected
+            # 如果所有回復都重複，降級為隨機選擇
+        
+        # 簡單隨機選擇（備用策略）
         return random.choice(responses)
     
     async def _generate_reply(
@@ -238,6 +292,64 @@ class ScriptEngine:
         if not state:
             return False
         return state.transition_to_scene(scene_id)
+    
+    def update_script(
+        self,
+        account_id: str,
+        new_script: Script,
+        preserve_state: bool = True
+    ) -> bool:
+        """
+        熱更新賬號的劇本（不重啟賬號）
+        
+        Args:
+            account_id: 賬號ID
+            new_script: 新劇本
+            preserve_state: 是否保留當前場景狀態（默認True）
+        
+        Returns:
+            是否更新成功
+        """
+        if account_id not in self.running_states:
+            logger.warning(f"賬號 {account_id} 沒有初始化劇本狀態，將初始化新劇本")
+            self.initialize_account(account_id, new_script)
+            return True
+        
+        old_state = self.running_states[account_id]
+        old_current_scene = old_state.current_scene
+        
+        try:
+            # 保存當前狀態信息
+            preserved_variables = old_state.variables.copy() if preserve_state else {}
+            preserved_scene_history = old_state.scene_history.copy() if preserve_state else []
+            
+            # 創建新狀態
+            new_state = ScriptState(account_id, new_script)
+            
+            # 恢復變量
+            new_state.variables = preserved_variables
+            
+            # 嘗試恢復當前場景（如果新劇本中有相同的場景）
+            if preserve_state and old_current_scene and old_current_scene in new_script.scenes:
+                new_state.transition_to_scene(old_current_scene)
+                new_state.scene_history = preserved_scene_history
+                logger.info(f"賬號 {account_id} 劇本已熱更新，保留場景: {old_current_scene}")
+            elif new_script.scenes:
+                # 如果無法保留場景，使用第一個場景
+                first_scene_id = list(new_script.scenes.keys())[0]
+                new_state.transition_to_scene(first_scene_id)
+                logger.info(f"賬號 {account_id} 劇本已熱更新，切換到場景: {first_scene_id}")
+            
+            # 更新狀態
+            self.running_states[account_id] = new_state
+            new_state.last_activity = datetime.now()
+            
+            logger.info(f"賬號 {account_id} 劇本熱更新成功")
+            return True
+            
+        except Exception as e:
+            logger.error(f"賬號 {account_id} 劇本熱更新失敗: {e}", exc_info=True)
+            return False
     
     def remove_account(self, account_id: str):
         """移除賬號的劇本狀態"""

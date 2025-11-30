@@ -44,14 +44,36 @@ jobs:
           ADMIN_DEFAULT_EMAIL: admin@test.com
           ADMIN_DEFAULT_PASSWORD: testpass123
         run: |
-          poetry run pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=html --cov-report=xml --maxfail=5
+          poetry run pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=html --cov-report=xml --maxfail=5 --cov-fail-under=70
 
+      - name: 檢查覆蓋率閾值
+        working-directory: admin-backend
+        run: |
+          # 提取覆蓋率數值
+          COVERAGE_OUTPUT=$(poetry run pytest tests/ --cov=app --cov-report=term --quiet 2>&1 || true)
+          COVERAGE=$(echo "$COVERAGE_OUTPUT" | grep "TOTAL" | awk '{print $NF}' | sed 's/%//' || echo "0")
+          MIN_COVERAGE=70
+          
+          echo "📊 測試覆蓋率檢查"
+          echo "當前覆蓋率: ${COVERAGE}%"
+          echo "最低要求: ${MIN_COVERAGE}%"
+          echo "COVERAGE=${COVERAGE}" >> $GITHUB_ENV
+          
+          # 使用 Python 進行數值比較（更可靠）
+          python3 << EOF
+          coverage = float("${COVERAGE}")
+          min_coverage = ${MIN_COVERAGE}
+          if coverage < min_coverage:
+              print(f"❌ 測試覆蓋率 {coverage}% 低於最低要求 {min_coverage}%")
+              exit(1)
+          else:
+              print(f"✅ 測試覆蓋率 {coverage}% 達到要求")
+          EOF
+      
       - name: Generate coverage badge
         working-directory: admin-backend
         run: |
-          coverage=$(poetry run pytest tests/ --cov=app --cov-report=term --quiet 2>&1 | grep "TOTAL" | awk '{print $NF}' | sed 's/%//' || echo "0")
-          echo "Coverage: $coverage%"
-          echo "COVERAGE=$coverage" >> $GITHUB_ENV
+          echo "Coverage: ${COVERAGE}%"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

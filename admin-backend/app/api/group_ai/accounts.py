@@ -1716,25 +1716,49 @@ async def get_account_status(
     """獲取賬號狀態（需要 account:view 權限）"""
     check_permission(current_user, PermissionCode.ACCOUNT_VIEW.value, db)
     try:
+        # 1. 先檢查 AccountManager（在內存中運行的賬號）
         status_data = manager.get_account_status(account_id)
-        if not status_data:
-            raise HTTPException(status_code=404, detail=f"賬號 {account_id} 不存在")
+        if status_data:
+            return AccountStatusResponse(
+                account_id=status_data.account_id,
+                status=status_data.status.value,
+                online=status_data.online,
+                last_activity=status_data.last_activity.isoformat() if status_data.last_activity else None,
+                message_count=status_data.message_count,
+                reply_count=status_data.reply_count,
+                redpacket_count=status_data.redpacket_count,
+                error_count=status_data.error_count,
+                last_error=status_data.last_error,
+                uptime_seconds=status_data.uptime_seconds
+            )
         
-        return AccountStatusResponse(
-            account_id=status_data.account_id,
-            status=status_data.status.value,
-            online=status_data.online,
-            last_activity=status_data.last_activity.isoformat() if status_data.last_activity else None,
-            message_count=status_data.message_count,
-            reply_count=status_data.reply_count,
-            redpacket_count=status_data.redpacket_count,
-            error_count=status_data.error_count,
-            last_error=status_data.last_error,
-            uptime_seconds=status_data.uptime_seconds
-        )
+        # 2. 檢查數據庫（包含遠程服務器賬號）
+        db_account = db.query(GroupAIAccount).filter(
+            GroupAIAccount.account_id == account_id
+        ).first()
+        
+        if db_account:
+            # 賬號在數據庫中但不在 AccountManager 中，返回默認的 offline 狀態
+            from group_ai_service.models.account import AccountStatusEnum
+            return AccountStatusResponse(
+                account_id=account_id,
+                status=AccountStatusEnum.OFFLINE.value,
+                online=False,
+                last_activity=None,
+                message_count=0,
+                reply_count=0,
+                redpacket_count=0,
+                error_count=0,
+                last_error=None,
+                uptime_seconds=0
+            )
+        
+        # 3. 都不存在，返回 404
+        raise HTTPException(status_code=404, detail=f"賬號 {account_id} 不存在")
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception(f"獲取賬號狀態失敗: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"獲取賬號狀態失敗: {str(e)}")
 
 

@@ -243,6 +243,19 @@ async def worker_heartbeat(
         
         _save_worker_status(request.node_id, worker_data)
         
+        # 同步賬號信息到數據庫
+        if request.accounts:
+            try:
+                from app.api.group_ai.remote_account_sync import sync_accounts_from_worker
+                sync_result = sync_accounts_from_worker(
+                    node_id=request.node_id,
+                    accounts=request.accounts,
+                    db=db
+                )
+                logger.info(f"從節點 {request.node_id} 同步了 {sync_result['synced_count']} 個賬號")
+            except Exception as sync_error:
+                logger.error(f"同步賬號信息失敗: {sync_error}", exc_info=True)
+        
         # 检查是否有待执行的命令
         commands = _get_commands(request.node_id)
         

@@ -57,6 +57,8 @@ import Link from "next/link"
   exportScripts,
   downloadBlob,
   batchOperateScripts,
+  getWorkers,
+  deployScriptToNodes,
   type Script,
   type ScriptCreateRequest,
   type ScriptUpdateRequest,
@@ -64,6 +66,8 @@ import Link from "next/link"
   type VersionCompareResponse,
   type ExportFormat,
   type BatchScriptRequest,
+  type WorkerNode,
+  type ScriptDeploymentResponse,
 } from "@/lib/api/group-ai"
 
 const workflowSteps: Step[] = [
@@ -154,6 +158,14 @@ export default function GroupAIScriptsPage() {
   const [reviewComment, setReviewComment] = useState("")
   const [changeSummary, setChangeSummary] = useState("")
   const [reviewing, setReviewing] = useState(false)
+  
+  // 推送到遠端節點相關狀態
+  const [deployDialogOpen, setDeployDialogOpen] = useState(false)
+  const [deployingScriptId, setDeployingScriptId] = useState<string | null>(null)
+  const [workers, setWorkers] = useState<Record<string, WorkerNode>>({})
+  const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set())
+  const [deploying, setDeploying] = useState(false)
+  const [deployResult, setDeployResult] = useState<ScriptDeploymentResponse | null>(null)
   
   const [formData, setFormData] = useState<ScriptCreateRequest>({
     script_id: "",
@@ -265,6 +277,78 @@ export default function GroupAIScriptsPage() {
         }
       }
     )
+  }
+
+  // 打開推送到遠端節點對話框
+  const handleOpenDeployDialog = async (scriptId: string) => {
+    setDeployingScriptId(scriptId)
+    setSelectedNodes(new Set())
+    setDeployResult(null)
+    setDeployDialogOpen(true)
+    
+    // 獲取 Worker 節點列表
+    try {
+      const workersData = await getWorkers()
+      setWorkers(workersData.workers || {})
+    } catch (err) {
+      console.error("獲取 Worker 節點失敗:", err)
+      setWorkers({})
+    }
+  }
+
+  // 推送劇本到遠端節點
+  const handleDeployScript = async () => {
+    if (!deployingScriptId || selectedNodes.size === 0) {
+      showErrorDialog("錯誤", "請選擇至少一個目標節點")
+      return
+    }
+    
+    try {
+      setDeploying(true)
+      const result = await deployScriptToNodes({
+        script_id: deployingScriptId,
+        node_ids: Array.from(selectedNodes),
+        force_update: false
+      })
+      setDeployResult(result)
+      
+      if (result.success_count > 0) {
+        toast({
+          title: "推送成功",
+          description: `成功推送到 ${result.success_count} 個節點${result.failed_count > 0 ? `，失敗 ${result.failed_count} 個` : ''}`,
+        })
+      } else {
+        showErrorDialog("推送失敗", `所有 ${result.total_nodes} 個節點推送失敗`)
+      }
+    } catch (err) {
+      showErrorDialog("推送失敗", err instanceof Error ? err.message : "無法推送劇本")
+    } finally {
+      setDeploying(false)
+    }
+  }
+
+  // 切換節點選擇
+  const toggleNodeSelect = (nodeId: string) => {
+    const newSelected = new Set(selectedNodes)
+    if (newSelected.has(nodeId)) {
+      newSelected.delete(nodeId)
+    } else {
+      newSelected.add(nodeId)
+    }
+    setSelectedNodes(newSelected)
+  }
+
+  // 全選/取消全選在線節點
+  const toggleSelectAllNodes = () => {
+    const onlineNodes = Object.entries(workers)
+      .filter(([_, worker]) => worker.status === "online")
+      .map(([nodeId]) => nodeId)
+    
+    if (selectedNodes.size === onlineNodes.length) {
+      setSelectedNodes(new Set())
+    } else {
+      setSelectedNodes(new Set(onlineNodes))
+    }
   }
 
   // 格式化时间
@@ -1368,6 +1452,17 @@ export default function GroupAIScriptsPage() {
                             编辑
                           </Button>
                         </PermissionGuard>
+                        <PermissionGuard permission="script:create">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenDeployDialog(script.script_id)}
+                            title="推送劇本到遠端 Worker 節點"
+                          >
+                            <Send className="h-4 w-4 mr-1" />
+                            推送
+                          </Button>
+                        </PermissionGuard>
                         <PermissionGuard permission="script:delete">
                           <Button
                             size="sm"
@@ -1803,6 +1898,171 @@ export default function GroupAIScriptsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 推送到遠端節點對話框 */}
+      <Dialog open={deployDialogOpen} onOpenChange={(open) => {
+        setDeployDialogOpen(open)
+        if (!open) {
+          setDeployingScriptId(null)
+          setSelectedNodes(new Set())
+          setDeployResult(null)
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>推送劇本到遠端節點</DialogTitle>
+            <DialogDescription>
+              選擇目標 Worker 節點，將劇本 {deployingScriptId} 推送到遠端
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* 節點選擇 */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>選擇目標節點</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleSelectAllNodes}
+                >
+                  {Object.entries(workers).filter(([_, w]) => w.status === "online").length === selectedNodes.size 
+                    ? "取消全選" 
+                    : "全選在線節點"}
+                </Button>
+              </div>
+              
+              {Object.keys(workers).length === 0 ? (
+                <Alert>
+                  <AlertDescription>
+                    暫無可用的 Worker 節點。請確保已有 Worker 節點在線並發送心跳。
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="grid gap-2 max-h-60 overflow-y-auto">
+                  {Object.entries(workers).map(([nodeId, worker]) => (
+                    <div
+                      key={nodeId}
+                      className={`flex items-center justify-between p-3 rounded-md border cursor-pointer transition-colors ${
+                        selectedNodes.has(nodeId)
+                          ? "bg-primary/10 border-primary"
+                          : "bg-muted/50 hover:bg-muted"
+                      }`}
+                      onClick={() => worker.status === "online" && toggleNodeSelect(nodeId)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${
+                          worker.status === "online" ? "bg-green-500" : "bg-gray-400"
+                        }`} />
+                        <div>
+                          <p className="font-medium">{nodeId}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {worker.account_count} 個賬號 | 
+                            最後心跳: {worker.last_heartbeat ? new Date(worker.last_heartbeat).toLocaleString() : "未知"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={worker.status === "online" ? "default" : "secondary"}>
+                          {worker.status === "online" ? "在線" : "離線"}
+                        </Badge>
+                        {selectedNodes.has(nodeId) && (
+                          <CheckSquare className="h-4 w-4 text-primary" />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {selectedNodes.size > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  已選擇 {selectedNodes.size} 個節點
+                </p>
+              )}
+            </div>
+
+            {/* 推送結果 */}
+            {deployResult && (
+              <div className="space-y-2">
+                <Label>推送結果</Label>
+                <div className="p-4 bg-muted rounded-md space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">總數：</span>
+                    <span className="text-sm font-medium">{deployResult.total_nodes}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-green-600">
+                    <span className="text-sm">成功：</span>
+                    <span className="text-sm font-medium">{deployResult.success_count}</span>
+                  </div>
+                  {deployResult.failed_count > 0 && (
+                    <div className="flex items-center justify-between text-red-600">
+                      <span className="text-sm">失敗：</span>
+                      <span className="text-sm font-medium">{deployResult.failed_count}</span>
+                    </div>
+                  )}
+                  {deployResult.results && deployResult.results.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-sm font-medium">詳細結果：</p>
+                      {deployResult.results.map((result, index) => (
+                        <div key={index} className={`text-xs flex items-center gap-2 ${
+                          result.status === "success" ? "text-green-600" : "text-red-600"
+                        }`}>
+                          {result.status === "success" ? (
+                            <CheckCircle className="h-3 w-3" />
+                          ) : (
+                            <XCircle className="h-3 w-3" />
+                          )}
+                          <span>{result.node_id}: {result.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {deploying && (
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                <span className="text-sm">正在推送，請稍候...</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setDeployDialogOpen(false)
+                setDeployingScriptId(null)
+                setSelectedNodes(new Set())
+                setDeployResult(null)
+              }}
+              disabled={deploying}
+            >
+              取消
+            </Button>
+            <Button 
+              onClick={handleDeployScript}
+              disabled={selectedNodes.size === 0 || deploying}
+            >
+              {deploying ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  推送中...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  開始推送
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

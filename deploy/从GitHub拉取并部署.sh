@@ -54,6 +54,16 @@ echo ""
 echo "【步骤2】从 GitHub 拉取最新代码..."
 git fetch --all
 
+# 检查本地修改
+echo "  检查本地修改..."
+LOCAL_CHANGES=$(git status --porcelain)
+if [ -n "$LOCAL_CHANGES" ]; then
+    echo "  ⚠ 发现本地修改，正在备份..."
+    STASH_NAME="服務器本地修改備份-$(date +%Y%m%d_%H%M%S)"
+    git stash save "$STASH_NAME"
+    echo "  ✓ 本地修改已備份到 stash"
+fi
+
 # 智能分支检测
 CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
 echo "  当前分支: ${CURRENT_BRANCH:-未设置}"
@@ -63,10 +73,7 @@ REMOTE_BRANCHES=$(git ls-remote --heads origin 2>/dev/null | sed 's/.*refs\/head
 
 # 确定要拉取的分支
 TARGET_BRANCH=""
-if [ -n "$CURRENT_BRANCH" ] && echo "$REMOTE_BRANCHES" | grep -q "^$CURRENT_BRANCH$"; then
-    TARGET_BRANCH="$CURRENT_BRANCH"
-    echo "  ✓ 使用当前分支: $TARGET_BRANCH"
-elif echo "$REMOTE_BRANCHES" | grep -q "^main$"; then
+if echo "$REMOTE_BRANCHES" | grep -q "^main$"; then
     TARGET_BRANCH="main"
     echo "  ✓ 使用 main 分支"
 elif echo "$REMOTE_BRANCHES" | grep -q "^master$"; then
@@ -80,12 +87,29 @@ else
     echo "  ⚠ 未检测到远程分支，使用默认分支: $TARGET_BRANCH"
 fi
 
+# 切换到目标分支（如果需要）
+if [ "$CURRENT_BRANCH" != "$TARGET_BRANCH" ]; then
+    echo "  切换到目标分支: $TARGET_BRANCH"
+    if git branch | grep -q "^\s*$TARGET_BRANCH$"; then
+        git checkout "$TARGET_BRANCH"
+    else
+        git checkout -b "$TARGET_BRANCH" "origin/$TARGET_BRANCH" 2>/dev/null || {
+            echo "  ⚠ 无法从远程创建分支，尝试其他方法..."
+            git checkout -b "$TARGET_BRANCH"
+            git branch --set-upstream-to="origin/$TARGET_BRANCH" "$TARGET_BRANCH" || true
+        }
+    fi
+    echo "  ✓ 已切换到分支: $TARGET_BRANCH"
+fi
+
 # 拉取代码
 echo "  正在拉取分支: $TARGET_BRANCH"
 git pull origin "$TARGET_BRANCH" || {
     echo "  ⚠ 拉取 $TARGET_BRANCH 失败，尝试其他分支..."
     for BRANCH in main master develop; do
         if echo "$REMOTE_BRANCHES" | grep -q "^$BRANCH$"; then
+            echo "  尝试切换到: $BRANCH"
+            git checkout -b "$BRANCH" "origin/$BRANCH" 2>/dev/null || git checkout "$BRANCH"
             echo "  尝试拉取: $BRANCH"
             git pull origin "$BRANCH" && break
         fi

@@ -43,6 +43,8 @@ import {
   getWorkers,
   extractRoles,
   createAssignment,
+  importTelegramAccounts,
+  importTelegramAccountsBatch,
   type Account, 
   type AccountCreateRequest,
   type SessionFile,
@@ -50,7 +52,8 @@ import {
   type WorkerAccount,
   type WorkersResponse,
   type Role,
-  type ExtractRolesResponse
+  type ExtractRolesResponse,
+  type ImportResult
 } from "@/lib/api/group-ai"
 import { getServers, type ServerStatus } from "@/lib/api/servers"
 import { Textarea } from "@/components/ui/textarea"
@@ -161,6 +164,12 @@ export default function GroupAIAccountsPage() {
     server_id: "",
     active: undefined as boolean | undefined,
   })
+  
+  // Telegram 賬號批量導入相關狀態
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
   
   const router = useRouter()
 
@@ -539,6 +548,58 @@ export default function GroupAIAccountsPage() {
       console.error(`停止账号 ${accountId} 失败:`, err)
       // 即使失败也刷新列表，確保状态同步
       await fetchAccounts()
+    }
+  }
+
+  // 批量導入 Telegram 賬號配置
+  const handleImportTelegramAccounts = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // 檢查文件擴展名
+    const validExtensions = ['.txt', '.csv', '.xlsx', '.xls']
+    const fileExt = file.name.toLowerCase().slice(file.name.lastIndexOf('.'))
+    if (!validExtensions.includes(fileExt)) {
+      showErrorDialog("錯誤", `不支持的文件格式: ${fileExt}。支持格式: ${validExtensions.join(', ')}`)
+      return
+    }
+
+    // 檢查文件大小（限制10MB）
+    if (file.size > 10 * 1024 * 1024) {
+      showErrorDialog("錯誤", "文件大小不能超過10MB")
+      return
+    }
+
+    setImportFile(file)
+    setImportDialogOpen(true)
+  }
+
+  const executeImport = async () => {
+    if (!importFile) return
+
+    try {
+      setImporting(true)
+      setImportResult(null)
+      
+      const result = await importTelegramAccounts(importFile)
+      setImportResult(result)
+      
+      if (result.success > 0) {
+        showSuccessDialog(
+          "導入成功",
+          `成功導入 ${result.success} 個賬號配置${result.failed > 0 ? `，失敗 ${result.failed} 個` : ''}`
+        )
+        // 刷新賬號列表
+        await fetchAccounts()
+      } else {
+        showErrorDialog("導入失敗", `所有 ${result.total} 個賬號配置導入失敗`)
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "導入失敗"
+      showErrorDialog("導入失敗", errorMessage)
+      console.error("導入 Telegram 賬號配置失敗:", err)
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -1103,10 +1164,31 @@ export default function GroupAIAccountsPage() {
             }}
           >
             <PermissionGuard permission="account:create">
-              <Button onClick={() => setDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                添加账号
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={() => setDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  添加账号
+                </Button>
+                <input
+                  type="file"
+                  id="telegram-import"
+                  accept=".txt,.csv,.xlsx,.xls"
+                  onChange={handleImportTelegramAccounts}
+                  className="hidden"
+                />
+                <label htmlFor="telegram-import">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    asChild
+                  >
+                    <span>
+                      <Upload className="h-4 w-4 mr-2" />
+                      批量導入配置
+                    </span>
+                  </Button>
+                </label>
+              </div>
             </PermissionGuard>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
@@ -2817,6 +2899,137 @@ export default function GroupAIAccountsPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Telegram 賬號批量導入對話框 */}
+      <Dialog open={importDialogOpen} onOpenChange={(open) => {
+        setImportDialogOpen(open)
+        if (!open) {
+          setImportFile(null)
+          setImportResult(null)
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>批量導入 Telegram 賬號配置</DialogTitle>
+            <DialogDescription>
+              從文件導入 Telegram 賬號配置（API_ID, API_HASH, SESSION_NAME）
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {importFile && (
+              <div className="space-y-2">
+                <Label>選擇的文件</Label>
+                <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{importFile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(importFile.size / 1024).toFixed(2)} KB
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setImportFile(null)
+                      const input = document.getElementById('telegram-import') as HTMLInputElement
+                      if (input) input.value = ''
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <Alert>
+              <AlertDescription>
+                <p className="font-medium mb-2">支持的文件格式：</p>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  <li><strong>TXT/CSV 文件</strong>：每行格式為 <code>API_ID|API_HASH|SESSION_NAME</code> 或 <code>API_ID,API_HASH,SESSION_NAME</code></li>
+                  <li><strong>Excel 文件</strong>：包含列 <code>API_ID</code>, <code>API_HASH</code>, <code>SESSION_NAME</code></li>
+                </ul>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  注意：導入的配置將保存到數據庫，但不會自動啟動賬號。您需要在賬號列表中手動啟動。
+                </p>
+              </AlertDescription>
+            </Alert>
+
+            {importResult && (
+              <div className="space-y-2">
+                <Label>導入結果</Label>
+                <div className="p-4 bg-muted rounded-md space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">總數：</span>
+                    <span className="text-sm font-medium">{importResult.total}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-green-600">
+                    <span className="text-sm">成功：</span>
+                    <span className="text-sm font-medium">{importResult.success}</span>
+                  </div>
+                  {importResult.failed > 0 && (
+                    <div className="flex items-center justify-between text-red-600">
+                      <span className="text-sm">失敗：</span>
+                      <span className="text-sm font-medium">{importResult.failed}</span>
+                    </div>
+                  )}
+                  {importResult.errors && importResult.errors.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-sm font-medium mb-1">錯誤詳情：</p>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {importResult.errors.map((error, index) => (
+                          <p key={index} className="text-xs text-red-600">{error}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {importing && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">正在導入，請稍候...</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setImportDialogOpen(false)
+                setImportFile(null)
+                setImportResult(null)
+              }}
+              disabled={importing}
+            >
+              取消
+            </Button>
+            <Button 
+              onClick={executeImport}
+              disabled={!importFile || importing}
+            >
+              {importing ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  導入中...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-2" />
+                  開始導入
+                </>
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

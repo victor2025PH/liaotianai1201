@@ -1793,3 +1793,110 @@ export async function batchOperateScripts(request: BatchScriptRequest): Promise<
   return response.json()
 }
 
+// Telegram 賬號批量導入相關類型
+export interface AccountImportItem {
+  api_id: string
+  api_hash: string
+  session_name: string
+}
+
+export interface ImportResult {
+  total: number
+  success: number
+  failed: number
+  errors: string[]
+}
+
+/**
+ * 批量導入 Telegram 賬號配置（文件上傳）
+ * @param file 文件（支持 .txt, .csv, .xlsx, .xls）
+ * @returns 導入結果
+ */
+export async function importTelegramAccounts(file: File): Promise<ImportResult> {
+  const { fetchWithAuth } = await import("./client")
+  
+  const formData = new FormData()
+  formData.append("file", file)
+  
+  const response = await fetchWithAuth(`${API_BASE}/accounts/import`, {
+    method: "POST",
+    body: formData,
+  })
+  
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || error.message || `HTTP ${response.status}`)
+  }
+  
+  return response.json()
+}
+
+/**
+ * 批量導入 Telegram 賬號配置（JSON 格式）
+ * @param accounts 賬號列表
+ * @returns 導入結果
+ */
+export async function importTelegramAccountsBatch(accounts: AccountImportItem[]): Promise<ImportResult> {
+  const { fetchWithAuth } = await import("./client")
+  
+  const response = await fetchWithAuth(`${API_BASE}/accounts/import/batch`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(accounts),
+  })
+  
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || error.message || `HTTP ${response.status}`)
+  }
+  
+  return response.json()
+}
+
+// 劇本推送到遠端節點相關類型
+export interface ScriptDeploymentRequest {
+  script_id: string
+  node_ids: string[]
+  force_update?: boolean
+}
+
+export interface ScriptDeploymentResult {
+  node_id: string
+  status: "success" | "failed"
+  message: string
+}
+
+export interface ScriptDeploymentResponse {
+  script_id: string
+  total_nodes: number
+  success_count: number
+  failed_count: number
+  results: ScriptDeploymentResult[]
+}
+
+/**
+ * 推送劇本到遠端 Worker 節點
+ * @param request 推送請求
+ * @returns 推送結果
+ */
+export async function deployScriptToNodes(request: ScriptDeploymentRequest): Promise<ScriptDeploymentResponse> {
+  const { fetchWithAuth } = await import("./client")
+  
+  const response = await fetchWithAuth(`${API_BASE}/scripts/deploy`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+  })
+  
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || error.message || `HTTP ${response.status}`)
+  }
+  
+  return response.json()
+}
+

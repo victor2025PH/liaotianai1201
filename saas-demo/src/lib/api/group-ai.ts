@@ -11,6 +11,7 @@ export interface Account {
   session_file: string
   script_id: string
   server_id?: string | null  // 關聯的服務器ID
+  node_id?: string | null    // Worker 節點 ID
   status: string
   group_count: number
   message_count: number

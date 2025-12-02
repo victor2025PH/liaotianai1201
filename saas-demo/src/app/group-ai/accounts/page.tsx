@@ -1971,7 +1971,8 @@ export default function GroupAIAccountsPage() {
                               setFormData({
                                 account_id: account.account_id,
                                 session_file: account.session_file || "",
-                                script_id: account.script_id || ""
+                                script_id: account.script_id || "",
+                                role_id: ""
                               })
                             }}
                           >
@@ -2165,7 +2166,8 @@ export default function GroupAIAccountsPage() {
                             setFormData({
                               account_id: account.account_id,
                               session_file: "",
-                              script_id: ""
+                              script_id: "",
+                              role_id: ""
                             })
                           }}
                           title="创建账号"

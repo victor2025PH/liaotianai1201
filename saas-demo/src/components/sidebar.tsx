@@ -17,6 +17,7 @@ import {
   Shield,
   Phone,
   Menu,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -51,6 +52,13 @@ const navigationConfig: NavItem[] = [
     icon: Monitor,
     step: null,
     descKey: "nodeManagement",
+  },
+  {
+    nameKey: "workerDeploy",
+    href: "/group-ai/worker-deploy",
+    icon: Download,
+    step: null,
+    descKey: "workerDeploy",
   },
   {
     nameKey: "telegramRegister",

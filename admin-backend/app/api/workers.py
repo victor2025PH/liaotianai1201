@@ -438,3 +438,274 @@ async def clear_worker_commands(
             detail=f"清除命令队列失败: {str(e)}"
         )
 
+
+# ============ Worker 部署包配置 ============
+
+class WorkerDeployConfig(BaseModel):
+    """Worker 部署配置"""
+    node_id: str = Field(..., description="節點ID")
+    server_url: str = Field(default="https://aikz.usdt2026.cc", description="服務器地址")
+    api_key: str = Field(default="", description="API密鑰（可選）")
+    heartbeat_interval: int = Field(default=30, description="心跳間隔（秒）")
+    telegram_api_id: str = Field(default="", description="Telegram API ID")
+    telegram_api_hash: str = Field(default="", description="Telegram API Hash")
+
+
+@router.post("/deploy-package", status_code=status.HTTP_200_OK)
+async def generate_deploy_package(
+    config: WorkerDeployConfig,
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """
+    生成 Worker 部署包配置
+    返回自動運行腳本的內容
+    """
+    try:
+        # 生成 Windows 批處理腳本
+        windows_script = f'''@echo off
+chcp 65001 >nul
+echo ========================================
+echo   聊天AI Worker 節點 - 自動部署
+echo ========================================
+echo.
+
+REM 配置環境變量
+set LIAOTIAN_SERVER={config.server_url}
+set LIAOTIAN_NODE_ID={config.node_id}
+set LIAOTIAN_API_KEY={config.api_key}
+set LIAOTIAN_HEARTBEAT_INTERVAL={config.heartbeat_interval}
+set TELEGRAM_API_ID={config.telegram_api_id}
+set TELEGRAM_API_HASH={config.telegram_api_hash}
+
+REM 檢查 Python
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo [錯誤] 未找到 Python，請先安裝 Python 3.8+
+    pause
+    exit /b 1
+)
+
+REM 創建虛擬環境
+if not exist "venv" (
+    echo 正在創建虛擬環境...
+    python -m venv venv
+)
+
+REM 激活虛擬環境並安裝依賴
+call venv\\Scripts\\activate.bat
+pip install requests telethon python-dotenv -q
+
+REM 創建 sessions 目錄
+if not exist "sessions" mkdir sessions
+
+REM 運行 Worker
+echo.
+echo 啟動 Worker 節點: {config.node_id}
+echo 服務器: {config.server_url}
+echo.
+python worker_client.py
+
+pause
+'''
+
+        # 生成 Linux/Mac 腳本
+        linux_script = f'''#!/bin/bash
+echo "========================================"
+echo "  聊天AI Worker 節點 - 自動部署"
+echo "========================================"
+echo ""
+
+# 配置環境變量
+export LIAOTIAN_SERVER="{config.server_url}"
+export LIAOTIAN_NODE_ID="{config.node_id}"
+export LIAOTIAN_API_KEY="{config.api_key}"
+export LIAOTIAN_HEARTBEAT_INTERVAL="{config.heartbeat_interval}"
+export TELEGRAM_API_ID="{config.telegram_api_id}"
+export TELEGRAM_API_HASH="{config.telegram_api_hash}"
+
+# 檢查 Python
+if ! command -v python3 &> /dev/null; then
+    echo "[錯誤] 未找到 Python3，請先安裝"
+    exit 1
+fi
+
+# 創建虛擬環境
+if [ ! -d "venv" ]; then
+    echo "正在創建虛擬環境..."
+    python3 -m venv venv
+fi
+
+# 激活虛擬環境並安裝依賴
+source venv/bin/activate
+pip install requests telethon python-dotenv -q
+
+# 創建 sessions 目錄
+mkdir -p sessions
+
+# 運行 Worker
+echo ""
+echo "啟動 Worker 節點: {config.node_id}"
+echo "服務器: {config.server_url}"
+echo ""
+python worker_client.py
+'''
+
+        # 生成 Python Worker 客戶端
+        worker_client = '''#!/usr/bin/env python3
+"""
+聊天AI Worker 節點客戶端
+"""
+
+import os
+import sys
+import json
+import time
+import requests
+from datetime import datetime
+from pathlib import Path
+
+# 從環境變量讀取配置
+CONFIG = {
+    "server_url": os.getenv("LIAOTIAN_SERVER", "https://aikz.usdt2026.cc"),
+    "node_id": os.getenv("LIAOTIAN_NODE_ID", "worker_default"),
+    "api_key": os.getenv("LIAOTIAN_API_KEY", ""),
+    "heartbeat_interval": int(os.getenv("LIAOTIAN_HEARTBEAT_INTERVAL", "30")),
+    "sessions_dir": "./sessions",
+}
+
+class WorkerClient:
+    def __init__(self):
+        self.server_url = CONFIG["server_url"]
+        self.node_id = CONFIG["node_id"]
+        self.api_key = CONFIG["api_key"]
+
+    def log(self, message):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{timestamp}] {message}")
+
+    def scan_sessions(self):
+        """掃描本地 session 文件"""
+        sessions_dir = Path(CONFIG["sessions_dir"])
+        sessions = []
+        if sessions_dir.exists():
+            for f in sessions_dir.glob("*.session"):
+                sessions.append({
+                    "filename": f.name,
+                    "account_id": f.stem,
+                    "status": "available"
+                })
+        return sessions
+
+    def send_heartbeat(self):
+        """發送心跳到主服務器"""
+        try:
+            sessions = self.scan_sessions()
+            
+            payload = {
+                "node_id": self.node_id,
+                "status": "online",
+                "account_count": len(sessions),
+                "accounts": sessions,
+                "metadata": {
+                    "hostname": os.uname().nodename if hasattr(os, 'uname') else os.environ.get('COMPUTERNAME', 'unknown'),
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+
+            headers = {}
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+
+            response = requests.post(
+                f"{self.server_url}/api/v1/workers/heartbeat",
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                self.log(f"✅ 心跳成功 - {len(sessions)} 個帳號")
+                data = response.json()
+                if data.get("pending_commands"):
+                    self.process_commands(data["pending_commands"])
+            else:
+                self.log(f"❌ 心跳失敗: {response.status_code} - {response.text}")
+
+        except Exception as e:
+            self.log(f"❌ 心跳錯誤: {e}")
+
+    def process_commands(self, commands):
+        """處理服務器下發的命令"""
+        for cmd in commands:
+            action = cmd.get("action")
+            self.log(f"📥 收到命令: {action}")
+            # TODO: 實現具體命令處理
+
+    def run(self):
+        """主運行循環"""
+        self.log(f"🚀 Worker 節點啟動")
+        self.log(f"   節點ID: {self.node_id}")
+        self.log(f"   服務器: {self.server_url}")
+        self.log(f"   心跳間隔: {CONFIG['heartbeat_interval']}秒")
+
+        while True:
+            self.send_heartbeat()
+            time.sleep(CONFIG["heartbeat_interval"])
+
+if __name__ == "__main__":
+    client = WorkerClient()
+    try:
+        client.run()
+    except KeyboardInterrupt:
+        print("\\n👋 Worker 節點已停止")
+'''
+
+        return {
+            "success": True,
+            "config": config.dict(),
+            "scripts": {
+                "windows": windows_script,
+                "linux": linux_script,
+                "worker_client": worker_client
+            },
+            "instructions": {
+                "windows": "1. 下載所有文件到同一目錄\n2. 雙擊 start_worker.bat 運行",
+                "linux": "1. 下載所有文件到同一目錄\n2. 運行: chmod +x start_worker.sh && ./start_worker.sh"
+            }
+        }
+    except Exception as e:
+        logger.error(f"生成部署包失敗: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"生成部署包失敗: {str(e)}"
+        )
+
+
+@router.get("/deploy-template", status_code=status.HTTP_200_OK)
+async def get_deploy_template(
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """
+    獲取 Worker 部署配置模板
+    """
+    return {
+        "template": {
+            "node_id": "worker_001",
+            "server_url": "https://aikz.usdt2026.cc",
+            "api_key": "",
+            "heartbeat_interval": 30,
+            "telegram_api_id": "",
+            "telegram_api_hash": ""
+        },
+        "description": {
+            "node_id": "節點唯一標識，如 worker_001",
+            "server_url": "主服務器地址",
+            "api_key": "API密鑰（可選）",
+            "heartbeat_interval": "心跳間隔（秒）",
+            "telegram_api_id": "Telegram API ID（從 my.telegram.org 獲取）",
+            "telegram_api_hash": "Telegram API Hash"
+        }
+    }
+

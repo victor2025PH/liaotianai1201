@@ -86,6 +86,7 @@ const zhCN = {
   nav: {
     dashboard: "总览",
     nodeManagement: "节点管理",
+    workerDeploy: "Worker 部署",
     telegramRegister: "Telegram 注册",
     scriptManagement: "剧本管理",
     accountManagement: "账号管理",
@@ -547,6 +548,7 @@ const zhTW = {
   nav: {
     dashboard: "總覽",
     nodeManagement: "節點管理",
+    workerDeploy: "Worker 部署",
     telegramRegister: "Telegram 註冊",
     scriptManagement: "劇本管理",
     accountManagement: "帳號管理",
@@ -1007,6 +1009,7 @@ const en = {
   nav: {
     dashboard: "Dashboard",
     nodeManagement: "Node Management",
+    workerDeploy: "Worker Deploy",
     telegramRegister: "Telegram Register",
     scriptManagement: "Script Management",
     accountManagement: "Account Management",

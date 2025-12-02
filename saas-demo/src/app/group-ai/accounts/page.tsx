@@ -1594,7 +1594,8 @@ export default function GroupAIAccountsPage() {
                         setFormData({ 
                           account_id: accountId, 
                           session_file: session.filename,
-                          script_id: formData.script_id 
+                          script_id: formData.script_id,
+                          role_id: ""
                         })
                         setDialogOpen(true)
                       }

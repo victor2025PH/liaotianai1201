@@ -1,14 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
-import { Download, Copy, Check, Server, Laptop, Terminal } from "lucide-react"
+import { Download, Copy, Check, Server, Laptop, Terminal, Package, HelpCircle } from "lucide-react"
 import { getApiBaseUrl } from "@/lib/api/config"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 const API_BASE = getApiBaseUrl()
 
@@ -21,20 +27,36 @@ interface DeployConfig {
   telegram_api_hash: string
 }
 
+// 生成友好的節點ID建議
+const generateNodeId = () => {
+  const adjectives = ["swift", "blue", "red", "smart", "fast", "cool", "nice"]
+  const nouns = ["wolf", "tiger", "eagle", "hawk", "fox", "bear", "lion"]
+  const adj = adjectives[Math.floor(Math.random() * adjectives.length)]
+  const noun = nouns[Math.floor(Math.random() * nouns.length)]
+  const num = Math.floor(Math.random() * 100)
+  return `worker_${adj}_${noun}_${num}`
+}
+
 export default function WorkerDeployPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
   const [scripts, setScripts] = useState<any>(null)
   
   const [config, setConfig] = useState<DeployConfig>({
-    node_id: `worker_${Date.now().toString(36)}`,
+    node_id: "",
     server_url: typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : "https://aikz.usdt2026.cc",
     api_key: "",
     heartbeat_interval: 30,
     telegram_api_id: "",
     telegram_api_hash: ""
   })
+
+  // 初始化時生成節點ID
+  useEffect(() => {
+    setConfig(prev => ({ ...prev, node_id: generateNodeId() }))
+  }, [])
 
   const generatePackage = async () => {
     try {
@@ -92,12 +114,95 @@ export default function WorkerDeployPage() {
     toast({ title: `已下載 ${filename}` })
   }
 
-  const downloadAllFiles = () => {
+  // 下載 ZIP 壓縮包
+  const downloadZip = async () => {
     if (!scripts) return
-    downloadFile(scripts.windows, "start_worker.bat")
-    downloadFile(scripts.linux, "start_worker.sh")
-    downloadFile(scripts.worker_client, "worker_client.py")
-    toast({ title: "✅ 所有文件已下載" })
+    
+    setDownloading(true)
+    try {
+      // 動態導入 JSZip
+      const JSZip = (await import("jszip")).default
+      const zip = new JSZip()
+      
+      // 創建 worker-deploy 目錄結構
+      const folder = zip.folder(`worker-deploy-${config.node_id}`)
+      if (folder) {
+        folder.file("start_worker.bat", scripts.windows)
+        folder.file("start_worker.sh", scripts.linux)
+        folder.file("worker_client.py", scripts.worker_client)
+        
+        // 創建 sessions 目錄（帶一個說明文件）
+        const sessionsFolder = folder.folder("sessions")
+        if (sessionsFolder) {
+          sessionsFolder.file("README.txt", 
+`將 Telegram .session 文件放在此目錄
+
+例如：
+- +8613800138000.session
+- 123456789.session
+
+Session 文件可以通過 Telethon 登入生成
+`)
+        }
+        
+        // 創建 README
+        folder.file("README.md", 
+`# Worker 節點部署包
+
+## 節點信息
+- 節點 ID: ${config.node_id}
+- 服務器: ${config.server_url}
+- 心跳間隔: ${config.heartbeat_interval} 秒
+
+## 快速開始
+
+### Windows
+1. 將 Telegram .session 文件放入 sessions 目錄
+2. 雙擊 start_worker.bat 運行
+
+### Linux/Mac
+1. 將 Telegram .session 文件放入 sessions 目錄
+2. 運行: chmod +x start_worker.sh && ./start_worker.sh
+
+## 後台運行
+
+### Windows
+\`\`\`
+start /b pythonw worker_client.py
+\`\`\`
+
+### Linux
+\`\`\`
+nohup ./start_worker.sh > worker.log 2>&1 &
+\`\`\`
+`)
+      }
+      
+      // 生成 ZIP 並下載
+      const content = await zip.generateAsync({ type: "blob" })
+      const url = URL.createObjectURL(content)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `worker-deploy-${config.node_id}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      
+      toast({ 
+        title: "✅ 下載成功",
+        description: `worker-deploy-${config.node_id}.zip`
+      })
+    } catch (error) {
+      console.error("ZIP 生成失敗:", error)
+      toast({ 
+        title: "❌ 下載失敗",
+        description: "無法生成 ZIP 文件",
+        variant: "destructive"
+      })
+    } finally {
+      setDownloading(false)
+    }
   }
 
   return (
@@ -122,14 +227,43 @@ export default function WorkerDeployPage() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="node_id">節點 ID *</Label>
-                <Input
-                  id="node_id"
-                  value={config.node_id}
-                  onChange={(e) => setConfig({ ...config, node_id: e.target.value })}
-                  placeholder="worker_001"
-                />
-                <p className="text-xs text-muted-foreground">每個節點的唯一標識</p>
+                <Label htmlFor="node_id" className="flex items-center gap-1">
+                  節點 ID *
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p className="font-medium mb-1">節點 ID 命名建議：</p>
+                        <ul className="text-xs space-y-1">
+                          <li>• <code>worker_辦公室</code> - 按位置命名</li>
+                          <li>• <code>worker_張三電腦</code> - 按使用者命名</li>
+                          <li>• <code>worker_aws_01</code> - 按服務器命名</li>
+                          <li>• <code>worker_192.168.1.100</code> - 按IP命名</li>
+                        </ul>
+                        <p className="text-xs mt-2 text-muted-foreground">用於在控制台識別不同電腦</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="node_id"
+                    value={config.node_id}
+                    onChange={(e) => setConfig({ ...config, node_id: e.target.value })}
+                    placeholder="worker_辦公室"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => setConfig({ ...config, node_id: generateNodeId() })}
+                    title="隨機生成"
+                  >
+                    🎲
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">給這台電腦起個名字，方便識別</p>
               </div>
               
               <div className="space-y-2">
@@ -208,13 +342,13 @@ export default function WorkerDeployPage() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span>部署腳本</span>
-                <Button onClick={downloadAllFiles} variant="outline" size="sm">
-                  <Download className="h-4 w-4 mr-2" />
-                  下載全部文件
+                <Button onClick={downloadZip} variant="default" size="sm" disabled={downloading}>
+                  <Package className="h-4 w-4 mr-2" />
+                  {downloading ? "打包中..." : "下載 ZIP 壓縮包"}
                 </Button>
               </CardTitle>
               <CardDescription>
-                將所有文件下載到同一目錄，然後運行對應系統的啟動腳本
+                下載壓縮包後解壓，運行對應系統的啟動腳本即可
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -307,36 +441,65 @@ export default function WorkerDeployPage() {
         {/* 使用說明 */}
         <Card>
           <CardHeader>
-            <CardTitle>使用說明</CardTitle>
+            <CardTitle>📖 使用說明</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <h4 className="font-medium mb-2 flex items-center gap-2">
-                  <Laptop className="h-4 w-4" />
-                  Windows 部署
-                </h4>
-                <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-                  <li>下載所有文件到同一目錄</li>
-                  <li>將 Telegram .session 文件放入 sessions 目錄</li>
-                  <li>雙擊 start_worker.bat 運行</li>
-                </ol>
+            {/* 步驟說明 */}
+            <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 p-4 rounded-lg">
+              <h4 className="font-medium mb-3">🚀 快速開始（3 步完成）</h4>
+              <div className="grid gap-3">
+                <div className="flex items-start gap-3">
+                  <span className="bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
+                  <div>
+                    <p className="font-medium">下載並解壓</p>
+                    <p className="text-sm text-muted-foreground">點擊「下載 ZIP 壓縮包」，解壓到任意目錄</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold flex-shrink-0">2</span>
+                  <div>
+                    <p className="font-medium">放入 Session 文件</p>
+                    <p className="text-sm text-muted-foreground">將 Telegram .session 文件放入 <code className="bg-muted px-1 rounded">sessions</code> 目錄</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold flex-shrink-0">3</span>
+                  <div>
+                    <p className="font-medium">運行啟動腳本</p>
+                    <p className="text-sm text-muted-foreground">
+                      Windows: 雙擊 <code className="bg-muted px-1 rounded">start_worker.bat</code><br/>
+                      Linux/Mac: 運行 <code className="bg-muted px-1 rounded">./start_worker.sh</code>
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h4 className="font-medium mb-2 flex items-center gap-2">
-                  <Terminal className="h-4 w-4" />
-                  Linux/Mac 部署
-                </h4>
-                <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-                  <li>下載所有文件到同一目錄</li>
-                  <li>將 Telegram .session 文件放入 sessions 目錄</li>
-                  <li>運行: chmod +x start_worker.sh && ./start_worker.sh</li>
-                </ol>
+            </div>
+
+            {/* 節點ID說明 */}
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-2">❓ 節點 ID 怎麼填</h4>
+              <p className="text-sm text-muted-foreground mb-2">
+                節點 ID 是用來在控制台識別這台電腦的名字，可以隨意命名：
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                <div className="bg-muted p-2 rounded text-center">
+                  <code>worker_辦公室</code>
+                </div>
+                <div className="bg-muted p-2 rounded text-center">
+                  <code>worker_張三</code>
+                </div>
+                <div className="bg-muted p-2 rounded text-center">
+                  <code>worker_aws_01</code>
+                </div>
+                <div className="bg-muted p-2 rounded text-center">
+                  <code>worker_home</code>
+                </div>
               </div>
             </div>
             
+            {/* 後台運行 */}
             <div className="border-t pt-4">
-              <h4 className="font-medium mb-2">後台運行</h4>
+              <h4 className="font-medium mb-2">🔄 後台運行（可選）</h4>
               <div className="grid md:grid-cols-2 gap-4 text-sm">
                 <div className="bg-muted p-3 rounded">
                   <p className="text-xs text-muted-foreground mb-1">Windows:</p>
@@ -347,6 +510,20 @@ export default function WorkerDeployPage() {
                   <code>nohup ./start_worker.sh &gt; worker.log 2&gt;&amp;1 &amp;</code>
                 </div>
               </div>
+            </div>
+
+            {/* 壓縮包內容 */}
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-2">📁 壓縮包內容</h4>
+              <pre className="bg-muted p-3 rounded text-xs">
+{`worker-deploy-${config.node_id}/
+├── start_worker.bat    # Windows 啟動腳本
+├── start_worker.sh     # Linux/Mac 啟動腳本
+├── worker_client.py    # Python 客戶端
+├── README.md           # 說明文檔
+└── sessions/           # 放置 .session 文件
+    └── README.txt`}
+              </pre>
             </div>
           </CardContent>
         </Card>

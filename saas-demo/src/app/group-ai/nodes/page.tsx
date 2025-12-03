@@ -399,19 +399,79 @@ export default function NodesPage() {
                       <Badge variant="outline" className="text-xs">{worker.accounts?.length || 0} 账号</Badge>
                     </div>
                   </div>
+                  {/* 節點統計摘要 */}
+                  {worker.metadata && (worker.metadata.total_friends > 0 || worker.metadata.total_groups > 0) && (
+                    <div className="flex gap-4 mb-2 text-xs text-muted-foreground">
+                      <span>👥 好友: {worker.metadata.total_friends || 0}</span>
+                      <span>💬 群組: {worker.metadata.total_groups || 0}</span>
+                      {worker.metadata.new_contacts_24h > 0 && (
+                        <span className="text-green-500">📈 今日+{worker.metadata.new_contacts_24h}</span>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* 帳號列表 */}
                   {worker.accounts && worker.accounts.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {worker.accounts.map((acc: any, idx: number) => (
-                        <div key={idx} className="flex items-center gap-1 px-2 py-1 bg-muted/50 rounded text-xs">
-                          <span className="font-medium">{acc.first_name || acc.phone}</span>
-                          {acc.role_name && <span className="text-muted-foreground">({acc.role_name})</span>}
-                          <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">{acc.status || "online"}</Badge>
+                        <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg text-xs border hover:border-blue-500/50 transition-colors">
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-medium truncate">
+                              {acc.excel_name || acc.name || acc.username || acc.phone || acc.account_id || `Account ${idx + 1}`}
+                            </span>
+                            {(acc.phone || acc.username) && (
+                              <span className="text-[10px] text-muted-foreground truncate">
+                                {acc.phone && `📱 ${acc.phone}`}
+                                {acc.phone && acc.username && " · "}
+                                {acc.username && `@${acc.username}`}
+                              </span>
+                            )}
+                            {/* Excel 分組和備註 */}
+                            {(acc.excel_group || acc.excel_remark) && (
+                              <span className="text-[10px] text-blue-400 truncate">
+                                {acc.excel_group && `📁 ${acc.excel_group}`}
+                                {acc.excel_group && acc.excel_remark && " · "}
+                                {acc.excel_remark && `📝 ${acc.excel_remark}`}
+                              </span>
+                            )}
+                            {/* 帳號統計 */}
+                            {(acc.friends_count !== undefined || acc.groups_count !== undefined) && (
+                              <div className="flex gap-2 text-[10px] text-muted-foreground mt-0.5">
+                                {acc.friends_count !== undefined && (
+                                  <span>👥 {acc.friends_count}</span>
+                                )}
+                                {acc.groups_count !== undefined && (
+                                  <span>💬 {acc.groups_count}</span>
+                                )}
+                                {acc.channels_count !== undefined && acc.channels_count > 0 && (
+                                  <span>📢 {acc.channels_count}</span>
+                                )}
+                                {acc.new_contacts_24h !== undefined && acc.new_contacts_24h > 0 && (
+                                  <span className="text-green-500">+{acc.new_contacts_24h}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            {acc.excel_group && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-blue-500/10">{acc.excel_group}</Badge>
+                            )}
+                            {acc.role_name && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">{acc.role_name}</Badge>
+                            )}
+                            <Badge 
+                              variant={acc.status === "available" ? "default" : "secondary"} 
+                              className={`text-[10px] px-1 py-0 h-4 ${acc.status === "available" ? "bg-green-500" : ""}`}
+                            >
+                              {acc.status === "available" ? "可用" : acc.status || "未知"}
+                            </Badge>
+                          </div>
                         </div>
                       ))}
                     </div>
                   )}
                   {/* 节点操作 */}
-                  <div className="flex gap-2 mt-2 pt-2 border-t">
+                  <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t">
                     <Button 
                       size="sm" 
                       variant="outline"
@@ -427,6 +487,28 @@ export default function NodesPage() {
                       onClick={() => sendCommand(nodeId, "stop_auto_chat", {})}
                     >
                       <Square className="mr-1 h-3 w-3" /> 停止
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      className="h-6 text-xs text-blue-500 border-blue-500/50"
+                      onClick={() => {
+                        sendCommand(nodeId, "update_excel", {})
+                        toast({ title: "已發送更新 Excel 命令", description: "帳號詳情將自動填入 Excel 文件" })
+                      }}
+                    >
+                      <RefreshCw className="mr-1 h-3 w-3" /> 更新Excel
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      className="h-6 text-xs text-green-500 border-green-500/50"
+                      onClick={() => {
+                        sendCommand(nodeId, "export_accounts", {})
+                        toast({ title: "已發送導出命令", description: "帳號將導出到 sessions 目錄的新 Excel 文件" })
+                      }}
+                    >
+                      <MessageSquare className="mr-1 h-3 w-3" /> 導出帳號
                     </Button>
                   </div>
                 </div>

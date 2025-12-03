@@ -18,6 +18,7 @@ import {
   Phone,
   Menu,
   Download,
+  Gift,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -59,6 +60,13 @@ const navigationConfig: NavItem[] = [
     icon: Download,
     step: null,
     descKey: "workerDeploy",
+  },
+  {
+    nameKey: "redpacketGame",
+    href: "/group-ai/redpacket",
+    icon: Gift,
+    step: null,
+    descKey: "redpacketGame",
   },
   {
     nameKey: "telegramRegister",

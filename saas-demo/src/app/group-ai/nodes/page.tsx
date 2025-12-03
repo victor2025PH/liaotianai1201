@@ -12,8 +12,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { 
   Monitor, Play, Square, RefreshCw, Users, Laptop, Cloud, 
-  Zap, Wifi, WifiOff, MessageSquare, Gift, Loader2, Plus
+  Zap, Wifi, WifiOff, MessageSquare, Gift, Loader2, Plus,
+  Trash2, AlertTriangle, CheckCircle2, Search
 } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 import { getApiBaseUrl } from "@/lib/api/config"
 import { useI18n } from "@/lib/i18n"
@@ -57,6 +69,10 @@ export default function NodesPage() {
     redpacket_enabled: true,
     redpacket_interval: 300,
   })
+  
+  // 重複帳號檢測
+  const [duplicates, setDuplicates] = useState<any[]>([])
+  const [showDuplicateAlert, setShowDuplicateAlert] = useState(false)
 
   const fetchWorkers = async () => {
     try {
@@ -89,10 +105,70 @@ export default function NodesPage() {
 
   useEffect(() => {
     fetchWorkers()
+    checkDuplicates()
     // 优化：延長輪詢間隔到 30 秒
     const interval = setInterval(fetchWorkers, 30000)
     return () => clearInterval(interval)
   }, [])
+
+  // 檢測重複帳號
+  const checkDuplicates = async () => {
+    try {
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/workers/check/duplicates`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.has_duplicates) {
+          setDuplicates(data.duplicates || [])
+          setShowDuplicateAlert(true)
+        }
+      }
+    } catch (error) {
+      console.warn("檢測重複帳號失敗:", error)
+    }
+  }
+
+  // 刪除節點
+  const deleteNode = async (nodeId: string) => {
+    try {
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/workers/${nodeId}`, {
+        method: "DELETE"
+      })
+      if (res.ok) {
+        toast({ title: "✅ 節點已刪除", description: `${nodeId} 已從列表中移除` })
+        fetchWorkers()
+      } else {
+        const data = await res.json()
+        toast({ title: "❌ 刪除失敗", description: data.detail, variant: "destructive" })
+      }
+    } catch (error) {
+      toast({ title: "❌ 刪除失敗", description: String(error), variant: "destructive" })
+    }
+  }
+
+  // 檢測節點狀態
+  const checkNodesStatus = async () => {
+    try {
+      setLoading(true)
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/workers/check/status`, {
+        method: "POST"
+      })
+      if (res.ok) {
+        const data = await res.json()
+        toast({ 
+          title: "節點狀態檢測完成", 
+          description: `在線: ${data.summary.online} | 離線: ${data.summary.offline} | 錯誤: ${data.summary.error}` 
+        })
+        fetchWorkers()
+      }
+    } catch (error) {
+      toast({ title: "❌ 檢測失敗", description: String(error), variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const sendCommand = async (computerId: string, action: string, params: any = {}) => {
     try {
@@ -214,11 +290,47 @@ export default function NodesPage() {
           </h1>
           <p className="text-sm text-muted-foreground">管理本地电脑和远程服务器</p>
         </div>
-        <Button onClick={fetchWorkers} variant="outline" size="sm" disabled={loading}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          刷新
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={checkNodesStatus} variant="outline" size="sm" disabled={loading}>
+            <Search className="mr-2 h-4 w-4" />
+            檢測狀態
+          </Button>
+          <Button onClick={checkDuplicates} variant="outline" size="sm" disabled={loading}>
+            <AlertTriangle className="mr-2 h-4 w-4" />
+            檢測重複
+          </Button>
+          <Button onClick={fetchWorkers} variant="outline" size="sm" disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            刷新
+          </Button>
+        </div>
       </div>
+
+      {/* 重複帳號提醒 */}
+      {showDuplicateAlert && duplicates.length > 0 && (
+        <Card className="border-yellow-500 bg-yellow-500/10">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                <span className="font-medium text-yellow-500">發現 {duplicates.length} 個重複帳號</span>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setShowDuplicateAlert(false)}>✕</Button>
+            </div>
+            <div className="mt-2 space-y-1 text-sm">
+              {duplicates.slice(0, 5).map((dup, idx) => (
+                <div key={idx} className="text-muted-foreground">
+                  帳號 <span className="font-mono text-yellow-500">{dup.account_id}</span> 在 {dup.count} 個節點上重複：
+                  <span className="font-mono ml-1">{dup.nodes.join(", ")}</span>
+                </div>
+              ))}
+              {duplicates.length > 5 && (
+                <div className="text-muted-foreground">還有 {duplicates.length - 5} 個重複帳號...</div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 統計 + 创建群组 */}
       <div className="grid gap-4 md:grid-cols-5">
@@ -516,6 +628,42 @@ export default function NodesPage() {
                     >
                       <MessageSquare className="mr-1 h-3 w-3" /> 導出帳號
                     </Button>
+                    {/* 刪除節點按鈕 */}
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="h-6 text-xs text-red-500 border-red-500/50 hover:bg-red-500/10"
+                        >
+                          <Trash2 className="mr-1 h-3 w-3" /> 刪除
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>確認刪除節點</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            確定要刪除節點 <span className="font-mono font-bold">{nodeId}</span> 嗎？
+                            <br />
+                            此操作會將節點從列表中移除，但不會影響實際運行的 Worker 程序。
+                            {worker.status === "online" && (
+                              <span className="text-yellow-500 block mt-2">
+                                ⚠️ 此節點目前在線，刪除後如果 Worker 程序仍在運行，節點會在下次心跳時重新出現。
+                              </span>
+                            )}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>取消</AlertDialogCancel>
+                          <AlertDialogAction 
+                            onClick={() => deleteNode(nodeId)}
+                            className="bg-red-500 hover:bg-red-600"
+                          >
+                            確認刪除
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </div>
               ))}

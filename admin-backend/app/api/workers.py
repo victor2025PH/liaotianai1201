@@ -439,6 +439,161 @@ async def clear_worker_commands(
         )
 
 
+@router.delete("/{node_id}", status_code=status.HTTP_200_OK)
+async def delete_worker(
+    node_id: str,
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """
+    刪除 Worker 節點
+    """
+    try:
+        # 從 Redis 或內存中刪除
+        if _redis_client:
+            try:
+                key = _get_worker_key(node_id)
+                _redis_client.delete(key)
+                _redis_client.srem(_get_workers_set_key(), node_id)
+                # 清除命令隊列
+                _redis_client.delete(_get_commands_key(node_id))
+            except Exception as e:
+                logger.error(f"從 Redis 刪除節點失敗: {e}")
+        
+        # 從內存存儲刪除
+        if node_id in _workers_memory_store:
+            del _workers_memory_store[node_id]
+        if node_id in _worker_commands:
+            del _worker_commands[node_id]
+        
+        logger.info(f"已刪除節點: {node_id}")
+        
+        return {
+            "success": True,
+            "node_id": node_id,
+            "message": f"節點 {node_id} 已刪除"
+        }
+    except Exception as e:
+        logger.error(f"刪除節點失敗: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"刪除節點失敗: {str(e)}"
+        )
+
+
+@router.get("/check/duplicates", status_code=status.HTTP_200_OK)
+async def check_duplicate_accounts(
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """
+    檢測重複帳號
+    返回在多個節點上出現的帳號列表
+    """
+    try:
+        workers_data = _get_all_workers()
+        
+        # 建立帳號到節點的映射
+        account_nodes: Dict[str, List[str]] = {}
+        
+        for node_id, data in workers_data.items():
+            accounts = data.get("accounts", [])
+            for acc in accounts:
+                acc_id = str(acc.get("account_id") or acc.get("user_id") or acc.get("phone", ""))
+                if acc_id:
+                    if acc_id not in account_nodes:
+                        account_nodes[acc_id] = []
+                    account_nodes[acc_id].append(node_id)
+        
+        # 找出重複帳號
+        duplicates = []
+        for acc_id, nodes in account_nodes.items():
+            if len(nodes) > 1:
+                duplicates.append({
+                    "account_id": acc_id,
+                    "nodes": nodes,
+                    "count": len(nodes)
+                })
+        
+        return {
+            "success": True,
+            "has_duplicates": len(duplicates) > 0,
+            "duplicate_count": len(duplicates),
+            "duplicates": duplicates,
+            "total_accounts": len(account_nodes),
+            "message": f"發現 {len(duplicates)} 個重複帳號" if duplicates else "無重複帳號"
+        }
+    except Exception as e:
+        logger.error(f"檢測重複帳號失敗: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"檢測重複帳號失敗: {str(e)}"
+        )
+
+
+@router.post("/check/status", status_code=status.HTTP_200_OK)
+async def check_workers_status(
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """
+    檢測所有節點狀態
+    返回在線、離線和錯誤節點列表
+    """
+    try:
+        workers_data = _get_all_workers()
+        now = datetime.now()
+        
+        online_nodes = []
+        offline_nodes = []
+        error_nodes = []
+        
+        for node_id, data in workers_data.items():
+            last_heartbeat_str = data.get("last_heartbeat", "1970-01-01T00:00:00")
+            try:
+                last_heartbeat = datetime.fromisoformat(last_heartbeat_str)
+                time_diff = (now - last_heartbeat).total_seconds()
+            except:
+                time_diff = 9999
+            
+            node_info = {
+                "node_id": node_id,
+                "account_count": data.get("account_count", 0),
+                "last_heartbeat": last_heartbeat_str,
+                "seconds_ago": int(time_diff)
+            }
+            
+            status = data.get("status", "offline")
+            
+            if status == "error":
+                error_nodes.append(node_info)
+            elif time_diff > 120:  # 超過 120 秒沒有心跳
+                offline_nodes.append(node_info)
+            elif status == "online":
+                online_nodes.append(node_info)
+            else:
+                offline_nodes.append(node_info)
+        
+        return {
+            "success": True,
+            "summary": {
+                "total": len(workers_data),
+                "online": len(online_nodes),
+                "offline": len(offline_nodes),
+                "error": len(error_nodes)
+            },
+            "online_nodes": online_nodes,
+            "offline_nodes": offline_nodes,
+            "error_nodes": error_nodes
+        }
+    except Exception as e:
+        logger.error(f"檢測節點狀態失敗: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"檢測節點狀態失敗: {str(e)}"
+        )
+
+
 # ============ Worker 部署包配置 ============
 
 class WorkerDeployConfig(BaseModel):
@@ -462,86 +617,87 @@ async def generate_deploy_package(
     返回自動運行腳本的內容
     """
     try:
-        # 生成 Windows 批處理腳本 (使用英文避免編碼問題)
-        windows_script = f'''@echo off
-echo ========================================
-echo   Worker Node Auto Deploy
-echo ========================================
-echo.
-
-set LIAOTIAN_SERVER={config.server_url}
-set LIAOTIAN_NODE_ID={config.node_id}
-set LIAOTIAN_API_KEY={config.api_key}
-set LIAOTIAN_HEARTBEAT_INTERVAL={config.heartbeat_interval}
-set TELEGRAM_API_ID={config.telegram_api_id}
-set TELEGRAM_API_HASH={config.telegram_api_hash}
-
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] Python not found. Please install Python 3.8+
-    pause
-    exit /b 1
-)
-
-if not exist "venv" (
-    echo Creating virtual environment...
-    python -m venv venv
-)
-
-call venv\\Scripts\\activate.bat
-pip install requests telethon python-dotenv openpyxl -q
-
-if not exist "sessions" mkdir sessions
-
-echo.
-echo Starting Worker: {config.node_id}
-echo Server: {config.server_url}
-echo.
-python worker_client.py
-
-pause
-'''
+        # 確保 node_id 不為空
+        node_id = config.node_id.strip() if config.node_id else f"node_{int(time.time())}"
+        if not node_id or node_id == "worker_default":
+            # 生成唯一的節點 ID
+            import random
+            import string
+            suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+            node_id = f"worker_{suffix}"
+        
+        # 生成 Windows 批處理腳本 (簡化版，避免編碼問題)
+        # 使用 \r\n 確保 Windows 換行符
+        windows_lines = [
+            "@echo off",
+            "echo ========================================",
+            "echo   Worker Node Auto Deploy",
+            f"echo   Node ID: {node_id}",
+            "echo ========================================",
+            "echo.",
+            "",
+            f"set LIAOTIAN_SERVER={config.server_url}",
+            f"set LIAOTIAN_NODE_ID={node_id}",
+            f"set LIAOTIAN_API_KEY={config.api_key}",
+            f"set LIAOTIAN_HEARTBEAT_INTERVAL={config.heartbeat_interval}",
+            f"set TELEGRAM_API_ID={config.telegram_api_id}",
+            f"set TELEGRAM_API_HASH={config.telegram_api_hash}",
+            "",
+            "where python >nul 2>&1",
+            "if %errorlevel% neq 0 (",
+            "    echo [ERROR] Python not found. Please install Python 3.8+",
+            "    pause",
+            "    exit /b 1",
+            ")",
+            "",
+            "if not exist sessions mkdir sessions",
+            "",
+            "echo.",
+            f"echo Starting Worker: {node_id}",
+            f"echo Server: {config.server_url}",
+            "echo.",
+            "",
+            "pip install requests httpx openpyxl -q",
+            "python worker_client.py",
+            "",
+            "pause",
+        ]
+        windows_script = "\r\n".join(windows_lines)
 
         # 生成 Linux/Mac 腳本
         linux_script = f'''#!/bin/bash
 echo "========================================"
-echo "  聊天AI Worker 節點 - 自動部署"
+echo "  Worker Node Auto Deploy"
+echo "  Node ID: {node_id}"
 echo "========================================"
 echo ""
 
-# 配置環境變量
+# Configuration
 export LIAOTIAN_SERVER="{config.server_url}"
-export LIAOTIAN_NODE_ID="{config.node_id}"
+export LIAOTIAN_NODE_ID="{node_id}"
 export LIAOTIAN_API_KEY="{config.api_key}"
 export LIAOTIAN_HEARTBEAT_INTERVAL="{config.heartbeat_interval}"
 export TELEGRAM_API_ID="{config.telegram_api_id}"
 export TELEGRAM_API_HASH="{config.telegram_api_hash}"
 
-# 檢查 Python
+# Check Python
 if ! command -v python3 &> /dev/null; then
-    echo "[錯誤] 未找到 Python3，請先安裝"
+    echo "[ERROR] Python3 not found. Please install Python 3.8+"
     exit 1
 fi
 
-# 創建虛擬環境
-if [ ! -d "venv" ]; then
-    echo "正在創建虛擬環境..."
-    python3 -m venv venv
-fi
-
-# 激活虛擬環境並安裝依賴
-source venv/bin/activate
-pip install requests telethon python-dotenv openpyxl -q
-
-# 創建 sessions 目錄
+# Create sessions directory
 mkdir -p sessions
 
-# 運行 Worker
+# Install dependencies
+pip3 install requests httpx openpyxl -q
+
+# Run Worker
 echo ""
-echo "啟動 Worker 節點: {config.node_id}"
-echo "服務器: {config.server_url}"
+echo "Starting Worker: {node_id}"
+echo "Server: {config.server_url}"
 echo ""
-python worker_client.py
+python3 worker_client.py
 '''
 
         # 生成 Python Worker 客戶端 (完整版 - 支持 Excel 配置和 Telethon)

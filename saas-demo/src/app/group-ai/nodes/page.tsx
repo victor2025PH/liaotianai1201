@@ -25,6 +25,12 @@ interface Worker {
   account_count: number
   last_heartbeat: string
   accounts: any[]
+  metadata?: {
+    total_friends?: number
+    total_groups?: number
+    new_contacts_24h?: number
+    [key: string]: any
+  }
 }
 
 interface AutomationConfig {

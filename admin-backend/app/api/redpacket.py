@@ -280,6 +280,168 @@ async def get_stats(
     }
 
 
+# ============ 遊戲陪玩 API ============
+
+class StartGameRequest(BaseModel):
+    """開始遊戲請求"""
+    target_user_id: int = Field(..., description="陪玩對象 Telegram ID")
+    ai_player_ids: list[int] = Field(..., description="AI 玩家 Telegram ID 列表")
+
+
+class GameClaimRequest(BaseModel):
+    """遊戲搶紅包請求"""
+    target_user_id: int = Field(..., description="遊戲會話用戶 ID")
+    packet_uuid: str = Field(..., description="紅包 UUID")
+    claimer_id: Optional[int] = Field(default=None, description="指定搶紅包的 AI")
+
+
+class GameSendRequest(BaseModel):
+    """遊戲發紅包請求"""
+    target_user_id: int = Field(..., description="遊戲會話用戶 ID")
+    sender_id: Optional[int] = Field(default=None, description="指定發紅包的 AI")
+    packet_type: str = Field(default="random", description="紅包類型")
+    amount: Optional[float] = Field(default=None, description="金額")
+    count: Optional[int] = Field(default=None, description="份數")
+    bomb_number: Optional[int] = Field(default=None, description="炸彈數字")
+
+
+@router.post("/game/start")
+async def start_game(
+    request: StartGameRequest,
+    current_user: Optional[User] = Depends(get_current_active_user)
+):
+    """開始遊戲陪玩會話"""
+    from app.services.redpacket_game import get_game_service
+    
+    service = get_game_service(
+        api_key=_redpacket_config.get("api_key", ""),
+        api_url=_redpacket_config.get("api_url", "")
+    )
+    
+    try:
+        session = await service.start_session(
+            target_user_id=request.target_user_id,
+            ai_player_ids=request.ai_player_ids
+        )
+        
+        return {
+            "success": True,
+            "message": f"遊戲會話已開始，{len(session.ai_players)} 個 AI 玩家就緒",
+            "data": {
+                "target_user_id": request.target_user_id,
+                "ai_players": [
+                    {"id": p.telegram_id, "name": p.name, "balance": p.balance}
+                    for p in session.ai_players
+                ]
+            }
+        }
+    except Exception as e:
+        logger.error(f"開始遊戲失敗: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/game/claim")
+async def game_claim(
+    request: GameClaimRequest,
+    current_user: Optional[User] = Depends(get_current_active_user)
+):
+    """AI 搶紅包"""
+    from app.services.redpacket_game import get_game_service
+    
+    service = get_game_service()
+    session = service.get_session(request.target_user_id)
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="遊戲會話不存在")
+    
+    result = await service.claim_packet(
+        session=session,
+        packet_uuid=request.packet_uuid,
+        claimer_id=request.claimer_id
+    )
+    
+    return {"success": result.get("success", False), "data": result}
+
+
+@router.post("/game/send")
+async def game_send(
+    request: GameSendRequest,
+    current_user: Optional[User] = Depends(get_current_active_user)
+):
+    """AI 發紅包"""
+    from app.services.redpacket_game import get_game_service
+    
+    service = get_game_service()
+    session = service.get_session(request.target_user_id)
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="遊戲會話不存在")
+    
+    result = await service.send_packet(
+        session=session,
+        sender_id=request.sender_id,
+        packet_type=request.packet_type,
+        amount=request.amount,
+        count=request.count,
+        bomb_number=request.bomb_number
+    )
+    
+    return {"success": result.get("success", False), "data": result}
+
+
+@router.post("/game/auto-play")
+async def game_auto_play(
+    target_user_id: int = Body(..., embed=True),
+    current_user: Optional[User] = Depends(get_current_active_user)
+):
+    """自動玩一輪遊戲"""
+    from app.services.redpacket_game import get_game_service
+    
+    service = get_game_service()
+    session = service.get_session(target_user_id)
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="遊戲會話不存在")
+    
+    actions = await service.auto_play_round(session)
+    
+    return {"success": True, "data": {"actions": actions}}
+
+
+@router.get("/game/session/{target_user_id}")
+async def get_game_session(
+    target_user_id: int,
+    current_user: Optional[User] = Depends(get_current_active_user)
+):
+    """獲取遊戲會話狀態"""
+    from app.services.redpacket_game import get_game_service
+    
+    service = get_game_service()
+    stats = service.get_session_stats(target_user_id)
+    
+    if not stats:
+        raise HTTPException(status_code=404, detail="遊戲會話不存在")
+    
+    return {"success": True, "data": stats}
+
+
+@router.post("/game/stop")
+async def stop_game(
+    target_user_id: int = Body(..., embed=True),
+    current_user: Optional[User] = Depends(get_current_active_user)
+):
+    """停止遊戲會話"""
+    from app.services.redpacket_game import get_game_service
+    
+    service = get_game_service()
+    success = service.stop_session(target_user_id)
+    
+    if success:
+        return {"success": True, "message": "遊戲會話已停止"}
+    else:
+        raise HTTPException(status_code=404, detail="遊戲會話不存在")
+
+
 # ============ 輔助函數 ============
 
 def _get_client() -> LuckyRedAIClient:

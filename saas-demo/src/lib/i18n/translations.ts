@@ -86,6 +86,9 @@ const zhCN = {
   nav: {
     dashboard: "总览",
     nodeManagement: "节点管理",
+    chatFeatures: "智能聊天",
+    advancedFeatures: "高级功能",
+    privateFunnel: "私聊转化",
     workerDeploy: "Worker 部署",
     redpacketGame: "红包游戏",
     telegramRegister: "Telegram 注册",
@@ -549,6 +552,9 @@ const zhTW = {
   nav: {
     dashboard: "總覽",
     nodeManagement: "節點管理",
+    chatFeatures: "智能聊天",
+    advancedFeatures: "高級功能",
+    privateFunnel: "私聊轉化",
     workerDeploy: "Worker 部署",
     redpacketGame: "紅包遊戲",
     telegramRegister: "Telegram 註冊",
@@ -1011,6 +1017,9 @@ const en = {
   nav: {
     dashboard: "Dashboard",
     nodeManagement: "Node Management",
+    chatFeatures: "Smart Chat",
+    advancedFeatures: "Advanced",
+    privateFunnel: "Private Funnel",
     workerDeploy: "Worker Deploy",
     redpacketGame: "Redpacket Game",
     telegramRegister: "Telegram Register",

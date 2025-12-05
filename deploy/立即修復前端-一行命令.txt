@@ -1,0 +1,25 @@
+# 立即修復前端 - 一行命令（直接複製執行）
+
+cd ~/liaotian && git pull origin main && sudo tee /etc/systemd/system/liaotian-frontend.service > /dev/null <<'EOF'
+[Unit]
+Description=Liaotian AI Frontend
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/liaotian/saas-demo
+Environment="NODE_ENV=production"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/bin/node /home/ubuntu/liaotian/saas-demo/.next/standalone/server.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=liaotian-frontend
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload && cd saas-demo && rm -rf .next && npm run build && sudo chown -R ubuntu:ubuntu .next && sudo systemctl restart liaotian-frontend && sleep 3 && sudo systemctl status liaotian-frontend --no-pager | head -15 && echo "✅ 修復完成！"

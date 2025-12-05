@@ -518,12 +518,12 @@ export default function NodesPage() {
                     </div>
                   </div>
                   {/* 節點統計摘要 */}
-                  {worker.metadata && (worker.metadata.total_friends > 0 || worker.metadata.total_groups > 0) && (
+                  {worker.metadata && ((worker.metadata?.total_friends ?? 0) > 0 || (worker.metadata?.total_groups ?? 0) > 0) && (
                     <div className="flex gap-4 mb-2 text-xs text-muted-foreground">
-                      <span>👥 好友: {worker.metadata.total_friends || 0}</span>
-                      <span>💬 群組: {worker.metadata.total_groups || 0}</span>
-                      {worker.metadata.new_contacts_24h > 0 && (
-                        <span className="text-green-500">📈 今日+{worker.metadata.new_contacts_24h}</span>
+                      <span>👥 好友: {worker.metadata?.total_friends ?? 0}</span>
+                      <span>💬 群組: {worker.metadata?.total_groups ?? 0}</span>
+                      {(worker.metadata?.new_contacts_24h ?? 0) > 0 && (
+                        <span className="text-green-500">📈 今日+{worker.metadata?.new_contacts_24h ?? 0}</span>
                       )}
                     </div>
                   )}
@@ -537,6 +537,12 @@ export default function NodesPage() {
                             <span className="font-medium truncate">
                               {acc.excel_name || acc.name || acc.username || acc.phone || acc.account_id || `Account ${idx + 1}`}
                             </span>
+                            {/* Telegram ID - 重要！紅包系統需要 */}
+                            {(acc.user_id || acc.tg_id) && (
+                              <span className="text-[10px] font-mono text-purple-400">
+                                🆔 {acc.user_id || acc.tg_id}
+                              </span>
+                            )}
                             {(acc.phone || acc.username) && (
                               <span className="text-[10px] text-muted-foreground truncate">
                                 {acc.phone && `📱 ${acc.phone}`}
@@ -571,6 +577,12 @@ export default function NodesPage() {
                             )}
                           </div>
                           <div className="flex flex-col gap-1">
+                            {/* Telegram ID 徽章 */}
+                            {(acc.user_id || acc.tg_id) && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-purple-500/10 text-purple-400 font-mono">
+                                TG: {acc.user_id || acc.tg_id}
+                              </Badge>
+                            )}
                             {acc.excel_group && (
                               <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-blue-500/10">{acc.excel_group}</Badge>
                             )}

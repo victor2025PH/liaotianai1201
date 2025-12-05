@@ -657,7 +657,7 @@ async def generate_deploy_package(
             f"echo Server: {config.server_url}",
             "echo.",
             "",
-            "pip install requests httpx openpyxl -q",
+            "pip install requests httpx openpyxl telethon -q",
             "python worker_client.py",
             "",
             "pause",
@@ -690,7 +690,7 @@ fi
 mkdir -p sessions
 
 # Install dependencies
-pip3 install requests httpx openpyxl -q
+pip3 install requests httpx openpyxl telethon -q
 
 # Run Worker
 echo ""
@@ -700,12 +700,14 @@ echo ""
 python3 worker_client.py
 '''
 
-        # 生成 Python Worker 客戶端 (完整版 - 支持 Excel 配置和 Telethon)
+        # 生成 Python Worker 客戶端 (完整版 - 支持 Telegram user_id 讀取)
         worker_client = '''#!/usr/bin/env python3
 """
-Worker Node Client - Full Version with Excel Config Support
-- Reads account config from Excel file in sessions folder
-- Supports Telethon for account statistics
+Worker Node Client - Full Version
+- Automatically reads Telegram user_id from session files
+- Supports Telethon for detailed account statistics
+- Auto-reports all account info to server via heartbeat
+- Supports Excel configuration (optional)
 """
 
 import os
@@ -714,28 +716,42 @@ import json
 import time
 import asyncio
 import sqlite3
+import struct
 import requests
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Default Configuration (can be overridden by Excel)
+# Default Configuration
 CONFIG = {
     "server_url": os.getenv("LIAOTIAN_SERVER", "https://aikz.usdt2026.cc"),
     "node_id": os.getenv("LIAOTIAN_NODE_ID", "worker_default"),
     "api_key": os.getenv("LIAOTIAN_API_KEY", ""),
     "heartbeat_interval": int(os.getenv("LIAOTIAN_HEARTBEAT_INTERVAL", "30")),
     "sessions_dir": "./sessions",
-    "api_id": None,
-    "api_hash": None,
+    "api_id": os.getenv("TELEGRAM_API_ID", None),
+    "api_hash": os.getenv("TELEGRAM_API_HASH", None),
     "stats_interval": 300,
+    # Red packet game config
+    "redpacket_api_url": os.getenv("REDPACKET_API_URL", ""),
+    "redpacket_api_key": os.getenv("REDPACKET_API_KEY", ""),
+    "redpacket_enabled": os.getenv("REDPACKET_ENABLED", "false").lower() == "true",
 }
 
-# Account config from Excel
+# Convert API ID to int if provided
+if CONFIG["api_id"]:
+    try:
+        CONFIG["api_id"] = int(CONFIG["api_id"])
+    except:
+        CONFIG["api_id"] = None
+
+# Account storage
 excel_config = {}
 account_cache = {}
 last_stats_update = None
 telethon_available = False
 openpyxl_available = False
+redpacket_available = False
+redpacket_client = None
 
 # Try imports
 try:
@@ -752,194 +768,514 @@ try:
 except ImportError:
     pass
 
+# Try import red packet SDK (simple HTTP client)
+try:
+    import httpx
+    redpacket_available = True
+except ImportError:
+    pass
+
 def log(message):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] {message}")
 
+
+def init_redpacket_client():
+    """Initialize red packet game client"""
+    global redpacket_client
+    
+    if not redpacket_available:
+        log("[REDPACKET] httpx not installed, red packet features disabled")
+        return False
+    
+    if not CONFIG.get("redpacket_api_url") or not CONFIG.get("redpacket_api_key"):
+        log("[REDPACKET] API URL or Key not configured")
+        return False
+    
+    try:
+        # Simple HTTP client for red packet API
+        # Note: Full SDK integration can be added later
+        redpacket_client = {
+            "api_url": CONFIG["redpacket_api_url"].rstrip('/'),
+            "api_key": CONFIG["redpacket_api_key"],
+            "enabled": CONFIG.get("redpacket_enabled", False),
+        }
+        log(f"[REDPACKET] Client initialized: {redpacket_client['api_url']}")
+        return True
+    except Exception as e:
+        log(f"[REDPACKET] Initialization error: {e}")
+        return False
+
+
+async def redpacket_get_balance(tg_id: int) -> dict:
+    """Get red packet balance for a Telegram user"""
+    if not redpacket_client or not redpacket_available:
+        return {"error": "Red packet client not available"}
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{redpacket_client['api_url']}/wallet/balance",
+                headers={
+                    "Authorization": f"Bearer {redpacket_client['api_key']}",
+                    "X-Telegram-User-Id": str(tg_id),
+                }
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"error": f"HTTP {response.status_code}", "detail": response.text}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+async def redpacket_send_packet(tg_id: int, amount: float, count: int, message: str = "🤖 AI 紅包") -> dict:
+    """Send a red packet"""
+    if not redpacket_client or not redpacket_available:
+        return {"error": "Red packet client not available"}
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                f"{redpacket_client['api_url']}/packets/send",
+                headers={
+                    "Authorization": f"Bearer {redpacket_client['api_key']}",
+                    "X-Telegram-User-Id": str(tg_id),
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "total_amount": amount,
+                    "total_count": count,
+                    "currency": "usdt",
+                    "packet_type": "random",
+                    "message": message,
+                }
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"error": f"HTTP {response.status_code}", "detail": response.text}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+async def redpacket_claim_packet(tg_id: int, packet_uuid: str) -> dict:
+    """Claim a red packet"""
+    if not redpacket_client or not redpacket_available:
+        return {"error": "Red packet client not available"}
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                f"{redpacket_client['api_url']}/packets/claim",
+                headers={
+                    "Authorization": f"Bearer {redpacket_client['api_key']}",
+                    "X-Telegram-User-Id": str(tg_id),
+                    "Content-Type": "application/json",
+                },
+                json={"packet_uuid": packet_uuid}
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"error": f"HTTP {response.status_code}", "detail": response.text}
+    except Exception as e:
+        return {"error": str(e)}
+
 def load_excel_config():
-    """Load account configuration from Excel file in sessions folder"""
+    """
+    Load account configuration from Excel file in sessions folder
+    
+    === EXCEL 格式規範 ===
+    
+    必需列（至少需要 phone）:
+    - api_id     : Telegram API ID（數字）
+    - api_hash   : Telegram API Hash（32位字符串）
+    - phone      : 電話號碼（用於匹配 session 文件）
+    
+    可選列（用於帳號管理）:
+    - username   : 用戶名（自動填充）
+    - name       : 昵稱/名字（自動填充）
+    - user_id    : Telegram 數字 ID（自動填充）
+    - friends    : 好友數量（自動填充）
+    - groups     : 群組數量（自動填充）
+    - group      : 分組名稱（手動填寫，用於分類）
+    - remark     : 備註（手動填寫）
+    - node       : 指定節點（可選，如 computer_001）
+    - enabled    : 是否啟用（1=啟用，0=禁用）
+    - last_update: 最後更新時間（自動填充）
+    
+    === 列名別名支持 ===
+    - api_id: apiid, API_ID, APIID
+    - api_hash: apihash, API_HASH, APIHASH
+    - phone: 手机, 手機, 电话, 電話, mobile
+    - name: 名字, 昵称, 暱稱, nickname
+    - group: 分组, 分組, category
+    - remark: 备注, 備註, note, notes
+    """
     global excel_config, CONFIG
     
     sessions_dir = Path(CONFIG["sessions_dir"])
     excel_files = list(sessions_dir.glob("*.xlsx")) + list(sessions_dir.glob("*.xls"))
     
     if not excel_files:
-        log("[CONFIG] No Excel config file found in sessions folder")
+        log("[EXCEL] No config file found in sessions folder")
+        log("[EXCEL] Expected: sessions/*.xlsx with columns: api_id, api_hash, phone")
         return None
     
     if not openpyxl_available:
-        log("[CONFIG] openpyxl not installed. Run: pip install openpyxl")
+        log("[EXCEL] openpyxl not installed. Run: pip install openpyxl")
         return None
     
     excel_file = excel_files[0]
-    log(f"[CONFIG] Loading: {excel_file.name}")
+    log(f"[EXCEL] Loading: {excel_file.name}")
     
     try:
         wb = openpyxl.load_workbook(excel_file)
         ws = wb.active
         
-        # Read headers
+        # Read headers (first row)
         headers = [str(cell.value).lower().strip() if cell.value else "" for cell in ws[1]]
-        log(f"[CONFIG] Columns: {[h for h in headers if h]}")
+        log(f"[EXCEL] Columns found: {[h for h in headers if h]}")
         
-        # Map columns
+        # Map column names to indices (支持多種別名)
         col_map = {}
-        for idx, h in enumerate(headers):
-            if h in ['api_id', 'apiid']:
-                col_map['api_id'] = idx
-            elif h in ['api_hash', 'apihash']:
-                col_map['api_hash'] = idx
-            elif h in ['phone', '手机', '手機', '电话']:
-                col_map['phone'] = idx
-            elif h in ['node', '电脑', '節點']:
-                col_map['node'] = idx
-            elif h in ['group', '分组', '分組']:
-                col_map['group'] = idx
-            elif h in ['username', '用户名', '用戶名']:
-                col_map['username'] = idx
-            elif h in ['name', '名字', '昵称', '暱稱']:
-                col_map['name'] = idx
-            elif h in ['friends', '好友', '好友数']:
-                col_map['friends'] = idx
-            elif h in ['groups', '群组', '群組', '群数']:
-                col_map['groups'] = idx
-            elif h in ['remark', '备注', '備註']:
-                col_map['remark'] = idx
+        column_aliases = {
+            'api_id': ['api_id', 'apiid', 'api-id', 'telegram_api_id'],
+            'api_hash': ['api_hash', 'apihash', 'api-hash', 'telegram_api_hash'],
+            'phone': ['phone', '手机', '手機', '电话', '電話', 'mobile', 'tel'],
+            'username': ['username', '用户名', '用戶名', 'user'],
+            'name': ['name', '名字', '昵称', '暱稱', 'nickname', 'first_name'],
+            'user_id': ['user_id', 'userid', 'tg_id', 'telegram_id', 'id'],
+            'node': ['node', '节点', '節點', '电脑', '電腦', 'computer'],
+            'group': ['group', '分组', '分組', 'category', '类别', '類別'],
+            'remark': ['remark', '备注', '備註', 'note', 'notes', '说明'],
+            'friends': ['friends', '好友', '好友数', 'contacts'],
+            'groups': ['groups', '群组', '群組', '群数', 'chats'],
+            'enabled': ['enabled', '启用', '啟用', 'active', 'status'],
+            'last_update': ['last_update', '更新时间', '更新時間', 'updated'],
+            'redpacket_enabled': ['redpacket_enabled', '红包启用', '紅包啟用', 'redpacket'],
+        }
         
-        # Read data
-        api_id_found = None
-        api_hash_found = None
+        for col_name, aliases in column_aliases.items():
+            for idx, h in enumerate(headers):
+                if h in aliases:
+                    col_map[col_name] = idx
+                    break
+        
+        log(f"[EXCEL] Mapped columns: {list(col_map.keys())}")
+        
+        # Validate required columns
+        if 'phone' not in col_map:
+            log("[EXCEL] ERROR: 'phone' column is required!")
+            return None
+        
+        # Read account data
+        accounts_loaded = 0
         
         for row_idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
             row_data = [cell.value for cell in row]
             
-            if 'api_id' in col_map and row_data[col_map['api_id']] and not api_id_found:
-                api_id_found = int(row_data[col_map['api_id']])
-            if 'api_hash' in col_map and row_data[col_map['api_hash']] and not api_hash_found:
-                api_hash_found = str(row_data[col_map['api_hash']])
+            # Skip empty rows
+            if not row_data or not any(row_data):
+                continue
             
-            if 'phone' in col_map and row_data[col_map['phone']]:
-                phone = str(row_data[col_map['phone']]).strip()
-                phone_key = phone.replace(' ', '').replace('+', '').replace('-', '')
-                
-                excel_config[phone_key] = {
-                    'phone': phone,
-                    'row_idx': row_idx,  # Save row index for updating
-                    'node': row_data[col_map['node']] if 'node' in col_map else None,
-                    'group': row_data[col_map['group']] if 'group' in col_map else None,
-                    'name': row_data[col_map['name']] if 'name' in col_map else None,
-                    'remark': row_data[col_map['remark']] if 'remark' in col_map else None,
-                }
+            # Get phone (required)
+            phone_val = row_data[col_map['phone']] if 'phone' in col_map else None
+            if not phone_val:
+                continue
+            
+            phone = str(phone_val).strip()
+            phone_key = phone.replace(' ', '').replace('+', '').replace('-', '')
+            
+            # Get api_id and api_hash for this account
+            api_id = None
+            api_hash = None
+            
+            if 'api_id' in col_map and row_data[col_map['api_id']]:
+                try:
+                    api_id = int(row_data[col_map['api_id']])
+                except:
+                    pass
+            
+            if 'api_hash' in col_map and row_data[col_map['api_hash']]:
+                api_hash = str(row_data[col_map['api_hash']]).strip()
+            
+            # Check if enabled (default: True)
+            enabled = True
+            if 'enabled' in col_map and row_data[col_map['enabled']] is not None:
+                enabled = bool(row_data[col_map['enabled']])
+            
+            # Get redpacket enabled status
+            redpacket_enabled = True
+            if 'redpacket_enabled' in col_map and row_data[col_map['redpacket_enabled']] is not None:
+                redpacket_enabled = bool(row_data[col_map['redpacket_enabled']])
+            
+            # Store config
+            excel_config[phone_key] = {
+                'phone': phone,
+                'api_id': api_id,
+                'api_hash': api_hash,
+                'row_idx': row_idx,
+                'enabled': enabled,
+                'redpacket_enabled': redpacket_enabled,
+                'node': row_data[col_map['node']] if 'node' in col_map and row_data[col_map['node']] else None,
+                'group': row_data[col_map['group']] if 'group' in col_map and row_data[col_map['group']] else None,
+                'name': row_data[col_map['name']] if 'name' in col_map and row_data[col_map['name']] else None,
+                'remark': row_data[col_map['remark']] if 'remark' in col_map and row_data[col_map['remark']] else None,
+                'username': row_data[col_map['username']] if 'username' in col_map and row_data[col_map['username']] else None,
+                'user_id': int(row_data[col_map['user_id']]) if 'user_id' in col_map and row_data[col_map['user_id']] else None,
+            }
+            accounts_loaded += 1
+            
+            if api_id and api_hash:
+                log(f"[EXCEL] Account: {phone} -> API_ID={api_id}, enabled={enabled}")
         
-        if api_id_found:
-            CONFIG['api_id'] = api_id_found
-            log(f"[CONFIG] API ID: {api_id_found}")
-        if api_hash_found:
-            CONFIG['api_hash'] = api_hash_found
-            log(f"[CONFIG] API Hash: {api_hash_found[:10]}...")
+        # Set default API credentials from first account (fallback)
+        if not CONFIG['api_id'] or not CONFIG['api_hash']:
+            for phone_key, acc in excel_config.items():
+                if acc.get('api_id') and acc.get('api_hash'):
+                    CONFIG['api_id'] = acc['api_id']
+                    CONFIG['api_hash'] = acc['api_hash']
+                    log(f"[EXCEL] Default API credentials from: {acc['phone']}")
+                    break
         
-        log(f"[CONFIG] Loaded {len(excel_config)} accounts")
+        log(f"[EXCEL] Loaded {accounts_loaded} accounts from Excel")
         
+        # Store workbook info for later updates
         return {'wb': wb, 'ws': ws, 'col_map': col_map, 'file': excel_file}
         
     except Exception as e:
-        log(f"[CONFIG] Error: {e}")
+        log(f"[EXCEL] Error loading: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
-excel_workbook = None  # Global reference for updating
+excel_workbook_info = None  # Global reference for updating Excel
+
+
+def create_sample_excel():
+    """
+    Create a sample Excel config file if none exists
+    """
+    if not openpyxl_available:
+        log("[EXCEL] Cannot create sample: openpyxl not installed")
+        return None
+    
+    sessions_dir = Path(CONFIG["sessions_dir"])
+    if not sessions_dir.exists():
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Check if Excel already exists
+    excel_files = list(sessions_dir.glob("*.xlsx"))
+    if excel_files:
+        log(f"[EXCEL] Config file already exists: {excel_files[0].name}")
+        return None
+    
+    sample_file = sessions_dir / "accounts_config.xlsx"
+    log(f"[EXCEL] Creating sample config: {sample_file.name}")
+    
+    try:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Accounts"
+        
+        # Headers
+        headers = [
+            'api_id', 'api_hash', 'phone', 'username', 'name', 'user_id',
+            'friends', 'groups', 'group', 'remark', 'enabled', 'last_update'
+        ]
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = openpyxl.styles.Font(bold=True)
+        
+        # Sample data row
+        sample_data = [
+            30390800,  # api_id
+            '471481f784e6d78893e53b88ee43e62b',  # api_hash
+            '+639277358115',  # phone
+            '',  # username (auto-fill)
+            '',  # name (auto-fill)
+            '',  # user_id (auto-fill)
+            '',  # friends (auto-fill)
+            '',  # groups (auto-fill)
+            'Group A',  # group
+            'Main account',  # remark
+            1,  # enabled
+            '',  # last_update (auto-fill)
+        ]
+        
+        for col, value in enumerate(sample_data, 1):
+            ws.cell(row=2, column=col, value=value)
+        
+        # Adjust column widths
+        col_widths = [12, 35, 18, 15, 15, 15, 10, 10, 12, 20, 10, 18]
+        for i, width in enumerate(col_widths, 1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
+        
+        wb.save(sample_file)
+        wb.close()
+        
+        log(f"[EXCEL] Sample config created: {sample_file.name}")
+        log("[EXCEL] Please edit this file and add your accounts!")
+        
+        return sample_file
+        
+    except Exception as e:
+        log(f"[EXCEL] Error creating sample: {e}")
+        return None
+
+
+def auto_match_sessions_to_excel():
+    """
+    Auto-match session files to Excel config by phone number
+    Reports unmatched sessions
+    """
+    sessions_dir = Path(CONFIG["sessions_dir"])
+    session_files = list(sessions_dir.glob("*.session"))
+    
+    if not session_files:
+        log("[MATCH] No session files found")
+        return
+    
+    if not excel_config:
+        log("[MATCH] No Excel config loaded")
+        return
+    
+    matched = []
+    unmatched = []
+    
+    for session_file in session_files:
+        session_phone = session_file.stem.replace('+', '').replace('-', '').replace(' ', '')
+        
+        # Try to find matching Excel entry
+        found = False
+        for phone_key in excel_config.keys():
+            if (phone_key == session_phone or 
+                session_phone.endswith(phone_key) or 
+                phone_key.endswith(session_phone)):
+                matched.append((session_file.name, phone_key))
+                found = True
+                break
+        
+        if not found:
+            unmatched.append(session_file.name)
+    
+    log(f"[MATCH] Matched: {len(matched)}, Unmatched: {len(unmatched)}")
+    
+    if unmatched:
+        log("[MATCH] Unmatched sessions (add to Excel):")
+        for name in unmatched:
+            log(f"  - {name}")
+    
+    return {"matched": matched, "unmatched": unmatched}
 
 async def fetch_and_update_excel():
-    """Fetch account details from Telegram and update Excel file"""
-    global excel_workbook
-    
-    if not telethon_available or not CONFIG['api_id'] or not CONFIG['api_hash']:
-        log("[EXCEL] Telethon or API config not available")
+    """
+    Fetch account details from Telegram and update Excel file
+    Auto-fills: username, name, user_id, friends, groups, last_update
+    """
+    if not telethon_available:
+        log("[EXCEL-UPDATE] Telethon not installed")
         return
     
     if not openpyxl_available:
-        log("[EXCEL] openpyxl not installed")
+        log("[EXCEL-UPDATE] openpyxl not installed")
         return
     
     sessions_dir = Path(CONFIG["sessions_dir"])
     excel_files = list(sessions_dir.glob("*.xlsx"))
     if not excel_files:
-        log("[EXCEL] No Excel file to update")
+        log("[EXCEL-UPDATE] No Excel file to update")
         return
     
     excel_file = excel_files[0]
-    log(f"[EXCEL] Updating: {excel_file.name}")
+    log(f"[EXCEL-UPDATE] Updating: {excel_file.name}")
     
     try:
         wb = openpyxl.load_workbook(excel_file)
         ws = wb.active
         
-        # Check/add columns for auto-fill data
+        # Read existing headers
         headers = [str(cell.value).lower().strip() if cell.value else "" for cell in ws[1]]
         
-        # Add missing columns
-        needed_cols = ['username', 'name', 'friends', 'groups', 'last_update']
+        # Build column map with aliases
         col_map = {}
+        column_aliases = {
+            'api_id': ['api_id', 'apiid'],
+            'api_hash': ['api_hash', 'apihash'],
+            'phone': ['phone', '手机', '手機', '电话'],
+            'username': ['username', '用户名', '用戶名'],
+            'name': ['name', '名字', '昵称', '暱稱'],
+            'user_id': ['user_id', 'userid', 'tg_id', 'telegram_id'],
+            'friends': ['friends', '好友', '好友数'],
+            'groups': ['groups', '群组', '群組', '群数'],
+            'last_update': ['last_update', '更新时间', '更新時間'],
+        }
+        
+        for col_name, aliases in column_aliases.items():
+            for idx, h in enumerate(headers):
+                if h in aliases:
+                    col_map[col_name] = idx
+                    break
+        
+        # Add missing columns for auto-fill
         next_col = len(headers) + 1
+        auto_cols = ['user_id', 'username', 'name', 'friends', 'groups', 'last_update']
         
-        for idx, h in enumerate(headers):
-            if h in ['phone', '手机']:
-                col_map['phone'] = idx
-            elif h in ['username', '用户名']:
-                col_map['username'] = idx
-            elif h in ['name', '名字', '昵称']:
-                col_map['name'] = idx
-            elif h in ['friends', '好友', '好友数']:
-                col_map['friends'] = idx
-            elif h in ['groups', '群组', '群数']:
-                col_map['groups'] = idx
-            elif h in ['last_update', '更新时间']:
-                col_map['last_update'] = idx
+        for col_name in auto_cols:
+            if col_name not in col_map:
+                ws.cell(row=1, column=next_col, value=col_name)
+                col_map[col_name] = next_col - 1
+                next_col += 1
+                log(f"[EXCEL-UPDATE] Added column: {col_name}")
         
-        # Add missing columns to Excel
-        if 'username' not in col_map:
-            ws.cell(row=1, column=next_col, value='username')
-            col_map['username'] = next_col - 1
-            next_col += 1
-        if 'name' not in col_map:
-            ws.cell(row=1, column=next_col, value='name')
-            col_map['name'] = next_col - 1
-            next_col += 1
-        if 'friends' not in col_map:
-            ws.cell(row=1, column=next_col, value='friends')
-            col_map['friends'] = next_col - 1
-            next_col += 1
-        if 'groups' not in col_map:
-            ws.cell(row=1, column=next_col, value='groups')
-            col_map['groups'] = next_col - 1
-            next_col += 1
-        if 'last_update' not in col_map:
-            ws.cell(row=1, column=next_col, value='last_update')
-            col_map['last_update'] = next_col - 1
-        
-        # Fetch data for each session
+        # Fetch and update each account
         updated_count = 0
+        
         for session_file in sessions_dir.glob("*.session"):
-            phone_key = session_file.stem.replace('+', '').replace('-', '').replace(' ', '')
+            session_phone = session_file.stem.replace('+', '').replace('-', '').replace(' ', '')
             
             # Find row for this phone
             target_row = None
+            row_api_id = None
+            row_api_hash = None
+            
             for row_idx in range(2, ws.max_row + 1):
                 cell_phone = ws.cell(row=row_idx, column=col_map['phone'] + 1).value
                 if cell_phone:
                     cell_phone_key = str(cell_phone).replace('+', '').replace('-', '').replace(' ', '')
-                    if cell_phone_key == phone_key:
+                    # Match by phone number
+                    if cell_phone_key == session_phone or session_phone.endswith(cell_phone_key) or cell_phone_key.endswith(session_phone):
                         target_row = row_idx
+                        # Get API credentials from this row
+                        if 'api_id' in col_map:
+                            try:
+                                row_api_id = int(ws.cell(row=row_idx, column=col_map['api_id'] + 1).value)
+                            except: pass
+                        if 'api_hash' in col_map:
+                            row_api_hash = ws.cell(row=row_idx, column=col_map['api_hash'] + 1).value
                         break
             
             if not target_row:
+                log(f"[EXCEL-UPDATE] No matching row for: {session_phone}")
                 continue
             
-            # Connect and get account info
+            # Use row-specific or fallback API credentials
+            api_id = row_api_id or CONFIG.get('api_id')
+            api_hash = row_api_hash or CONFIG.get('api_hash')
+            
+            if not api_id or not api_hash:
+                log(f"[EXCEL-UPDATE] No API credentials for: {session_phone}")
+                continue
+            
+            # Connect and fetch account info
             try:
                 client = TelegramClient(
                     str(session_file).replace('.session', ''),
-                    CONFIG['api_id'],
-                    CONFIG['api_hash']
+                    api_id,
+                    api_hash
                 )
                 await client.connect()
                 
@@ -960,32 +1296,37 @@ async def fetch_and_update_excel():
                         groups_count = sum(1 for d in dialogs if d.is_group)
                     except: pass
                     
-                    # Update Excel
+                    # Update Excel cells
                     username = me.username or ""
                     name = f"{me.first_name or ''} {me.last_name or ''}".strip()
                     
+                    ws.cell(row=target_row, column=col_map['user_id'] + 1, value=me.id)
                     ws.cell(row=target_row, column=col_map['username'] + 1, value=username)
                     ws.cell(row=target_row, column=col_map['name'] + 1, value=name)
                     ws.cell(row=target_row, column=col_map['friends'] + 1, value=friends_count)
                     ws.cell(row=target_row, column=col_map['groups'] + 1, value=groups_count)
                     ws.cell(row=target_row, column=col_map['last_update'] + 1, value=datetime.now().strftime("%Y-%m-%d %H:%M"))
                     
-                    log(f"[EXCEL] Updated: {phone_key} -> @{username}, {name}, {friends_count} friends, {groups_count} groups")
+                    log(f"[EXCEL-UPDATE] {session_phone}: ID={me.id}, @{username}, {friends_count} friends, {groups_count} groups")
                     updated_count += 1
+                else:
+                    log(f"[EXCEL-UPDATE] Not authorized: {session_phone}")
                 
                 await client.disconnect()
                 await asyncio.sleep(2)  # Rate limit
                 
             except Exception as e:
-                log(f"[EXCEL] Error for {phone_key}: {e}")
+                log(f"[EXCEL-UPDATE] Error for {session_phone}: {e}")
         
         # Save Excel
         wb.save(excel_file)
         wb.close()
-        log(f"[EXCEL] Saved! Updated {updated_count} accounts")
+        log(f"[EXCEL-UPDATE] Saved! Updated {updated_count} accounts")
         
     except Exception as e:
-        log(f"[EXCEL] Error updating Excel: {e}")
+        log(f"[EXCEL-UPDATE] Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 async def export_accounts_to_excel():
     """Export all account details to a new Excel file"""
@@ -1026,61 +1367,177 @@ async def export_accounts_to_excel():
     return str(export_file)
 
 def read_session_basic(session_path):
-    """Read basic info from session file (SQLite)"""
+    """
+    Read basic info from Telethon session file (SQLite)
+    Extracts: user_id, username, name, phone, dc_id
+    """
+    info = {
+        "session_file": session_path.name, 
+        "account_id": session_path.stem,
+        "user_id": None,
+        "username": "",
+        "name": "",
+        "phone": "",
+        "dc_id": None,
+    }
+    
     try:
         conn = sqlite3.connect(str(session_path))
         cursor = conn.cursor()
+        
+        # Get table list
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = [t[0] for t in cursor.fetchall()]
+        log(f"[SESSION] {session_path.name} tables: {tables}")
         
-        info = {"session_file": session_path.name, "account_id": session_path.stem}
+        # Method 1: Read from 'sessions' table (Telethon v1.24+)
+        if 'sessions' in tables:
+            try:
+                cursor.execute("SELECT dc_id, server_address, port, auth_key FROM sessions LIMIT 1")
+                row = cursor.fetchone()
+                if row:
+                    info["dc_id"] = row[0]
+                    # auth_key contains encrypted user data
+            except Exception as e:
+                log(f"[SESSION] sessions table error: {e}")
         
+        # Method 2: Read from 'entities' table - this has user info
         if 'entities' in tables:
-            cursor.execute("SELECT id, username, name, phone FROM entities WHERE id > 0 LIMIT 10")
-            for entity in cursor.fetchall():
-                if entity[3]:  # Has phone
-                    info["user_id"] = entity[0]
-                    info["username"] = entity[1] or ""
-                    info["name"] = entity[2] or ""
-                    info["phone"] = entity[3] or ""
-                    break
+            try:
+                # First, try to find "self" entity (the account owner)
+                cursor.execute("SELECT id, username, name, phone FROM entities ORDER BY id ASC LIMIT 20")
+                entities = cursor.fetchall()
+                
+                for entity in entities:
+                    eid, username, name, phone = entity
+                    log(f"[SESSION] Entity: id={eid}, user={username}, name={name}, phone={phone}")
+                    
+                    # Positive IDs are users, negative are chats/channels
+                    if eid and eid > 0:
+                        # If has phone, it's likely the account owner
+                        if phone:
+                            info["user_id"] = int(eid)
+                            info["username"] = username or ""
+                            info["name"] = name or ""
+                            info["phone"] = phone
+                            break
+                        # If no phone but has username, it might be self
+                        elif username and not info["user_id"]:
+                            info["user_id"] = int(eid)
+                            info["username"] = username or ""
+                            info["name"] = name or ""
+                
+            except Exception as e:
+                log(f"[SESSION] entities table error: {e}")
+        
+        # Method 3: Read from 'sent_files' or 'update_state' for self info
+        if 'update_state' in tables and not info["user_id"]:
+            try:
+                cursor.execute("SELECT * FROM update_state LIMIT 1")
+                row = cursor.fetchone()
+                if row:
+                    log(f"[SESSION] update_state: {row}")
+            except:
+                pass
+        
+        # Method 4: Try to get user_id from session filename if it's a phone number
+        if not info["user_id"]:
+            filename = session_path.stem
+            # Check if filename looks like a phone number
+            clean_name = filename.replace('+', '').replace('-', '').replace(' ', '')
+            if clean_name.isdigit() and len(clean_name) >= 10:
+                info["phone"] = filename
+                log(f"[SESSION] Phone from filename: {filename}")
         
         conn.close()
+        
+        if info["user_id"]:
+            log(f"[SESSION] Found: user_id={info['user_id']}, @{info['username']}, {info['name']}, phone={info['phone']}")
+        else:
+            log(f"[SESSION] No user_id found for {session_path.name}")
+        
         return info
+        
     except Exception as e:
-        return {"session_file": session_path.name, "account_id": session_path.stem, "error": str(e)}
+        log(f"[SESSION] Error reading {session_path.name}: {e}")
+        return info
 
 async def get_account_stats(session_path):
-    """Get detailed account stats using Telethon"""
-    if not telethon_available or not CONFIG["api_id"] or not CONFIG["api_hash"]:
+    """
+    Get detailed account stats using Telethon
+    This is the MOST RELIABLE way to get user_id
+    
+    Uses per-account API credentials from Excel if available
+    """
+    if not telethon_available:
+        log(f"[TELETHON] Not available: telethon not installed")
+        return None
+    
+    # Get phone from session filename
+    session_phone = session_path.stem.replace('+', '').replace('-', '').replace(' ', '')
+    
+    # Look up API credentials for this account from Excel config
+    api_id = None
+    api_hash = None
+    
+    # Try to find matching config by phone
+    for phone_key, acc_config in excel_config.items():
+        if phone_key == session_phone or session_phone.endswith(phone_key) or phone_key.endswith(session_phone):
+            api_id = acc_config.get('api_id')
+            api_hash = acc_config.get('api_hash')
+            if api_id and api_hash:
+                log(f"[TELETHON] Using Excel config for {session_phone}: API_ID={api_id}")
+                break
+    
+    # Fallback to global config
+    if not api_id or not api_hash:
+        api_id = CONFIG.get("api_id")
+        api_hash = CONFIG.get("api_hash")
+    
+    if not api_id or not api_hash:
+        log(f"[TELETHON] No API credentials for: {session_path.name}")
         return None
     
     try:
+        session_name = str(session_path).replace('.session', '')
+        log(f"[TELETHON] Connecting: {session_path.name} (API_ID={api_id})")
+        
         client = TelegramClient(
-            str(session_path).replace('.session', ''),
-            CONFIG["api_id"],
-            CONFIG["api_hash"]
+            session_name,
+            api_id,
+            api_hash
         )
         
         await client.connect()
-        if not await client.is_user_authorized():
-            await client.disconnect()
-            return {"error": "Not authorized"}
         
-        # Get current user info
+        if not await client.is_user_authorized():
+            log(f"[TELETHON] Not authorized: {session_path.name}")
+            await client.disconnect()
+            return {"error": "Not authorized", "session_file": session_path.name}
+        
+        # Get current user info - THIS IS THE KEY!
         me = await client.get_me()
+        
         stats = {
-            "user_id": me.id,
+            "user_id": me.id,  # This is the numeric Telegram user ID!
+            "tg_id": me.id,    # Alias for red packet system
             "username": me.username or "",
+            "first_name": me.first_name or "",
+            "last_name": me.last_name or "",
             "name": f"{me.first_name or ''} {me.last_name or ''}".strip(),
             "phone": me.phone or "",
+            "is_bot": me.bot,
+            "session_file": session_path.name,
         }
+        
+        log(f"[TELETHON] Got user: id={me.id}, @{me.username}, phone={me.phone}")
         
         # Get contacts (friends)
         try:
             contacts = await client(GetContactsRequest(hash=0))
             stats["friends_count"] = len(contacts.users) if hasattr(contacts, 'users') else 0
-        except:
+        except Exception as e:
+            log(f"[TELETHON] Contacts error: {e}")
             stats["friends_count"] = 0
         
         # Get dialogs (chats, groups, channels)
@@ -1102,11 +1559,12 @@ async def get_account_stats(session_path):
             stats["channels_count"] = channels
             stats["private_chats"] = private_chats
             stats["total_dialogs"] = len(dialogs)
-        except:
+        except Exception as e:
+            log(f"[TELETHON] Dialogs error: {e}")
             stats["groups_count"] = 0
             stats["channels_count"] = 0
         
-        # Get recent contacts added (last 24h) - estimate from recent dialogs
+        # Get recent contacts added (last 24h)
         try:
             today = datetime.now()
             yesterday = today - timedelta(days=1)
@@ -1125,10 +1583,16 @@ async def get_account_stats(session_path):
         return stats
         
     except Exception as e:
-        return {"error": str(e)}
+        log(f"[TELETHON] Error for {session_path.name}: {e}")
+        return {"error": str(e), "session_file": session_path.name}
 
 def scan_sessions_sync():
-    """Scan sessions and merge with Excel config"""
+    """
+    Scan sessions folder and collect account info
+    Merges data from: session file + Excel config + cache
+    
+    Priority: Cache > Telethon > Excel > Session file
+    """
     sessions_dir = Path(CONFIG["sessions_dir"])
     accounts = []
     
@@ -1136,37 +1600,131 @@ def scan_sessions_sync():
         sessions_dir.mkdir(parents=True, exist_ok=True)
         return accounts
     
-    for f in sessions_dir.glob("*.session"):
+    session_files = list(sessions_dir.glob("*.session"))
+    log(f"[SCAN] Found {len(session_files)} session files")
+    
+    for f in session_files:
         cache_key = f.name
+        session_phone = f.stem.replace(' ', '').replace('+', '').replace('-', '')
+        
         if cache_key in account_cache:
+            # Use cached data
             cached = account_cache[cache_key].copy()
             cached["status"] = "available"
             accounts.append(cached)
         else:
+            # Read basic info from session file
             info = read_session_basic(f)
             info["status"] = "available"
             info["node_id"] = CONFIG["node_id"]
             info["session_path"] = str(f)
             
-            # Merge with Excel config
+            # Try to find matching Excel config
+            excel_data = None
             phone = info.get("phone", "").replace(' ', '').replace('+', '').replace('-', '')
-            account_id = f.stem.replace(' ', '').replace('+', '').replace('-', '')
             
-            # Try to match by phone or filename
-            excel_data = excel_config.get(phone) or excel_config.get(account_id)
+            # Try multiple matching strategies
+            for phone_key, acc_config in excel_config.items():
+                if (phone_key == session_phone or 
+                    phone_key == phone or
+                    session_phone.endswith(phone_key) or 
+                    phone_key.endswith(session_phone)):
+                    excel_data = acc_config
+                    break
+            
             if excel_data:
+                # Merge Excel data
+                info["excel_phone"] = excel_data.get("phone")
                 info["excel_name"] = excel_data.get("name")
                 info["excel_group"] = excel_data.get("group")
                 info["excel_remark"] = excel_data.get("remark")
                 info["excel_node"] = excel_data.get("node")
+                info["excel_enabled"] = excel_data.get("enabled", True)
+                
+                # Use Excel user_id if available and not already set
+                if excel_data.get("user_id") and not info.get("user_id"):
+                    info["user_id"] = excel_data["user_id"]
+                    info["tg_id"] = excel_data["user_id"]
+                
+                # Use Excel username if available
+                if excel_data.get("username") and not info.get("username"):
+                    info["username"] = excel_data["username"]
+                
                 # Use Excel name if available
                 if excel_data.get("name"):
                     info["name"] = excel_data["name"]
+                
+                # Store API credentials for this account
+                if excel_data.get("api_id") and excel_data.get("api_hash"):
+                    info["has_api_credentials"] = True
+                
+                log(f"[SCAN] Matched Excel: {session_phone} -> {excel_data.get('phone')}")
             
             account_cache[cache_key] = info
             accounts.append(info)
     
     return accounts
+
+
+def print_accounts_summary():
+    """Print a nice summary of all accounts found"""
+    accounts = list(account_cache.values())
+    
+    if not accounts:
+        log("=" * 60)
+        log("  NO ACCOUNTS FOUND")
+        log("  Please add .session files to the 'sessions' folder")
+        log("=" * 60)
+        return
+    
+    log("=" * 60)
+    log(f"  ACCOUNTS SUMMARY ({len(accounts)} total)")
+    log("=" * 60)
+    
+    # Print table header
+    log(f"{'#':<3} {'Telegram ID':<15} {'Username':<20} {'Phone':<15} {'Name':<15}")
+    log("-" * 60)
+    
+    # Print each account
+    for i, acc in enumerate(accounts, 1):
+        tg_id = acc.get('user_id') or acc.get('tg_id') or 'N/A'
+        username = acc.get('username', '')[:18] or '-'
+        phone = acc.get('phone', '')[:13] or '-'
+        name = acc.get('name', '')[:13] or '-'
+        
+        log(f"{i:<3} {str(tg_id):<15} @{username:<19} {phone:<15} {name:<15}")
+    
+    log("-" * 60)
+    
+    # Count accounts with user_id
+    with_id = sum(1 for a in accounts if a.get('user_id') or a.get('tg_id'))
+    log(f"  Accounts with Telegram ID: {with_id}/{len(accounts)}")
+    
+    # If missing IDs, suggest using Telethon
+    if with_id < len(accounts):
+        log("")
+        log("  TIP: Install Telethon and set API_ID/API_HASH to get all IDs")
+        log("       pip install telethon")
+    
+    log("=" * 60)
+    
+    # Export as JSON for red packet system
+    export_data = []
+    for acc in accounts:
+        if acc.get('user_id') or acc.get('tg_id'):
+            export_data.append({
+                "tg_id": acc.get('user_id') or acc.get('tg_id'),
+                "username": acc.get('username', ''),
+                "phone": acc.get('phone', ''),
+                "name": acc.get('name', '') or acc.get('first_name', ''),
+            })
+    
+    if export_data:
+        log("")
+        log("  JSON FOR RED PACKET SYSTEM (copy this):")
+        log("-" * 60)
+        print(json.dumps(export_data, indent=2, ensure_ascii=False))
+        log("-" * 60)
 
 async def update_all_stats():
     """Update detailed stats for all accounts"""
@@ -1287,6 +1845,32 @@ def process_commands(commands):
             asyncio.get_event_loop().run_until_complete(export_accounts_to_excel())
         elif action == "get_status":
             log(f"[CMD] {len(account_cache)} accounts")
+        elif action == "redpacket_balance":
+            # Get red packet balance for an account
+            tg_id = params.get("tg_id")
+            if tg_id:
+                result = asyncio.get_event_loop().run_until_complete(redpacket_get_balance(tg_id))
+                log(f"[CMD] Red packet balance: {result}")
+        elif action == "redpacket_send":
+            # Send a red packet
+            tg_id = params.get("tg_id")
+            amount = params.get("amount", 1.0)
+            count = params.get("count", 5)
+            message = params.get("message", "🤖 AI 紅包")
+            if tg_id:
+                result = asyncio.get_event_loop().run_until_complete(
+                    redpacket_send_packet(tg_id, amount, count, message)
+                )
+                log(f"[CMD] Red packet sent: {result}")
+        elif action == "redpacket_claim":
+            # Claim a red packet
+            tg_id = params.get("tg_id")
+            packet_uuid = params.get("packet_uuid")
+            if tg_id and packet_uuid:
+                result = asyncio.get_event_loop().run_until_complete(
+                    redpacket_claim_packet(tg_id, packet_uuid)
+                )
+                log(f"[CMD] Red packet claimed: {result}")
         else:
             log(f"[CMD] Unknown: {action}")
 
@@ -1294,23 +1878,50 @@ async def main_async():
     """Async main loop"""
     global last_stats_update
     
-    log("=" * 50)
-    log("Worker Node Starting (Full Version)")
-    log(f"  Node ID: {CONFIG['node_id']}")
-    log(f"  Server: {CONFIG['server_url']}")
-    log(f"  Sessions: {CONFIG['sessions_dir']}")
-    log("=" * 50)
+    log("")
+    log("=" * 60)
+    log("  WORKER NODE STARTING")
+    log("=" * 60)
+    log(f"  Node ID:    {CONFIG['node_id']}")
+    log(f"  Server:     {CONFIG['server_url']}")
+    log(f"  Sessions:   {CONFIG['sessions_dir']}")
+    log(f"  Heartbeat:  {CONFIG['heartbeat_interval']}s")
+    log("")
+    log(f"  Telethon:   {'YES' if telethon_available else 'NO (pip install telethon)'}")
+    log(f"  API ID:     {'SET' if CONFIG['api_id'] else 'NOT SET'}")
+    log(f"  API Hash:   {'SET' if CONFIG['api_hash'] else 'NOT SET'}")
+    log(f"  openpyxl:   {'YES' if openpyxl_available else 'NO (pip install openpyxl)'}")
+    log(f"  Red Packet: {'YES' if redpacket_available else 'NO (pip install httpx)'}")
+    log("=" * 60)
     
     # Load Excel config first
     load_excel_config()
     
-    log(f"  Telethon: {'Enabled' if telethon_available and CONFIG['api_id'] else 'Disabled'}")
-    log(f"  openpyxl: {'Installed' if openpyxl_available else 'Not installed'}")
-    log("=" * 50)
+    # Initialize red packet client
+    if CONFIG.get("redpacket_api_url"):
+        init_redpacket_client()
     
-    # Initial stats update
-    if telethon_available and CONFIG["api_id"]:
+    # Do initial session scan
+    log("")
+    log("[INIT] Scanning sessions folder...")
+    scan_sessions_sync()
+    
+    # If Telethon is available, fetch detailed stats
+    if telethon_available and CONFIG["api_id"] and CONFIG["api_hash"]:
+        log("")
+        log("[INIT] Fetching account details via Telethon...")
         await update_all_stats()
+    else:
+        log("")
+        log("[INIT] Telethon not configured - using basic session info only")
+        log("[INIT] To get Telegram user_id, set TELEGRAM_API_ID and TELEGRAM_API_HASH")
+    
+    # Print summary of all accounts found
+    print_accounts_summary()
+    
+    log("")
+    log("[WORKER] Starting heartbeat loop...")
+    log("")
     
     heartbeat_count = 0
     while True:
@@ -1354,6 +1965,58 @@ if __name__ == "__main__":
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"生成部署包失敗: {str(e)}"
+        )
+
+
+@router.get("/accounts/telegram-ids", status_code=status.HTTP_200_OK)
+async def get_all_telegram_ids(
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """
+    獲取所有 Worker 節點上的 Telegram 帳號 ID 列表
+    用於紅包遊戲系統對接
+    """
+    try:
+        workers_data = _get_all_workers()
+        
+        # 收集所有帳號
+        all_accounts = []
+        seen_ids = set()
+        
+        for node_id, data in workers_data.items():
+            accounts = data.get("accounts", [])
+            for acc in accounts:
+                # 獲取 user_id 或 tg_id
+                tg_id = acc.get("user_id") or acc.get("tg_id")
+                if tg_id and tg_id not in seen_ids:
+                    seen_ids.add(tg_id)
+                    all_accounts.append({
+                        "tg_id": tg_id,
+                        "username": acc.get("username", ""),
+                        "name": acc.get("name", "") or acc.get("first_name", ""),
+                        "phone": acc.get("phone", ""),
+                        "node_id": node_id,
+                        "status": acc.get("status", "available"),
+                    })
+        
+        # 按 tg_id 排序
+        all_accounts.sort(key=lambda x: x["tg_id"] if x["tg_id"] else 0)
+        
+        return {
+            "success": True,
+            "total_count": len(all_accounts),
+            "accounts": all_accounts,
+            "format_for_redpacket": [
+                {"tg_id": a["tg_id"], "name": a["name"] or a["username"] or f"AI_{a['tg_id']}"} 
+                for a in all_accounts if a["tg_id"]
+            ]
+        }
+    except Exception as e:
+        logger.error(f"獲取 Telegram ID 列表失敗: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"獲取 Telegram ID 列表失敗: {str(e)}"
         )
 
 

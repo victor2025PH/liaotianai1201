@@ -19,6 +19,7 @@ import {
   Menu,
   Download,
   Gift,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -53,6 +54,27 @@ const navigationConfig: NavItem[] = [
     icon: Monitor,
     step: null,
     descKey: "nodeManagement",
+  },
+  {
+    nameKey: "chatFeatures",
+    href: "/group-ai/chat-features",
+    icon: Sparkles,
+    step: null,
+    descKey: "chatFeatures",
+  },
+  {
+    nameKey: "advancedFeatures",
+    href: "/group-ai/advanced-features",
+    icon: Zap,
+    step: null,
+    descKey: "advancedFeatures",
+  },
+  {
+    nameKey: "privateFunnel",
+    href: "/group-ai/private-funnel",
+    icon: UserPlus,
+    step: null,
+    descKey: "privateFunnel",
   },
   {
     nameKey: "workerDeploy",

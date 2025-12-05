@@ -32,3 +32,16 @@ apscheduler>=3.10.4
 # SSH連接（Telegram註冊功能）
 paramiko>=3.4.0
 
+# =========== Worker 節點依賴 ===========
+# Telegram 客戶端
+telethon>=1.36.0
+
+# WebSocket 支持
+websockets>=12.0
+
+# YAML 解析
+pyyaml>=6.0.1
+
+# 異步支持
+aiofiles>=23.2.1
+

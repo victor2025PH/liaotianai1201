@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 # 导入基础模块（logs 延迟导入以避免循环导入）
 # 注意：statistics 模块不存在，已从导入列表移除
-from app.api.group_ai import accounts, scripts, monitor, control, role_assignments, script_versions, servers, dashboard, alert_rules, dialogue, redpacket, script_review, role_assignment_schemes, export, automation_tasks, telegram_alerts, session_export, account_allocation, allocation, account_management, account_import, script_deployment
+from app.api.group_ai import accounts, scripts, monitor, control, role_assignments, script_versions, servers, dashboard, alert_rules, dialogue, redpacket, script_review, role_assignment_schemes, export, automation_tasks, telegram_alerts, session_export, account_allocation, allocation, account_management, account_import, script_deployment, chat_features, advanced_features, private_chat_funnel
 
 # 延迟导入 logs 以避免循环导入（logs 导入 servers，而 __init__ 同时导入两者）
 try:
@@ -188,6 +188,27 @@ try:
         logger.warning("Groups router不存在或为空，跳过注册")
 except Exception as e:
     logger.error(f"注册Groups路由失败: {e}", exc_info=True)
+
+# 高級聊天功能 API
+router.include_router(
+    chat_features.router,
+    tags=["chat-features"],
+    # dependencies=protected_dependency,
+)
+
+# 高級功能 API (TTS, 圖片, 跨群, 告警, 模板, 黑白名單, 多語言, Webhook)
+router.include_router(
+    advanced_features.router,
+    tags=["advanced-features"],
+    # dependencies=protected_dependency,
+)
+
+# 私聊轉化漏斗 API
+router.include_router(
+    private_chat_funnel.router,
+    tags=["private-funnel"],
+    # dependencies=protected_dependency,
+)
 
 
 

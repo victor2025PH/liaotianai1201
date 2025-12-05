@@ -20,9 +20,9 @@ router = APIRouter(prefix="/redpacket", tags=["redpacket"])
 # ============ 配置存儲 ============
 
 _redpacket_config = {
-    "api_url": "",
-    "api_key": "",
-    "enabled": False,
+    "api_url": "http://api.usdt2026.cc",
+    "api_key": "test-key-2024",
+    "enabled": True,
     "auto_grab": True,
     "grab_delay_min": 1,
     "grab_delay_max": 5,

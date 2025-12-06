@@ -1474,7 +1474,7 @@ export default function GroupAIAccountsPage() {
                           // 使用類型擴展來處理 node_id（Worker 賬號有 node_id）
                           const accountWithNodeId = account as Account & { node_id?: string | null }
                           const serverId = account.server_id 
-                            || accountWithNodeId.node_id ?? undefined
+                            || (accountWithNodeId.node_id ?? undefined)
                           
                           console.log(`[分配剧本] 账号详情:`, {
                             account_id: account.account_id,

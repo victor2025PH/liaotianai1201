@@ -1,0 +1,58 @@
+# Git 提交和部署步驟
+
+## 1. Git 提交（已完成）
+- ✅ 已更新 .gitignore（添加 wy/）
+- ✅ 已添加所有變更
+- ✅ 已提交變更
+
+## 2. 推送到 GitHub
+
+執行以下命令：
+
+```bash
+cd "D:\telegram-ai-system"
+
+# 檢查當前分支
+git branch
+
+# 設置遠程倉庫（如果還沒設置）
+git remote add origin https://github.com/victor2025PH/liaotianai1201.git
+# 或更新 URL
+git remote set-url origin https://github.com/victor2025PH/liaotianai1201.git
+
+# 推送到 GitHub
+git push -u origin main
+# 如果分支是 master，使用：
+# git push -u origin master
+```
+
+## 3. 服務器部署
+
+### 方法 1：使用現有部署腳本
+
+```bash
+# 在服務器上執行
+cd ~/telegram-ai-system
+bash deploy/从GitHub拉取并部署.sh
+```
+
+### 方法 2：手動部署
+
+```bash
+# SSH 連接到服務器後
+cd ~/telegram-ai-system
+git pull origin main
+# 然後根據需要重啟服務
+```
+
+## 4. 檢查部署狀態
+
+```bash
+# 檢查服務是否運行
+ps aux | grep python
+ps aux | grep node
+
+# 檢查端口
+netstat -tlnp | grep 8000
+netstat -tlnp | grep 3000
+```

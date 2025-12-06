@@ -1,8 +1,0 @@
-{
-  "timestamp": "2025-11-22T17:52:28.459486",
-  "backups": {
-    "database": null,
-    "sessions": "backups\\sessions_20251122_175228.tar.gz",
-    "config": "backups\\config_20251122_175228.tar.gz"
-  }
-}

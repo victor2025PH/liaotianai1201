@@ -14,11 +14,17 @@ export function getApiBaseUrl(): string {
     return process.env.NEXT_PUBLIC_API_BASE_URL;
   }
 
-  // 如果是在瀏覽器環境，嘗試從 window.location 獲取
+  // 如果是在瀏覽器環境
   if (typeof window !== "undefined") {
+    const host = window.location.host;
+    
+    // 開發環境：localhost 使用 8000 端口
+    if (host.includes("localhost") || host.includes("127.0.0.1")) {
+      return "http://localhost:8000/api/v1";
+    }
+    
     // 生產環境：使用當前域名
     const protocol = window.location.protocol;
-    const host = window.location.host;
     return `${protocol}//${host}/api/v1`;
   }
 
@@ -50,10 +56,17 @@ export function getWebSocketUrl(): string {
     return process.env.NEXT_PUBLIC_WS_URL;
   }
 
-  // 如果是在瀏覽器環境，根據當前協議構建
+  // 如果是在瀏覽器環境
   if (typeof window !== "undefined") {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.host;
+    
+    // 開發環境：localhost 使用 8000 端口
+    if (host.includes("localhost") || host.includes("127.0.0.1")) {
+      return "ws://localhost:8000/api/v1/notifications/ws";
+    }
+    
+    // 生產環境：使用當前域名
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${protocol}//${host}/api/v1/notifications/ws`;
   }
 

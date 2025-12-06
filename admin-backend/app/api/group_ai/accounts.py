@@ -1,7 +1,7 @@
 """
 群組 AI 賬號管理 API
 """
-from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File, Query
+from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File, Query, Request
 from typing import List, Optional
 from pydantic import BaseModel
 import sys
@@ -19,7 +19,6 @@ from app.core.errors import UserFriendlyError
 try:
     from app.core.limiter import limiter, RATE_LIMITS
     from slowapi.errors import RateLimitExceeded
-    from fastapi import Request
     RATE_LIMITING_ENABLED = True
 except ImportError:
     RATE_LIMITING_ENABLED = False

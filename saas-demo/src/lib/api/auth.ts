@@ -4,7 +4,10 @@
 
 import { getApiBaseUrl } from "./config";
 
-const API_BASE = getApiBaseUrl();
+// 延遲獲取 API_BASE，確保在瀏覽器環境中正確解析
+function getApiBase(): string {
+  return getApiBaseUrl();
+}
 
 export interface LoginRequest {
   username: string // 郵箱
@@ -31,7 +34,8 @@ export async function login(credentials: LoginRequest): Promise<TokenResponse> {
     formData.append("username", credentials.username)
     formData.append("password", credentials.password)
 
-    const response = await fetch(`${API_BASE}/auth/login`, {
+    const apiBase = getApiBase();
+    const response = await fetch(`${apiBase}/auth/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -62,7 +66,7 @@ export async function login(credentials: LoginRequest): Promise<TokenResponse> {
     // 網絡錯誤
     if (error instanceof TypeError && error.message.includes("fetch")) {
       console.error("[API] 網絡錯誤，無法連接到後端服務（登錄 API）")
-      throw new Error(`無法連接到後端服務，請檢查服務是否運行（${API_BASE}）`)
+      throw new Error(`無法連接到後端服務，請檢查服務是否運行（${getApiBase()}）`)
     }
     // 重新拋出其他錯誤
     throw error

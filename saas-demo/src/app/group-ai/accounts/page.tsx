@@ -1224,7 +1224,7 @@ export default function GroupAIAccountsPage() {
                       {selectedAccountForRole?.node_id && (
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">节点:</span>
-                          <Badge variant="outline">{selectedAccountForRole.node_id}</Badge>
+                          <Badge variant="outline">{selectedAccountForRole?.node_id}</Badge>
                         </div>
                       )}
                     </div>
@@ -1470,24 +1470,26 @@ export default function GroupAIAccountsPage() {
                           // 更新账号的剧本ID
                           // 确保传递 server_id（优先使用 server_id，如果没有则使用 node_id）
                           // 尝试多种方式获取 server_id
-                          const serverId = selectedAccountForRole.server_id 
-                            || selectedAccountForRole.node_id 
-                            || undefined
+                          const account = selectedAccountForRole
+                          // 使用類型擴展來處理 node_id（Worker 賬號有 node_id）
+                          const accountWithNodeId = account as Account & { node_id?: string | null }
+                          const serverId = account.server_id 
+                            || accountWithNodeId.node_id ?? undefined
                           
                           console.log(`[分配剧本] 账号详情:`, {
-                            account_id: selectedAccountForRole.account_id,
-                            server_id: selectedAccountForRole.server_id,
-                            node_id: selectedAccountForRole.node_id,
-                            all_fields: Object.keys(selectedAccountForRole),
+                            account_id: account.account_id,
+                            server_id: account.server_id,
+                            node_id: accountWithNodeId.node_id,
+                            all_fields: Object.keys(account),
                             最终serverId: serverId
                           })
                           
                           // 如果没有 server_id，提示用户
                           if (!serverId) {
                             throw new Error(`无法获取账号的节点ID。账号信息: ${JSON.stringify({
-                              account_id: selectedAccountForRole.account_id,
-                              has_server_id: !!selectedAccountForRole.server_id,
-                              has_node_id: !!selectedAccountForRole.node_id,
+                              account_id: account.account_id,
+                              has_server_id: !!account.server_id,
+                              has_node_id: !!accountWithNodeId.node_id,
                             })}`)
                           }
                           

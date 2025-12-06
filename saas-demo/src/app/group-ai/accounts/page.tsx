@@ -1221,7 +1221,7 @@ export default function GroupAIAccountsPage() {
                           <span className="font-medium">{selectedAccountForRole.phone_number}</span>
                         </div>
                       )}
-                      {selectedAccountForRole.node_id && (
+                      {selectedAccountForRole?.node_id && (
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">节点:</span>
                           <Badge variant="outline">{selectedAccountForRole.node_id}</Badge>
@@ -1471,14 +1471,13 @@ export default function GroupAIAccountsPage() {
                           // 确保传递 server_id（优先使用 server_id，如果没有则使用 node_id）
                           // 尝试多种方式获取 server_id
                           const serverId = selectedAccountForRole.server_id 
-                            || (selectedAccountForRole as any).node_id 
-                            || (selectedAccountForRole as any).server_id
+                            || selectedAccountForRole.node_id 
                             || undefined
                           
                           console.log(`[分配剧本] 账号详情:`, {
                             account_id: selectedAccountForRole.account_id,
                             server_id: selectedAccountForRole.server_id,
-                            node_id: (selectedAccountForRole as any).node_id,
+                            node_id: selectedAccountForRole.node_id,
                             all_fields: Object.keys(selectedAccountForRole),
                             最终serverId: serverId
                           })
@@ -1488,7 +1487,7 @@ export default function GroupAIAccountsPage() {
                             throw new Error(`无法获取账号的节点ID。账号信息: ${JSON.stringify({
                               account_id: selectedAccountForRole.account_id,
                               has_server_id: !!selectedAccountForRole.server_id,
-                              has_node_id: !!(selectedAccountForRole as any).node_id,
+                              has_node_id: !!selectedAccountForRole.node_id,
                             })}`)
                           }
                           

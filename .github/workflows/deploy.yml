@@ -30,8 +30,98 @@ jobs:
             source admin-backend/venv/bin/activate
             pip install -r admin-backend/requirements.txt
             
-            # 4. 重启服务
+            # 4. 重启后端服务
             sudo systemctl restart telegram-backend
             
-            # 5. 检查状态
-            sudo systemctl status telegram-backend --no-pager
+            # 5. 等待服务启动
+            sleep 5
+            
+            # 6. 检查后端服务状态
+            echo "=========================================="
+            echo "检查后端服务状态"
+            echo "=========================================="
+            sudo systemctl status telegram-backend --no-pager || true
+            
+            # 7. 检查后端端口
+            echo ""
+            echo "检查后端端口 (8000)..."
+            ss -tlnp | grep :8000 || echo "端口 8000 未监听"
+            
+            # 8. 检查后端健康状态
+            echo ""
+            echo "检查后端健康状态..."
+            curl -s http://localhost:8000/health || echo "后端健康检查失败"
+            
+            # 9. 检查前端服务状态
+            echo ""
+            echo "=========================================="
+            echo "检查前端服务状态"
+            echo "=========================================="
+            
+            # 检查多个可能的前端服务
+            if systemctl list-units --type=service | grep -q "liaotian-frontend"; then
+              echo "检查 liaotian-frontend 服务..."
+              sudo systemctl status liaotian-frontend --no-pager -l | head -n 8 || true
+            elif systemctl list-units --type=service | grep -q "smart-tg-frontend"; then
+              echo "检查 smart-tg-frontend 服务..."
+              sudo systemctl status smart-tg-frontend --no-pager -l | head -n 8 || true
+            else
+              echo "未找到前端 systemd 服务，检查进程..."
+              ps aux | grep -E "node.*next|npm.*start" | grep -v grep | head -n 2 || echo "未发现前端进程"
+            fi
+            
+            # 10. 检查前端端口
+            echo ""
+            echo "检查前端端口 (3000, 3001)..."
+            for port in 3000 3001; do
+              if ss -tlnp | grep -q ":$port"; then
+                echo "端口 $port 正在监听:"
+                ss -tlnp | grep ":$port"
+              fi
+            done
+            
+            # 11. 检查前端 HTTP 响应
+            echo ""
+            echo "检查前端 HTTP 响应..."
+            for port in 3000 3001; do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$port 2>/dev/null || echo "000")
+              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+                echo "前端服务在端口 $port 响应正常 (HTTP $HTTP_CODE)"
+              fi
+            done
+            
+            # 12. 服务状态总结
+            echo ""
+            echo "=========================================="
+            echo "服务状态总结"
+            echo "=========================================="
+            
+            # 后端状态
+            if systemctl is-active --quiet telegram-backend 2>/dev/null; then
+              if curl -s -f http://localhost:8000/health > /dev/null 2>&1; then
+                echo "✅ 后端服务: 运行正常"
+              else
+                echo "⚠️  后端服务: 运行但健康检查失败"
+              fi
+            else
+              echo "❌ 后端服务: 未运行"
+            fi
+            
+            # 前端状态
+            FRONTEND_OK=false
+            if systemctl is-active --quiet liaotian-frontend 2>/dev/null || systemctl is-active --quiet smart-tg-frontend 2>/dev/null; then
+              FRONTEND_OK=true
+            elif pgrep -f "node.*next" > /dev/null || pgrep -f "npm.*start" > /dev/null; then
+              FRONTEND_OK=true
+            fi
+            
+            if [ "$FRONTEND_OK" = true ]; then
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 2>/dev/null || echo "000")
+              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+                echo "✅ 前端服务: 运行正常"
+              else
+                echo "⚠️  前端服务: 进程运行但 HTTP 响应异常"
+              fi
+            else
+              echo "❌ 前端服务: 未运行"
+            fi

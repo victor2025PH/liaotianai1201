@@ -326,13 +326,22 @@ async def get_system_monitor() -> SystemMonitorData:
     data = data_sources.get_system_monitor()
     from app.schemas.system import SystemHealth, SystemMetrics as SystemMetricsSchema
     
-    health = SystemHealth(**data.get("health", {}))
-    metrics = SystemMetricsSchema(**data.get("metrics", {}))
+    # 確保 data 是字典類型
+    if not isinstance(data, dict):
+        # 如果 data 不是字典，創建默認值
+        data = {}
+    
+    health_data = data.get("health", {}) if isinstance(data.get("health"), dict) else {}
+    metrics_data = data.get("metrics", {}) if isinstance(data.get("metrics"), dict) else {}
+    services_data = data.get("services", {}) if isinstance(data.get("services"), dict) else {}
+    
+    health = SystemHealth(**health_data)
+    metrics = SystemMetricsSchema(**metrics_data)
     
     return SystemMonitorData(
         health=health,
         metrics=metrics,
-        services=data.get("services", {}),
+        services=services_data,
     )
 
 

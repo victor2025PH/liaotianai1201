@@ -46,9 +46,17 @@ git config core.autocrlf false
 git config core.eol lf
 echo "  ✅ Git configured for Linux line endings"
 
-# Step 3: Handle conflicts and pull
+# Step 3: Handle local changes and pull
 echo ""
-echo "[3/5] Pulling latest code..."
+echo "[3/5] Handling local changes and pulling latest code..."
+
+# Check for local changes
+if git status --porcelain | grep -qv "^??"; then
+    echo "  ⚠️  Local changes detected. Stashing..."
+    git stash push -m "Auto-stashed by complete-setup $(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+fi
+
+# Try to pull
 if git pull origin main --allow-unrelated-histories 2>&1 | grep -q "would be overwritten"; then
     echo "  ⚠️  Conflicts detected. Resolving..."
     

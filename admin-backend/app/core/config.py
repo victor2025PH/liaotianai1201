@@ -90,10 +90,12 @@ class Settings(BaseSettings):
         return cls.json_schema_extra(field_name, raw_val) if hasattr(cls, 'json_schema_extra') else raw_val
 
     class Config:
-        # 暂时禁用 .env 文件读取，仅使用环境变量（避免编码问题）
-        env_file = None
+        # 启用 .env 文件读取
+        env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        # 优先使用环境变量，然后使用 .env 文件
+        env_file_encoding = "utf-8"
 
 
 @lru_cache

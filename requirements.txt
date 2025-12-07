@@ -65,3 +65,7 @@ tzdata
 urllib3
 wheel
 yarl
+pyrogram
+tgcrypto
+openai
+bcrypt==4.0.1

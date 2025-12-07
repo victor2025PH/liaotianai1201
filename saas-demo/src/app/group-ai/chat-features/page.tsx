@@ -332,7 +332,7 @@ export default function ChatFeaturesPage() {
               <CardDescription>配置自動聊天行為</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-4">
                 {/* 功能開關 */}
                 <div className="space-y-4">
                   <h3 className="font-semibold">功能開關</h3>
@@ -379,43 +379,44 @@ export default function ChatFeaturesPage() {
                 </div>
 
                 {/* 參數設置 */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold">參數設置</h3>
-                  <div className="space-y-2">
-                    <Label>聊天間隔（秒）: {settings.chat_interval_min} - {settings.chat_interval_max}</Label>
-                    <div className="flex gap-4">
+                <div className="space-y-3">
+                  <h3 className="font-semibold mb-2">參數設置</h3>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">聊天間隔（秒）</Label>
+                    <div className="flex items-center gap-2">
                       <Input 
                         type="number" 
                         value={settings.chat_interval_min}
                         onChange={(e) => setSettings({...settings, chat_interval_min: parseInt(e.target.value)})}
-                        className="w-24"
+                        className="w-20 h-9"
                       />
-                      <span className="self-center">-</span>
+                      <span className="text-muted-foreground">-</span>
                       <Input 
                         type="number" 
                         value={settings.chat_interval_max}
                         onChange={(e) => setSettings({...settings, chat_interval_max: parseInt(e.target.value)})}
-                        className="w-24"
+                        className="w-20 h-9"
                       />
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>紅包間隔（秒）</Label>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">紅包間隔（秒）</Label>
                     <Input 
                       type="number" 
                       value={settings.redpacket_interval}
                       onChange={(e) => setSettings({...settings, redpacket_interval: parseInt(e.target.value)})}
-                      className="w-32"
+                      className="w-28 h-9"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>表情頻率</Label>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">表情頻率</Label>
                     <div className="flex gap-2">
                       {["low", "medium", "high"].map((freq) => (
                         <Button
                           key={freq}
                           variant={settings.emoji_frequency === freq ? "default" : "outline"}
                           size="sm"
+                          className="h-9"
                           onClick={() => setSettings({...settings, emoji_frequency: freq})}
                         >
                           {freq === "low" ? "低" : freq === "medium" ? "中" : "高"}

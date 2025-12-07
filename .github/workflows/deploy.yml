@@ -4,37 +4,33 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # 允许手动触发
 
 jobs:
   deploy:
-    name: Deploy to Production Server
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to server
+      - name: Deploy to Server
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            # 1. 进入项目根目录
+            # 1. 进入项目目录
             cd /home/ubuntu/telegram-ai-system
             
             # 2. 拉取最新代码
             git pull origin main
             
-            # 3. 更新依赖 (关键步骤：进入后端目录激活环境并安装)
+            # 3. 更新依赖 (使用 admin-backend 下的 requirements.txt)
             source admin-backend/venv/bin/activate
             pip install -r admin-backend/requirements.txt
             
             # 4. 重启服务
             sudo systemctl restart telegram-backend
             
-            # 5. 检查重启状态
+            # 5. 检查状态
             sudo systemctl status telegram-backend --no-pager

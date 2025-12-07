@@ -9,7 +9,7 @@
 # One-click execution: bash scripts/server/verify-scripts-on-server.sh
 # ============================================================
 
-set -e
+# Don't exit on error, we want to check all scripts
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"

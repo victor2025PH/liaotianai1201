@@ -23,12 +23,20 @@ export function getApiBaseUrl(): string {
       return "http://localhost:8000/api/v1";
     }
     
-    // 生產環境：使用當前域名
-    const protocol = window.location.protocol;
-    return `${protocol}//${host}/api/v1`;
+    // 生產環境：使用相對路徑，讓 Nginx 處理代理
+    // 這樣可以避免 CORS 問題，並且讓 Nginx 正確代理到後端
+    return "/api/v1";
   }
 
-  // 服務端渲染或開發環境：使用默認值
+  // 服務端渲染：檢查是否在生產環境
+  // 如果是生產環境，使用相對路徑
+  if (process.env.NODE_ENV === "production") {
+    // 在生產環境中，如果沒有設置環境變量，使用相對路徑
+    // 這樣 Next.js 在服務端渲染時會使用當前請求的 host
+    return "/api/v1";
+  }
+
+  // 開發環境：使用默認值
   return "http://localhost:8000/api/v1";
 }
 

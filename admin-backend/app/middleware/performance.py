@@ -118,6 +118,33 @@ class PerformanceMonitoringMiddleware(BaseHTTPMiddleware):
             _performance_stats["request_count"] += 1
             _performance_stats["total_response_time"] += process_time_ms
             
+            # 按端點分組統計
+            import re
+            endpoint = path
+            endpoint = re.sub(r'/\d+', '/{id}', endpoint)
+            endpoint = re.sub(r'/[a-f0-9-]{36}', '/{uuid}', endpoint)
+            endpoint_key = f"{request.method} {endpoint}"
+            
+            if endpoint_key not in _performance_stats["requests_by_endpoint"]:
+                _performance_stats["requests_by_endpoint"][endpoint_key] = {
+                    "count": 0,
+                    "total_time": 0.0,
+                    "max_time": 0.0,
+                    "min_time": float('inf'),
+                }
+            
+            endpoint_stats = _performance_stats["requests_by_endpoint"][endpoint_key]
+            endpoint_stats["count"] += 1
+            endpoint_stats["total_time"] += process_time_ms
+            endpoint_stats["max_time"] = max(endpoint_stats["max_time"], process_time_ms)
+            endpoint_stats["min_time"] = min(endpoint_stats["min_time"], process_time_ms)
+            
+            # 按狀態碼分組統計
+            status_key = str(response.status_code)
+            if status_key not in _performance_stats["requests_by_status"]:
+                _performance_stats["requests_by_status"][status_key] = 0
+            _performance_stats["requests_by_status"][status_key] += 1
+            
             # 記錄慢請求
             if process_time_ms > self.slow_request_threshold_ms:
                 slow_request_info = {
@@ -196,12 +223,38 @@ def get_performance_stats() -> dict:
             _performance_stats["total_response_time"] / _performance_stats["request_count"]
         )
     
+    # 計算端點統計的平均時間
+    requests_by_endpoint = {}
+    for endpoint, stats in _performance_stats["requests_by_endpoint"].items():
+        requests_by_endpoint[endpoint] = {
+            "count": stats["count"],
+            "total_time": stats["total_time"],
+            "average_time": stats["total_time"] / stats["count"] if stats["count"] > 0 else 0.0,
+            "max_time": stats["max_time"],
+            "min_time": stats["min_time"] if stats["min_time"] != float('inf') else 0.0,
+        }
+    
+    # 處理慢請求格式（兼容舊格式）
+    slow_requests_formatted = []
+    for req in _performance_stats["slow_requests"][-20:]:
+        slow_requests_formatted.append({
+            "method": req.get("method", ""),
+            "path": req.get("path", ""),
+            "response_time": req.get("response_time_ms", 0),
+            "response_time_ms": req.get("response_time_ms", 0),
+            "timestamp": req.get("timestamp", datetime.now().isoformat()) if "timestamp" in req else datetime.now().isoformat(),
+        })
+    
     return {
         "request_count": _performance_stats["request_count"],
-        "average_response_time_ms": round(avg_response_time, 2),
-        "total_response_time_ms": round(_performance_stats["total_response_time"], 2),
+        "total_response_time": _performance_stats["total_response_time"],
+        "average_response_time": round(avg_response_time, 2),
+        "average_response_time_ms": round(avg_response_time, 2),  # 兼容舊格式
+        "total_response_time_ms": round(_performance_stats["total_response_time"], 2),  # 兼容舊格式
         "slow_requests_count": len(_performance_stats["slow_requests"]),
-        "slow_requests": _performance_stats["slow_requests"][-20:],  # 最近 20 個慢請求
+        "slow_requests": slow_requests_formatted,
+        "requests_by_endpoint": requests_by_endpoint,
+        "requests_by_status": _performance_stats["requests_by_status"],
     }
 
 
@@ -212,5 +265,7 @@ def reset_performance_stats():
         "request_count": 0,
         "total_response_time": 0.0,
         "slow_requests": [],
+        "requests_by_endpoint": {},
+        "requests_by_status": {},
     }
 

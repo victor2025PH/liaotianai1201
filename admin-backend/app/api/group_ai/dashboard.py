@@ -12,6 +12,9 @@ from sqlalchemy import func, and_, case
 from app.db import SessionLocal
 from app.models.group_ai import GroupAIAccount, GroupAIDialogueHistory, GroupAIMetric
 from app.api.group_ai.servers import load_server_configs
+from app.api.deps import get_current_active_user
+from app.models.user import User
+from fastapi import Depends
 
 logger = logging.getLogger(__name__)
 
@@ -367,7 +370,9 @@ def calculate_change(current: float, previous: float, reverse: bool = False, is_
 
 
 @router.get("/")
-async def get_dashboard():
+async def get_dashboard(
+    current_user: User = Depends(get_current_active_user)
+):
     """獲取儀表板統計數據（從群組AI系統）"""
     return get_dashboard_stats()
 

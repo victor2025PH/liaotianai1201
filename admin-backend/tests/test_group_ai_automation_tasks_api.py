@@ -73,7 +73,7 @@ class TestAutomationTasksAPI:
             "notify_recipients": ["admin@example.com"]
         }
         
-        with patch('app.api.group_ai.automation_tasks.get_task_scheduler') as mock_get_scheduler:
+        with patch('app.services.task_scheduler.get_task_scheduler') as mock_get_scheduler:
             mock_scheduler = MagicMock()
             mock_scheduler.is_running = False
             mock_get_scheduler.return_value = mock_scheduler

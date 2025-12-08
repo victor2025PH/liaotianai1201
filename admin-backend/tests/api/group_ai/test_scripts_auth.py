@@ -57,7 +57,7 @@ def test_user(db_session: Session) -> User:
 @pytest.fixture
 def auth_token(test_user: User) -> str:
     """生成认证 token"""
-    return create_access_token(data={"sub": test_user.email})
+    return create_access_token(subject=test_user.email)
 
 
 class TestScriptsAuth:

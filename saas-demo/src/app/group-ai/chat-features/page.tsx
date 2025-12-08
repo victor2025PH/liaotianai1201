@@ -332,7 +332,7 @@ export default function ChatFeaturesPage() {
               <CardDescription>配置自動聊天行為</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-6">
                 {/* 功能開關 */}
                 <div className="space-y-4">
                   <h3 className="font-semibold">功能開關</h3>
@@ -379,8 +379,8 @@ export default function ChatFeaturesPage() {
                 </div>
 
                 {/* 參數設置 */}
-                <div className="space-y-3">
-                  <h3 className="font-semibold mb-2">參數設置</h3>
+                <div className="space-y-4">
+                  <h3 className="font-semibold">參數設置</h3>
                   <div className="space-y-1.5">
                     <Label className="text-sm">聊天間隔（秒）</Label>
                     <div className="flex items-center gap-2">

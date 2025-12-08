@@ -241,15 +241,39 @@ class FormatConverter:
     
     def _convert_with_rules(
         self, 
-        old_data: Dict[str, Any],
+        old_data: Any,  # 可能是dict、list或str
         script_id: Optional[str] = None,
         script_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """使用规则进行转换（降级方案）"""
+        # 如果 old_data 是字符串，无法使用规则转换，返回默认格式
+        if isinstance(old_data, str):
+            logger.warning("无法使用规则转换纯文本，返回默认格式")
+            return {
+                "script_id": script_id or "converted_script",
+                "version": "1.0",
+                "description": script_name or "转换自纯文本",
+                "scenes": [
+                    {
+                        "id": "default",
+                        "triggers": [{"type": "message"}],
+                        "responses": [{"template": "已收到您的消息"}]
+                    }
+                ]
+            }
+        
+        # 确保 old_data 是字典或列表
+        if not isinstance(old_data, (dict, list)):
+            logger.warning(f"无法识别的格式类型: {type(old_data)}")
+            raise ValueError(f"格式转换失败: 无法识别的格式类型 {type(old_data)}")
+        
         # 提取script_id，確保是字符串
         if not script_id:
-            script_id_value = old_data.get("script_id", "converted_script")
-            script_id = str(script_id_value) if script_id_value is not None else "converted_script"
+            if isinstance(old_data, dict):
+                script_id_value = old_data.get("script_id", "converted_script")
+                script_id = str(script_id_value) if script_id_value is not None else "converted_script"
+            else:
+                script_id = "converted_script"
         else:
             script_id = str(script_id)
         

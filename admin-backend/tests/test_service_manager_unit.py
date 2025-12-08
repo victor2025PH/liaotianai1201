@@ -385,7 +385,7 @@ scenes:
             pytest.skip("YAML 解析失敗，無法初始化賬號服務")
     
     @pytest.mark.asyncio
-    async def test_start_account_success(self, service_manager, account_config):
+    async def test_start_account_success(self, service_manager, account_config, tmp_path):
         """測試啟動賬號（成功）"""
         # 創建模擬劇本
         from group_ai_service.script_parser import Script, Scene, Trigger, Response
@@ -401,6 +401,11 @@ scenes:
             }
         )
         service_manager._scripts_cache["test_script"] = mock_script
+        
+        # 創建臨時 Session 文件
+        session_file = tmp_path / "test.session"
+        session_file.touch()
+        account_config.session_file = str(session_file)
         
         # Mock account_manager
         mock_account = Mock()
@@ -425,7 +430,7 @@ scenes:
         service_manager.account_manager.start_account.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_start_account_creates_session_pool(self, service_manager, account_config):
+    async def test_start_account_creates_session_pool(self, service_manager, account_config, tmp_path):
         """測試啟動賬號（創建會話池）"""
         # 創建模擬劇本
         from group_ai_service.script_parser import Script, Scene, Trigger, Response
@@ -441,6 +446,11 @@ scenes:
             }
         )
         service_manager._scripts_cache["test_script"] = mock_script
+        
+        # 創建臨時 Session 文件
+        session_file = tmp_path / "test.session"
+        session_file.touch()
+        account_config.session_file = str(session_file)
         
         # Mock account_manager
         mock_account = Mock()

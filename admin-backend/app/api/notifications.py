@@ -74,6 +74,15 @@ class NotificationConfigRead(BaseModel):
     enabled: bool
     created_at: str
     updated_at: str
+    
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def parse_datetime(cls, v):
+        """将 datetime 对象转换为 ISO 格式字符串"""
+        from datetime import datetime
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
 
 
 class NotificationRead(BaseModel):

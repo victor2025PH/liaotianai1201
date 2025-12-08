@@ -10,6 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { RefreshCw, TrendingUp, TrendingDown, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { fetchWithAuth } from "@/lib/api/client";
+import { getApiBaseUrl } from "@/lib/api/config";
 
 interface PerformanceStats {
   request_count: number;
@@ -18,8 +20,9 @@ interface PerformanceStats {
   slow_requests: Array<{
     path: string;
     method: string;
-    response_time: number;
-    timestamp: string;
+    response_time?: number;
+    response_time_ms?: number;
+    timestamp?: string;
   }>;
   requests_by_endpoint: Record<string, {
     count: number;
@@ -32,11 +35,8 @@ interface PerformanceStats {
 }
 
 async function fetchPerformanceStats(): Promise<PerformanceStats> {
-  const response = await fetch("/api/v1/system/performance", {
-    headers: {
-      "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
-    },
-  });
+  const apiBase = getApiBaseUrl();
+  const response = await fetchWithAuth(`${apiBase}/system/performance`);
   
   if (!response.ok) {
     throw new Error("获取性能数据失败");
@@ -116,7 +116,7 @@ export default function PerformancePage() {
     );
   }
 
-  const avgResponseTime = stats?.average_response_time || 0;
+  const avgResponseTime = stats?.average_response_time || stats?.average_response_time_ms || 0;
   const slowRequestsCount = stats?.slow_requests?.length || 0;
   const totalRequests = stats?.request_count || 0;
 
@@ -285,7 +285,7 @@ export default function PerformancePage() {
                     {stats.slow_requests.map((req, idx) => (
                       <TableRow key={idx}>
                         <TableCell className="text-sm">
-                          {new Date(req.timestamp).toLocaleString()}
+                          {req.timestamp ? new Date(req.timestamp).toLocaleString() : "未知"}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">{req.method}</Badge>
@@ -293,7 +293,7 @@ export default function PerformancePage() {
                         <TableCell className="font-mono text-sm">{req.path}</TableCell>
                         <TableCell>
                           <Badge variant="destructive">
-                            {req.response_time.toFixed(0)}ms
+                            {(req.response_time || req.response_time_ms || 0).toFixed(0)}ms
                           </Badge>
                         </TableCell>
                       </TableRow>

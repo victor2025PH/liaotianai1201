@@ -77,11 +77,23 @@ def analyze_slow_queries():
         print(f"✓ 脚本列表查询: {elapsed:.2f}ms ({len(rows)} 行)")
         
         # 测试3: 查询对话历史（带时间范围）
+        # 根据数据库类型使用不同的SQL语法
+        from sqlalchemy import inspect as sql_inspect
+        inspector = sql_inspect(engine)
+        is_postgresql = 'postgresql' in str(engine.url)
+        
         start = time.time()
-        result = db.execute(text("""
-            SELECT COUNT(*) FROM group_ai_dialogue_history 
-            WHERE timestamp > NOW() - INTERVAL '24 hours'
-        """))
+        if is_postgresql:
+            result = db.execute(text("""
+                SELECT COUNT(*) FROM group_ai_dialogue_history 
+                WHERE timestamp > NOW() - INTERVAL '24 hours'
+            """))
+        else:
+            # SQLite语法
+            result = db.execute(text("""
+                SELECT COUNT(*) FROM group_ai_dialogue_history 
+                WHERE timestamp > datetime('now', '-24 hours')
+            """))
         elapsed = (time.time() - start) * 1000
         results["dialogue_recent"] = {"time_ms": elapsed, "rows": result.scalar()}
         print(f"✓ 最近对话查询: {elapsed:.2f}ms")

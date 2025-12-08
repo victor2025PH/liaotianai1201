@@ -19,7 +19,7 @@ from app.services.alert_aggregator import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/alerts", tags=["alert-management"])
+router = APIRouter(tags=["alert-management"])
 
 
 class AlertSuppressRequest(BaseModel):

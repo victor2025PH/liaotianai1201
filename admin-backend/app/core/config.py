@@ -82,6 +82,16 @@ class Settings(BaseSettings):
         description="是否启用认证调试日志（[AUTH DEBUG]），仅在开发/调试时启用"
     )
     
+    # Telegram API 配置（可选，用于群组 AI 服务）
+    telegram_api_id: str = Field(default="", description="Telegram API ID")
+    telegram_api_hash: str = Field(default="", description="Telegram API Hash")
+    telegram_session_name: str = Field(default="", description="Telegram Session Name")
+    telegram_session_file: str = Field(default="", description="Telegram Session File Path")
+    
+    # OpenAI API 配置（可选，用于格式转换等 AI 功能）
+    openai_api_key: str = Field(default="", description="OpenAI API Key")
+    openai_model: str = Field(default="gpt-4o-mini", description="OpenAI Model Name")
+    
     @classmethod
     def parse_env_var(cls, field_name: str, raw_val: str) -> any:
         """解析環境變量，支持布爾值字符串"""
@@ -94,8 +104,8 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
-        # 优先使用环境变量，然后使用 .env 文件
-        env_file_encoding = "utf-8"
+        # 允许额外字段（忽略未定义的字段，避免测试环境配置错误）
+        extra = "ignore"
 
 
 @lru_cache

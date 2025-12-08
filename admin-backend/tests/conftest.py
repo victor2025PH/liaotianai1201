@@ -34,20 +34,39 @@ from app.models.user import User
 
 @pytest.fixture(scope="session", autouse=True)
 def prepare_database():
-    db_path = Path(get_settings().database_url.split("///")[-1])
-    if db_path.exists():
-        try:
-            os.remove(db_path)
-        except PermissionError:
-            # 如果文件被占用，尝试使用临时数据库
-            import tempfile
-            db_path = Path(tempfile.gettempdir()) / "test_admin.db"
-            # 更新设置使用临时数据库
-            import app.core.config
-            app.core.config.get_settings.cache_clear()
-            os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
+    settings = get_settings()
+    database_url = settings.database_url
+    
+    # 检查是否是 PostgreSQL（需要 CASCADE 删除）
+    is_postgresql = database_url.startswith("postgresql://") or database_url.startswith("postgres://")
+    
+    # 如果是 SQLite，尝试删除文件
+    if not is_postgresql:
+        db_path = Path(database_url.split("///")[-1])
+        if db_path.exists():
+            try:
+                os.remove(db_path)
+            except PermissionError:
+                # 如果文件被占用，尝试使用临时数据库
+                import tempfile
+                db_path = Path(tempfile.gettempdir()) / "test_admin.db"
+                # 更新设置使用临时数据库
+                import app.core.config
+                app.core.config.get_settings.cache_clear()
+                os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
 
-    Base.metadata.drop_all(bind=engine)
+    # 删除所有表（PostgreSQL 需要 CASCADE）
+    if is_postgresql:
+        # PostgreSQL 需要先删除外键约束，然后删除表
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            # 禁用外键检查（PostgreSQL 不支持，需要手动删除约束）
+            # 使用 CASCADE 删除所有表
+            conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
+            conn.commit()
+    else:
+        Base.metadata.drop_all(bind=engine)
+    
     Base.metadata.create_all(bind=engine)
 
     settings = get_settings()

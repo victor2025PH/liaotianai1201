@@ -125,11 +125,11 @@ def run_benchmark_suite(token: str) -> Dict[str, Any]:
     test_endpoints = [
         ("GET", "/health", None, None),
         ("GET", "/healthz", None, None),
-        ("GET", f"{API_BASE}/group-ai/dashboard", headers, None),
-        ("GET", f"{API_BASE}/group-ai/scripts", headers, None),
-        ("GET", f"{API_BASE}/group-ai/accounts", headers, None),
-        ("GET", f"{API_BASE}/group-ai/monitor/accounts/metrics", headers, None),
-        ("GET", f"{API_BASE}/system/performance", headers, None),
+        ("GET", "/api/v1/group-ai/dashboard", headers, None),
+        ("GET", "/api/v1/group-ai/scripts", headers, None),
+        ("GET", "/api/v1/group-ai/accounts", headers, None),
+        ("GET", "/api/v1/group-ai/monitor/accounts/metrics", headers, None),
+        ("GET", "/api/v1/system/performance", headers, None),
     ]
     
     for method, endpoint, endpoint_headers, data in test_endpoints:

@@ -5,7 +5,7 @@ import logging
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 
 from app.api.deps import get_current_active_user, get_db_session
 from app.models.user import User
@@ -151,6 +151,15 @@ class NotificationTemplateRead(BaseModel):
     enabled: bool
     created_at: str
     updated_at: str
+    
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def parse_datetime(cls, v):
+        """将 datetime 对象转换为 ISO 格式字符串"""
+        from datetime import datetime
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
 
 
 class NotificationTemplateListResponse(BaseModel):

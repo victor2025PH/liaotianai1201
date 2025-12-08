@@ -172,13 +172,23 @@ async def get_redpacket_history(
         
         history_items = []
         for result in results:
+            # 確保所有數據都是可序列化的
+            # 處理 timestamp
+            timestamp = result.timestamp
+            if isinstance(timestamp, datetime):
+                timestamp_str = timestamp.isoformat()
+            elif timestamp is None:
+                timestamp_str = datetime.now().isoformat()
+            else:
+                timestamp_str = str(timestamp)
+            
             history_items.append(RedpacketHistoryItem(
-                redpacket_id=result.redpacket_id,
-                account_id=result.account_id,
-                success=result.success,
-                amount=result.amount,
-                error=result.error,
-                timestamp=result.timestamp.isoformat() if isinstance(result.timestamp, datetime) else str(result.timestamp)
+                redpacket_id=str(result.redpacket_id),
+                account_id=str(result.account_id),
+                success=bool(result.success),
+                amount=float(result.amount) if result.amount is not None else None,
+                error=str(result.error) if result.error else None,
+                timestamp=timestamp_str
             ))
         
         return RedpacketHistoryResponse(

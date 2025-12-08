@@ -162,14 +162,27 @@ async def get_dialogue_context(
                 detail=f"未找到對話上下文 (賬號: {account_id}, 群組: {group_id})"
             )
         
+        # 確保所有數據都是可序列化的
+        last_reply_time_str = None
+        if context.last_reply_time:
+            if isinstance(context.last_reply_time, datetime):
+                last_reply_time_str = context.last_reply_time.isoformat()
+            else:
+                last_reply_time_str = str(context.last_reply_time)
+        
+        # 確保 mentioned_users 是可序列化的
+        mentioned_users_list = []
+        if context.mentioned_users:
+            mentioned_users_list = [int(u) if isinstance(u, (int, str)) else 0 for u in context.mentioned_users]
+        
         return DialogueContextResponse(
-            account_id=context.account_id,
-            group_id=context.group_id,
-            history_count=len(context.history),
-            last_reply_time=context.last_reply_time.isoformat() if context.last_reply_time else None,
-            reply_count_today=context.reply_count_today,
-            current_topic=context.current_topic,
-            mentioned_users=list(context.mentioned_users)
+            account_id=str(context.account_id),
+            group_id=int(context.group_id),
+            history_count=int(len(context.history)),
+            last_reply_time=last_reply_time_str,
+            reply_count_today=int(context.reply_count_today),
+            current_topic=str(context.current_topic) if context.current_topic else None,
+            mentioned_users=mentioned_users_list
         )
     
     except HTTPException:
@@ -216,10 +229,22 @@ async def get_dialogue_history(
         
         history_items = []
         for item in recent_history:
+            # 確保所有數據都是可序列化的
+            if not isinstance(item, dict):
+                continue
+            # 處理 timestamp
+            timestamp = item.get("timestamp")
+            if isinstance(timestamp, datetime):
+                timestamp_str = timestamp.isoformat()
+            elif timestamp is None:
+                timestamp_str = datetime.now().isoformat()
+            else:
+                timestamp_str = str(timestamp)
+            
             history_items.append(DialogueHistoryItem(
                 role=item.get("role", "user"),
-                content=item.get("content", ""),
-                timestamp=item.get("timestamp", datetime.now()).isoformat() if isinstance(item.get("timestamp"), datetime) else str(item.get("timestamp", "")),
+                content=str(item.get("content", "")),
+                timestamp=timestamp_str,
                 message_id=item.get("message_id"),
                 user_id=item.get("user_id")
             ))

@@ -84,7 +84,8 @@ def test_update_account_not_found():
         },
         headers={"Authorization": f"Bearer {token}"}
     )
-    assert resp.status_code in [404, 500]
+    # UPSERT 模式：如果账号不存在且没有提供 server_id，返回 400；如果提供了 server_id，会创建新记录返回 200
+    assert resp.status_code in [400, 404, 500]
 
 
 def test_delete_account_not_found():

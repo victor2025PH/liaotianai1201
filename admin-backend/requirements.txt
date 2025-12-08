@@ -45,3 +45,8 @@ pyyaml>=6.0.1
 # 異步支持
 aiofiles>=23.2.1
 
+# 測試框架
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+anyio>=4.0.0
+

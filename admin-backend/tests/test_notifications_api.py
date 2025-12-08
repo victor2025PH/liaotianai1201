@@ -45,7 +45,7 @@ class TestNotificationConfigAPI:
             "/api/v1/notifications/configs",
             json={
                 "name": unique_name,
-                "notification_type": "EMAIL",
+                "notification_type": "email",  # 使用小写，匹配 NotificationType 枚举值
                 "config_data": {"smtp_host": "smtp.example.com"},
                 "recipients": ["admin@example.com"]
             },
@@ -97,7 +97,7 @@ class TestNotificationTemplateAPI:
             "/api/v1/notifications/templates",
             json={
                 "name": unique_name,
-                "notification_type": "EMAIL",
+                "notification_type": "email",  # 使用小写，匹配 NotificationType 枚举值
                 "title_template": "標題: {{title}}",
                 "body_template": "內容: {{message}}"
             },

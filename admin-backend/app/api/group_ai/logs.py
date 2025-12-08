@@ -8,8 +8,11 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from pydantic import BaseModel
+
+from app.api.deps import get_current_active_user
+from app.models.user import User
 
 # 延迟导入以避免循环导入
 # from app.api.group_ai.servers import load_server_configs
@@ -151,12 +154,13 @@ def get_local_logs(log_dir: Path = None, lines: int = 100) -> List[dict]:
     return all_logs
 
 
-@router.get("/", response_model=LogList)
+@router.get("/", response_model=LogList, dependencies=[Depends(get_current_active_user)])
 async def list_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     level: Optional[str] = Query(None, pattern="^(error|warning|info)$"),
     q: Optional[str] = Query(None, description="搜索關鍵詞"),
+    current_user: User = Depends(get_current_active_user),
 ) -> LogList:
     """獲取系統日誌列表（從遠程服務器和本地服務）"""
     try:

@@ -1,5 +1,0 @@
-python main.py
-
-py main.py
-
-加频道和群聊天和转发视频

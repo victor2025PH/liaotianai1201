@@ -9,8 +9,9 @@ import sqlalchemy as sa
 
 # revision identifiers
 revision = '005_merge_heads_and_add_indexes'
-# 合并所有分支：基于最新的两个 head
-down_revision = ('004_add_performance_indexes', 'xxxx_add_telegram_registration')
+# 合并所有分支：基于现有的两个 head
+# 注意：004_add_performance_indexes 已被删除，直接基于现有的 head
+down_revision = ('003_add_script_version_management', 'xxxx_add_telegram_registration')
 branch_labels = None
 depends_on = None
 

@@ -278,14 +278,19 @@ class FormatConverter:
             script_id = str(script_id)
         
         # 提取version，確保是字符串
-        version_value = old_data.get("version", "1.0")
-        version = str(version_value) if version_value is not None else "1.0"
+        if isinstance(old_data, dict):
+            version_value = old_data.get("version", "1.0")
+            version = str(version_value) if version_value is not None else "1.0"
+            description = script_name or old_data.get("description", "转换自旧格式")
+        else:
+            version = "1.0"
+            description = script_name or "转换自旧格式"
         
         # 构建新格式
         new_data = {
             "script_id": script_id,
             "version": version,
-            "description": script_name or old_data.get("description", "转换自旧格式"),
+            "description": description,
             "scenes": []
         }
         
@@ -362,7 +367,14 @@ class FormatConverter:
                         new_data["scenes"].append(scene)
             else:
                 # 可能是其他格式，尝试直接使用
-                raise ValueError("无法识别的格式，请确保是旧格式（包含step和lines字段）或新格式（包含script_id和scenes字段）")
+                # 检查是否是新格式（但缺少 scenes）
+                if "script_id" in old_data:
+                    # 可能是新格式但结构不完整，尝试修复
+                    if "scenes" not in old_data:
+                        old_data["scenes"] = []
+                    return old_data
+                else:
+                    raise ValueError("格式转换失败: 无法识别的格式。请确保是旧格式（包含step和lines字段）或新格式（包含script_id和scenes字段）")
         
         # 验证转换结果
         if not new_data.get("scenes"):

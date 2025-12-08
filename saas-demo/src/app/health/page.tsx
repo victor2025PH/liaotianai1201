@@ -235,25 +235,25 @@ export default function HealthCheckPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-600">
-                    {componentsByStatus.healthy?.length || 0}
+                    {healthData.summary?.healthy ?? componentsByStatus.healthy?.length ?? 0}
                   </div>
                   <div className="text-sm text-muted-foreground">健康</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-yellow-600">
-                    {componentsByStatus.degraded?.length || 0}
+                    {healthData.summary?.degraded ?? componentsByStatus.degraded?.length ?? 0}
                   </div>
                   <div className="text-sm text-muted-foreground">降级</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-red-600">
-                    {componentsByStatus.unhealthy?.length || 0}
+                    {healthData.summary?.unhealthy ?? componentsByStatus.unhealthy?.length ?? 0}
                   </div>
                   <div className="text-sm text-muted-foreground">异常</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-gray-600">
-                    {componentsByStatus.unknown?.length || 0}
+                    {healthData.summary?.unknown ?? componentsByStatus.unknown?.length ?? 0}
                   </div>
                   <div className="text-sm text-muted-foreground">未知</div>
                 </div>

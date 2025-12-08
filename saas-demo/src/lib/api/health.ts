@@ -19,6 +19,12 @@ export interface HealthCheckResponse {
   status: "healthy" | "degraded" | "unhealthy";
   components: ComponentHealth[];
   timestamp: string;
+  summary?: {
+    healthy: number;
+    degraded: number;
+    unhealthy: number;
+    unknown: number;
+  };
 }
 
 /**

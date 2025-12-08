@@ -536,9 +536,11 @@ async def get_alerts(
     alert_type: Optional[str] = Query(None, description="告警類型（error, warning, info）"),
     resolved: Optional[bool] = Query(None, description="是否已解決"),
     check_rules: bool = Query(False, description="是否執行告警規則檢查"),
+    use_aggregation: bool = Query(True, description="是否使用告警聚合"),
+    severity: Optional[str] = Query(None, description="告警嚴重程度（critical, high, medium, low）"),
     db: Session = Depends(get_db)
 ):
-    """獲取告警列表"""
+    """獲取告警列表（支持聚合和去重）"""
     try:
         # 如果請求執行告警規則檢查，先檢查規則
         if check_rules:
@@ -551,6 +553,28 @@ async def get_alerts(
                     new_alerts = monitor_service.check_alerts(alert_rules=enabled_rules)
                     if new_alerts:
                         logger.info(f"告警規則檢查觸發了 {len(new_alerts)} 個新告警")
+                        
+                        # 如果啟用聚合，將新告警添加到聚合器
+                        if use_aggregation:
+                            from app.services.alert_aggregator import get_alert_aggregator, AlertSeverity
+                            aggregator = get_alert_aggregator()
+                            
+                            for alert in new_alerts:
+                                # 確定嚴重程度
+                                alert_severity = None
+                                if severity:
+                                    try:
+                                        alert_severity = AlertSeverity(severity)
+                                    except ValueError:
+                                        pass
+                                
+                                aggregator.add_alert(
+                                    alert_type=alert.alert_type,
+                                    message=alert.message,
+                                    account_id=alert.account_id,
+                                    timestamp=alert.timestamp,
+                                    severity=alert_severity
+                                )
                 else:
                     # 沒有啟用的規則，使用默認規則（向後兼容）
                     monitor_service.check_alerts()
@@ -558,7 +582,52 @@ async def get_alerts(
                 logger.warning(f"執行告警規則檢查失敗，使用默認規則: {e}")
                 monitor_service.check_alerts()
         
-        # 獲取最近的告警
+        # 如果使用聚合，從聚合器獲取告警
+        if use_aggregation:
+            from app.services.alert_aggregator import get_alert_aggregator, AlertSeverity
+            aggregator = get_alert_aggregator()
+            
+            # 清理舊告警
+            aggregator.cleanup_old_alerts()
+            
+            # 獲取活躍告警
+            alert_severity = None
+            if severity:
+                try:
+                    alert_severity = AlertSeverity(severity)
+                except ValueError:
+                    pass
+            
+            aggregated_alerts = aggregator.get_active_alerts(
+                severity=alert_severity,
+                limit=limit
+            )
+            
+            # 轉換為 AlertResponse
+            result = []
+            for agg in aggregated_alerts:
+                # 過濾告警類型
+                if alert_type and agg.alert_type != alert_type:
+                    continue
+                
+                # 過濾已解決/未解決
+                if resolved is not None:
+                    is_resolved = agg.status.value == "resolved"
+                    if resolved != is_resolved:
+                        continue
+                
+                result.append(AlertResponse(
+                    alert_id=agg.alert_key,
+                    alert_type=agg.alert_type,
+                    account_id=agg.account_id,
+                    message=f"{agg.message} (出现 {agg.count} 次)" if agg.count > 1 else agg.message,
+                    timestamp=agg.last_occurrence.isoformat(),
+                    resolved=agg.status.value == "resolved"
+                ))
+            
+            return result[:limit]
+        
+        # 不使用聚合，返回原始告警列表
         alerts = monitor_service.get_recent_alerts(limit=limit, alert_type=alert_type)
         
         # 過濾已解決/未解決

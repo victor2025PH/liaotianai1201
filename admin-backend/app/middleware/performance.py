@@ -4,6 +4,7 @@
 """
 import time
 import logging
+from datetime import datetime
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Callable
@@ -28,7 +29,9 @@ except ImportError:
 _performance_stats = {
     "request_count": 0,
     "total_response_time": 0.0,
-    "slow_requests": []  # 存儲慢請求（> 1000ms）
+    "slow_requests": [],  # 存儲慢請求（> 1000ms）
+    "requests_by_endpoint": {},  # 按端點分組的統計
+    "requests_by_status": {},  # 按狀態碼分組的統計
 }
 
 

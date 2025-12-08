@@ -161,6 +161,13 @@ const navigationConfig: NavItem[] = [
     descKey: "systemMonitor",
   },
   {
+    nameKey: "healthCheck",
+    href: "/health",
+    icon: Activity,
+    step: null,
+    descKey: "healthCheck",
+  },
+  {
     nameKey: "alertSettings",
     href: "/settings/alerts",
     icon: Settings,

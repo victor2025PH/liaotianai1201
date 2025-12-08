@@ -1,0 +1,132 @@
+# 告警规则配置
+# 定义系统监控阈值和告警规则
+
+# 性能告警规则
+performance:
+  # API响应时间告警
+  api_response_time:
+    enabled: true
+    threshold_ms: 1000  # 超过1000ms触发告警
+    severity: "medium"
+    message: "API响应时间超过阈值: {endpoint} 响应时间 {time_ms}ms"
+    check_interval: 60  # 每60秒检查一次
+  
+  # 慢查询告警
+  slow_query:
+    enabled: true
+    threshold_ms: 500  # 超过500ms的查询
+    severity: "high"
+    message: "检测到慢查询: {query} 耗时 {time_ms}ms"
+    check_interval: 300  # 每5分钟检查一次
+  
+  # 缓存命中率告警
+  cache_hit_rate:
+    enabled: true
+    threshold: 0.5  # 命中率低于50%
+    severity: "low"
+    message: "缓存命中率过低: {hit_rate}%"
+    check_interval: 300
+
+# 系统资源告警规则
+system:
+  # CPU使用率告警
+  cpu_usage:
+    enabled: true
+    threshold_percent: 80  # CPU使用率超过80%
+    severity: "high"
+    message: "CPU使用率过高: {usage}%"
+    check_interval: 60
+  
+  # 内存使用率告警
+  memory_usage:
+    enabled: true
+    threshold_percent: 85  # 内存使用率超过85%
+    severity: "high"
+    message: "内存使用率过高: {usage}%"
+    check_interval: 60
+  
+  # 磁盘使用率告警
+  disk_usage:
+    enabled: true
+    threshold_percent: 90  # 磁盘使用率超过90%
+    severity: "critical"
+    message: "磁盘使用率过高: {usage}%"
+    check_interval: 300
+
+# 服务健康告警规则
+services:
+  # 后端服务告警
+  backend:
+    enabled: true
+    health_check_url: "http://localhost:8000/health"
+    timeout_seconds: 5
+    failure_threshold: 3  # 连续3次失败触发告警
+    severity: "critical"
+    message: "后端服务健康检查失败"
+    check_interval: 30
+  
+  # 前端服务告警
+  frontend:
+    enabled: true
+    health_check_url: "http://localhost:3000"
+    timeout_seconds: 5
+    failure_threshold: 3
+    severity: "high"
+    message: "前端服务健康检查失败"
+    check_interval: 30
+  
+  # 数据库连接告警
+  database:
+    enabled: true
+    connection_timeout: 5
+    failure_threshold: 2
+    severity: "critical"
+    message: "数据库连接失败"
+    check_interval: 60
+
+# 业务告警规则
+business:
+  # 账号启动失败告警
+  account_startup_failure:
+    enabled: true
+    failure_threshold: 3  # 连续3次启动失败
+    severity: "high"
+    message: "账号启动失败: {account_id} - {reason}"
+    check_interval: 300
+  
+  # 脚本执行错误告警
+  script_execution_error:
+    enabled: true
+    error_threshold: 10  # 10分钟内错误超过阈值
+    severity: "medium"
+    message: "脚本执行错误率过高: {script_id} - {error_count} 错误"
+    check_interval: 600
+
+# 告警通知配置
+notifications:
+  # 邮件通知
+  email:
+    enabled: true
+    recipients:
+      - "admin@example.com"
+    severity_levels: ["critical", "high"]  # 只通知严重和高级别告警
+  
+  # Telegram通知
+  telegram:
+    enabled: false
+    chat_id: ""
+    severity_levels: ["critical"]
+  
+  # Webhook通知
+  webhook:
+    enabled: false
+    url: ""
+    severity_levels: ["critical", "high", "medium"]
+
+# 告警聚合配置
+aggregation:
+  enabled: true
+  deduplication_window: 300  # 5分钟内相同告警去重
+  aggregation_window: 3600  # 1小时内相同类型告警聚合
+  max_alerts_per_type: 100  # 每种类型最多保留100条告警
+

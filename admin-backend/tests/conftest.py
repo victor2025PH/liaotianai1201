@@ -111,5 +111,16 @@ def prepare_database():
 
     yield
 
-    Base.metadata.drop_all(bind=engine)
+    # 清理数据库（PostgreSQL 需要 CASCADE）
+    settings = get_settings()
+    database_url = settings.database_url
+    is_postgresql = database_url.startswith("postgresql://") or database_url.startswith("postgres://")
+    
+    if is_postgresql:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
+            conn.commit()
+    else:
+        Base.metadata.drop_all(bind=engine)
 

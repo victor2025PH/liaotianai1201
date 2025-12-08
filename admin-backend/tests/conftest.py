@@ -10,6 +10,7 @@ if str(ROOT_DIR) not in sys.path:
 
 # 在導入 security 模組之前修補 passlib 的 bcrypt 初始化
 # 避免 passlib 初始化時使用超過 72 字節的測試密碼
+# 同時修復 bcrypt 版本兼容性問題
 import passlib.handlers.bcrypt as bcrypt_handler
 
 # 保存原始的 detect_wrap_bug 函數
@@ -23,6 +24,17 @@ def _patched_detect_wrap_bug(ident):
 # 在導入 security 之前替換 detect_wrap_bug 函數
 if _original_detect_wrap_bug:
     bcrypt_handler.detect_wrap_bug = _patched_detect_wrap_bug
+
+# 修復 bcrypt 版本兼容性問題（bcrypt.__about__ 不存在）
+try:
+    import bcrypt as _bcrypt_module
+    # 如果 bcrypt 沒有 __about__ 屬性，創建一個模擬的
+    if not hasattr(_bcrypt_module, '__about__'):
+        class _MockAbout:
+            __version__ = getattr(_bcrypt_module, '__version__', '4.0.0')
+        _bcrypt_module.__about__ = _MockAbout()
+except ImportError:
+    pass  # bcrypt 未安裝，跳過
 
 from app.core.config import get_settings
 from app.core.security import get_password_hash

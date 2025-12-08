@@ -15,6 +15,7 @@ from app.api.group_ai.servers import load_server_configs
 from app.api.deps import get_current_active_user
 from app.models.user import User
 from fastapi import Depends
+from app.core.cache import cached
 
 logger = logging.getLogger(__name__)
 
@@ -370,6 +371,7 @@ def calculate_change(current: float, previous: float, reverse: bool = False, is_
 
 
 @router.get("/")
+@cached(prefix="dashboard_stats", ttl=60)  # 緩存 60 秒（儀表板數據更新頻率較低）
 async def get_dashboard(
     current_user: User = Depends(get_current_active_user)
 ):

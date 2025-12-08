@@ -558,6 +558,7 @@ async def create_script(
 
 
 @router.get("/", response_model=List[ScriptResponse])
+@cached(prefix="scripts_list", ttl=120)  # 緩存 120 秒（劇本列表更新頻率較低）
 async def list_scripts(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -572,12 +573,13 @@ async def list_scripts(
     """列出所有劇本（需要 script:view 權限）"""
     check_permission(current_user, PermissionCode.SCRIPT_VIEW.value, db)
     
-    # 暂时禁用缓存（因为 cache_manager.get/set 是异步方法，需要 await）
-    # 在同步上下文中无法使用，暂时跳过缓存功能
-    use_cache = False
-    cache_key = None
+    # 如果提供了強制刷新時間戳，清除緩存
+    if _t is not None:
+        invalidate_cache("scripts_list:*")
     
     try:
+        # 注意：由於使用了 @cached 裝飾器，以下代碼中的緩存邏輯已被裝飾器處理
+        # 這裡保留原有的查詢邏輯
         # 構建查詢
         query = db.query(GroupAIScript)
         

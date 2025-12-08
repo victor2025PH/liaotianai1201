@@ -193,6 +193,7 @@ class AlertResponse(BaseModel):
 
 
 @router.get("/accounts/metrics", response_model=List[AccountMetricsResponse])
+@cached(prefix="accounts_metrics", ttl=30)  # 緩存 30 秒（賬號指標更新頻率中等）
 async def get_accounts_metrics(
     account_id: Optional[str] = Query(None, description="賬號 ID（可選）"),
     db: Session = Depends(get_db)

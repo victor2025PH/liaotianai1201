@@ -38,9 +38,11 @@ def db() -> Session:
 @pytest.fixture
 def test_user(db: Session) -> User:
     """創建測試用戶"""
+    # 使用唯一邮箱避免 UNIQUE constraint 错误
+    unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
     user = create_user(
         db,
-        email="test@example.com",
+        email=unique_email,
         password="testpass123",
         full_name="Test User",
         is_superuser=False,
@@ -59,16 +61,18 @@ def test_role(db: Session) -> Role:
 
 def test_create_user(db: Session):
     """測試創建用戶"""
+    # 使用唯一邮箱避免 UNIQUE constraint 错误
+    unique_email = f"newuser_{uuid.uuid4().hex[:8]}@example.com"
     user = create_user(
         db,
-        email="newuser@example.com",
+        email=unique_email,
         password="newpass123",
         full_name="New User",
         is_superuser=False,
     )
     
     assert user.id is not None
-    assert user.email == "newuser@example.com"
+    assert user.email == unique_email
     assert user.full_name == "New User"
     assert user.is_active is True
     assert user.is_superuser is False
@@ -93,9 +97,11 @@ def test_get_user_by_email_not_found(db: Session):
 
 def test_user_password_hash(db: Session):
     """測試用戶密碼哈希"""
+    # 使用唯一邮箱避免 UNIQUE constraint 错误
+    unique_email = f"hashuser_{uuid.uuid4().hex[:8]}@example.com"
     user = create_user(
         db,
-        email="hashuser@example.com",
+        email=unique_email,
         password="plainpass123",
         full_name="Hash User",
         is_superuser=False,

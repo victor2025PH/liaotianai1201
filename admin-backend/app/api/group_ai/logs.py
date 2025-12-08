@@ -1,15 +1,17 @@
 """
 群組AI系統日誌API
 從遠程服務器和本地服務收集真實日誌
+增強：時間範圍過濾、錯誤分析、聚合統計
 """
 import logging
 import json
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Query, HTTPException, Depends
 from pydantic import BaseModel
+from collections import Counter, defaultdict
 
 from app.api.deps import get_current_active_user
 from app.models.user import User
@@ -31,15 +33,24 @@ class LogEntry(BaseModel):
     severity: str  # high, medium, low
     timestamp: datetime
     source: Optional[str] = None
-    metadata: Optional[dict] = None
 
 
 class LogList(BaseModel):
-    """日誌列表"""
+    """日誌列表響應"""
     items: List[LogEntry]
     total: int
     page: int
     page_size: int
+
+
+class LogStatistics(BaseModel):
+    """日誌統計"""
+    total_logs: int
+    logs_by_level: Dict[str, int]
+    logs_by_source: Dict[str, int]
+    error_count: int
+    warning_count: int
+    recent_errors: List[LogEntry]
 
 
 def get_remote_server_logs(servers_config: dict, lines: int = 100) -> List[dict]:
@@ -48,57 +59,61 @@ def get_remote_server_logs(servers_config: dict, lines: int = 100) -> List[dict]
     
     for node_id, config in servers_config.items():
         try:
-            import paramiko
-            
             host = config.get('host', '')
             user = config.get('user', 'ubuntu')
             password = config.get('password', '')
+            deploy_dir = config.get('deploy_dir', '/opt/group-ai')
+            log_file = f"{deploy_dir}/logs/worker.log"
             
-            ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(host, username=user, password=password, timeout=5)
-            
-            # 獲取systemd服務日誌
-            stdin, stdout, stderr = ssh.exec_command(
-                f'sudo journalctl -u group-ai-worker -n {lines} --no-pager 2>&1'
-            )
-            log_output = stdout.read().decode('utf-8')
-            ssh.close()
-            
-            # 解析日誌
-            import re
-            for line in log_output.strip().split('\n'):
-                if line.strip():
-                    # 解析journalctl格式: Nov 16 20:39:55 hostname start.sh[52283]: INFO:__main__:message
-                    journal_match = re.match(
-                        r'(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+\S+\s+\S+\[.*?\]:\s*(.+)',
-                        line
+            # 嘗試使用paramiko
+            try:
+                import paramiko
+                ssh = paramiko.SSHClient()
+                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ssh.connect(host, username=user, password=password, timeout=5)
+                
+                # 使用journalctl獲取systemd服務日誌
+                stdin, stdout, stderr = ssh.exec_command(
+                    f'sudo journalctl -u group-ai-worker -n {lines} --no-pager 2>&1'
+                )
+                log_output = stdout.read().decode('utf-8')
+                
+                if not log_output.strip() or "No entries" in log_output:
+                    stdin, stdout, stderr = ssh.exec_command(
+                        f'tail -n {lines} {log_file} 2>/dev/null || echo "日誌文件不存在"'
                     )
-                    if journal_match:
-                        timestamp_str, message = journal_match.groups()
-                        # 提取level
-                        level_match = re.match(r'(\w+):', message)
-                        level = level_match.group(1) if level_match else "INFO"
-                        message_clean = re.sub(r'^\w+:', '', message).strip()
-                        
-                        # 判斷嚴重性
-                        severity = "high" if level in ["ERROR", "CRITICAL"] else "medium" if level in ["WARNING"] else "low"
-                        
-                        # 判斷類型
-                        log_type = "系統錯誤" if level in ["ERROR", "CRITICAL"] else "系統警告" if level == "WARNING" else "系統信息"
-                        
-                        all_logs.append({
-                            "id": f"{node_id}-{len(all_logs)}",
-                            "level": level.lower(),
-                            "type": log_type,
-                            "message": message_clean,
-                            "severity": severity,
-                            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # 簡化時間戳
-                            "source": f"{node_id} ({host})",
-                            "metadata": {"node_id": node_id, "host": host}
-                        })
+                    log_output = stdout.read().decode('utf-8')
+                
+                ssh.close()
+                
+                # 解析日誌
+                import re
+                for line in log_output.strip().split('\n'):
+                    if line.strip() and "日誌文件不存在" not in line:
+                        journal_match = re.match(
+                            r'(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+\S+\s+\S+\[.*?\]:\s*(.+)',
+                            line
+                        )
+                        if journal_match:
+                            timestamp_str, message = journal_match.groups()
+                            level_match = re.match(r'(\w+):', message)
+                            level = level_match.group(1).lower() if level_match else "info"
+                            message_clean = re.sub(r'^\w+:', '', message).strip()
+                            
+                            all_logs.append({
+                                "timestamp": timestamp_str.strip(),
+                                "level": level,
+                                "message": message_clean,
+                                "source": f"server_{node_id}",
+                                "type": "system",
+                            })
+            except ImportError:
+                logger.warning(f"paramiko未安裝，跳過服務器 {node_id}")
+            except Exception as e:
+                logger.warning(f"獲取服務器 {node_id} 日誌失敗: {e}")
+                continue
         except Exception as e:
-            logger.warning(f"獲取服務器 {node_id} 日誌失敗: {e}")
+            logger.warning(f"處理服務器 {node_id} 配置失敗: {e}")
             continue
     
     return all_logs
@@ -109,7 +124,6 @@ def get_local_logs(log_dir: Path = None, lines: int = 100) -> List[dict]:
     all_logs = []
     
     if log_dir is None:
-        # 嘗試多個可能的日誌目錄
         possible_dirs = [
             Path.cwd() / "logs",
             Path(__file__).parent.parent.parent.parent.parent / "logs",
@@ -121,32 +135,42 @@ def get_local_logs(log_dir: Path = None, lines: int = 100) -> List[dict]:
                 break
     
     if log_dir and log_dir.exists():
-        # 查找所有日誌文件
         log_files = list(log_dir.glob("*.log")) + list(log_dir.glob("*.txt"))
-        for log_file in log_files[-5:]:  # 只讀取最近5個日誌文件
+        
+        for log_file in log_files:
             try:
                 with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                    log_lines = f.readlines()[-lines:]
-                    for line in log_lines:
-                        if line.strip():
-                            # 簡單解析日誌格式: [2024-01-16 20:00:00][INFO][module] message
-                            import re
-                            match = re.match(r'\[([^\]]+)\]\[(\w+)\]\[([^\]]+)\]\s+(.+)', line)
-                            if match:
-                                timestamp_str, level, module, message = match.groups()
-                                severity = "high" if level in ["ERROR", "CRITICAL"] else "medium" if level == "WARNING" else "low"
-                                log_type = "系統錯誤" if level in ["ERROR", "CRITICAL"] else "系統警告" if level == "WARNING" else "系統信息"
-                                
-                                all_logs.append({
-                                    "id": f"local-{len(all_logs)}",
-                                    "level": level.lower(),
-                                    "type": log_type,
-                                    "message": message.strip(),
-                                    "severity": severity,
-                                    "timestamp": timestamp_str,
-                                    "source": f"本地服務 ({module})",
-                                    "metadata": {"file": str(log_file.name), "module": module}
-                                })
+                    file_lines = f.readlines()
+                    recent_lines = file_lines[-lines:] if len(file_lines) > lines else file_lines
+                    
+                    for line in recent_lines:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        
+                        # 嘗試解析標準日誌格式
+                        import re
+                        match = re.match(
+                            r'(\d{4}-\d{2}-\d{2}[\s\d:]+)\s+(\w+)\s+(.+)',
+                            line
+                        )
+                        if match:
+                            timestamp_str, level, message = match.groups()
+                            all_logs.append({
+                                "timestamp": timestamp_str.strip(),
+                                "level": level.lower(),
+                                "message": message.strip(),
+                                "source": "local",
+                                "type": "application",
+                            })
+                        else:
+                            all_logs.append({
+                                "timestamp": datetime.now().isoformat(),
+                                "level": "info",
+                                "message": line,
+                                "source": "local",
+                                "type": "application",
+                            })
             except Exception as e:
                 logger.warning(f"讀取日誌文件 {log_file} 失敗: {e}")
                 continue
@@ -160,12 +184,14 @@ async def list_logs(
     page_size: int = Query(20, ge=1, le=100),
     level: Optional[str] = Query(None, pattern="^(error|warning|info)$"),
     q: Optional[str] = Query(None, description="搜索關鍵詞"),
+    source: Optional[str] = Query(None, description="日誌來源（過濾）"),
+    start_time: Optional[str] = Query(None, description="開始時間（ISO 8601格式）"),
+    end_time: Optional[str] = Query(None, description="結束時間（ISO 8601格式）"),
     current_user: User = Depends(get_current_active_user),
 ) -> LogList:
-    """獲取系統日誌列表（從遠程服務器和本地服務）"""
+    """獲取系統日誌列表（從遠程服務器和本地服務，支持時間範圍過濾）"""
     try:
         # 1. 從遠程服務器獲取日誌
-        # 延迟导入以避免循环导入
         from app.api.group_ai.servers import load_server_configs
         servers_config = load_server_configs()
         remote_logs = get_remote_server_logs(servers_config, lines=page_size * 3)
@@ -182,6 +208,40 @@ async def list_logs(
         # 5. 過濾級別
         if level:
             all_logs = [log for log in all_logs if log.get("level") == level]
+        
+        # 5.5. 過濾來源
+        if source:
+            all_logs = [log for log in all_logs if log.get("source", "").lower() == source.lower()]
+        
+        # 5.6. 時間範圍過濾
+        if start_time or end_time:
+            try:
+                start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00")) if start_time else None
+                end_dt = datetime.fromisoformat(end_time.replace("Z", "+00:00")) if end_time else None
+                
+                filtered_logs = []
+                for log in all_logs:
+                    log_timestamp = log.get("timestamp")
+                    if isinstance(log_timestamp, str):
+                        try:
+                            log_dt = datetime.fromisoformat(log_timestamp.replace("Z", "+00:00"))
+                        except:
+                            continue
+                    elif isinstance(log_timestamp, datetime):
+                        log_dt = log_timestamp
+                    else:
+                        continue
+                    
+                    if start_dt and log_dt < start_dt:
+                        continue
+                    if end_dt and log_dt > end_dt:
+                        continue
+                    
+                    filtered_logs.append(log)
+                
+                all_logs = filtered_logs
+            except Exception as e:
+                logger.warning(f"時間範圍過濾失敗: {e}")
         
         # 6. 搜索關鍵詞
         if q:
@@ -203,29 +263,25 @@ async def list_logs(
         log_entries = []
         for idx, log in enumerate(paginated_logs):
             try:
-                # 解析時間戳
                 timestamp_str = log.get("timestamp", "")
                 if isinstance(timestamp_str, str):
-                    # 嘗試多種時間格式
                     try:
-                        if " " in timestamp_str:
-                            timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-                        else:
-                            timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                        timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                     except:
                         timestamp = datetime.now()
+                elif isinstance(timestamp_str, datetime):
+                    timestamp = timestamp_str
                 else:
-                    timestamp = log.get("timestamp", datetime.now())
+                    timestamp = datetime.now()
                 
                 log_entries.append(LogEntry(
-                    id=log.get("id", f"log-{idx}"),
+                    id=f"log_{page}_{idx}",
                     level=log.get("level", "info"),
-                    type=log.get("type", "系統信息"),
+                    type=log.get("type", "system"),
                     message=log.get("message", ""),
-                    severity=log.get("severity", "low"),
+                    severity="high" if log.get("level") == "error" else "medium" if log.get("level") == "warning" else "low",
                     timestamp=timestamp,
                     source=log.get("source"),
-                    metadata=log.get("metadata")
                 ))
             except Exception as e:
                 logger.warning(f"轉換日誌條目失敗: {e}")
@@ -235,16 +291,89 @@ async def list_logs(
             items=log_entries,
             total=total,
             page=page,
-            page_size=page_size
+            page_size=page_size,
         )
     
     except Exception as e:
-        logger.exception(f"獲取日誌列表失敗: {e}")
-        # 返回空列表而不是模擬數據
-        return LogList(
-            items=[],
-            total=0,
-            page=page,
-            page_size=page_size
-        )
+        logger.error(f"獲取日誌列表失敗: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"獲取日誌列表失敗: {str(e)}")
 
+
+@router.get("/statistics", response_model=LogStatistics, dependencies=[Depends(get_current_active_user)])
+async def get_log_statistics(
+    hours: int = Query(24, ge=1, le=168, description="統計時間範圍（小時）"),
+    current_user: User = Depends(get_current_active_user),
+) -> LogStatistics:
+    """獲取日誌統計信息（錯誤分析、聚合統計）"""
+    try:
+        from app.api.group_ai.servers import load_server_configs
+        servers_config = load_server_configs()
+        
+        # 獲取指定時間範圍內的日誌
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=hours)
+        
+        remote_logs = get_remote_server_logs(servers_config, lines=1000)
+        local_logs = get_local_logs(lines=1000)
+        all_logs = remote_logs + local_logs
+        
+        # 時間範圍過濾
+        filtered_logs = []
+        for log in all_logs:
+            log_timestamp = log.get("timestamp")
+            if isinstance(log_timestamp, str):
+                try:
+                    log_dt = datetime.fromisoformat(log_timestamp.replace("Z", "+00:00"))
+                except:
+                    continue
+            elif isinstance(log_timestamp, datetime):
+                log_dt = log_timestamp
+            else:
+                continue
+            
+            if log_dt >= start_time and log_dt <= end_time:
+                filtered_logs.append(log)
+        
+        # 統計
+        logs_by_level = Counter(log.get("level", "info") for log in filtered_logs)
+        logs_by_source = Counter(log.get("source", "unknown") for log in filtered_logs)
+        
+        # 獲取最近的錯誤
+        error_logs = [log for log in filtered_logs if log.get("level") == "error"]
+        error_logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        
+        recent_errors = []
+        for idx, log in enumerate(error_logs[:10]):
+            try:
+                timestamp_str = log.get("timestamp", "")
+                if isinstance(timestamp_str, str):
+                    timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                elif isinstance(timestamp_str, datetime):
+                    timestamp = timestamp_str
+                else:
+                    timestamp = datetime.now()
+                
+                recent_errors.append(LogEntry(
+                    id=f"error_{idx}",
+                    level="error",
+                    type=log.get("type", "system"),
+                    message=log.get("message", ""),
+                    severity="high",
+                    timestamp=timestamp,
+                    source=log.get("source"),
+                ))
+            except:
+                continue
+        
+        return LogStatistics(
+            total_logs=len(filtered_logs),
+            logs_by_level=dict(logs_by_level),
+            logs_by_source=dict(logs_by_source),
+            error_count=logs_by_level.get("error", 0),
+            warning_count=logs_by_level.get("warning", 0),
+            recent_errors=recent_errors,
+        )
+    
+    except Exception as e:
+        logger.error(f"獲取日誌統計失敗: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"獲取日誌統計失敗: {str(e)}")

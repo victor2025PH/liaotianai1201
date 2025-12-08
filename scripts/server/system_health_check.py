@@ -2,6 +2,11 @@
 """
 系统健康检查脚本
 检查系统状态、安全配置、备份状态等
+
+使用方法:
+    cd /home/ubuntu/telegram-ai-system/admin-backend
+    source venv/bin/activate
+    python3 ../scripts/server/system_health_check.py
 """
 import sys
 import os
@@ -9,7 +14,14 @@ from pathlib import Path
 
 # 添加项目路径
 project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root / "admin-backend"))
+admin_backend_path = project_root / "admin-backend"
+sys.path.insert(0, str(admin_backend_path))
+
+# 检查虚拟环境
+venv_path = admin_backend_path / "venv"
+if not venv_path.exists():
+    print("⚠ 警告: 未找到虚拟环境，某些检查可能失败")
+    print("   建议: cd admin-backend && source venv/bin/activate && python3 ../scripts/server/system_health_check.py")
 
 import logging
 from datetime import datetime

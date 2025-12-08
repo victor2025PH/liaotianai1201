@@ -224,7 +224,10 @@ export async function getLogs(
   page: number = 1,
   pageSize: number = 20,
   level?: "error" | "warning" | "info",
-  q?: string
+  q?: string,
+  source?: string,
+  startTime?: string,
+  endTime?: string
 ): Promise<ApiResult<LogList>> {
   const params = new URLSearchParams({
     page: page.toString(),
@@ -236,8 +239,33 @@ export async function getLogs(
   if (q) {
     params.append("q", q);
   }
+  if (source) {
+    params.append("source", source);
+  }
+  if (startTime) {
+    params.append("start_time", startTime);
+  }
+  if (endTime) {
+    params.append("end_time", endTime);
+  }
   // 直接使用兼容API，它會調用群組AI API獲取真實日誌
   return apiGet<LogList>(`/logs?${params.toString()}`, { showErrorToast: false });
+}
+
+// Log Statistics API
+export interface LogStatistics {
+  total_logs: number;
+  logs_by_level: Record<string, number>;
+  logs_by_source: Record<string, number>;
+  error_count: number;
+  warning_count: number;
+  recent_errors: LogEntry[];
+}
+
+export async function getLogStatistics(
+  hours: number = 24
+): Promise<ApiResult<LogStatistics>> {
+  return apiGet<LogStatistics>(`/group-ai/logs/statistics?hours=${hours}`, { showErrorToast: false });
 }
 
 // Sessions API with search and filters

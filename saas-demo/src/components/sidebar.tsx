@@ -168,6 +168,13 @@ const navigationConfig: NavItem[] = [
     descKey: "healthCheck",
   },
   {
+    nameKey: "performanceMonitor",
+    href: "/performance",
+    icon: Activity,
+    step: null,
+    descKey: "performanceMonitor",
+  },
+  {
     nameKey: "alertSettings",
     href: "/settings/alerts",
     icon: Settings,

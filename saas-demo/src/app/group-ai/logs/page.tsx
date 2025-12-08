@@ -242,6 +242,36 @@ export default function LogsPage() {
         )}
       </div>
 
+      {/* 日志统计卡片 */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>总日志数</CardDescription>
+              <CardTitle className="text-2xl">{stats.total_logs.toLocaleString()}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>错误数</CardDescription>
+              <CardTitle className="text-2xl text-red-600">{stats.error_count}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>警告数</CardDescription>
+              <CardTitle className="text-2xl text-yellow-600">{stats.warning_count}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>来源数</CardDescription>
+              <CardTitle className="text-2xl">{Object.keys(stats.logs_by_source).length}</CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
+      )}
+
       {/* 搜索和筛选卡片 */}
       <Card>
         <CardHeader>

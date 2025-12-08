@@ -127,6 +127,12 @@ router.include_router(
     # dependencies=protected_dependency,  # 移除路由级别依赖，使用端点级别依赖
 )
 router.include_router(
+    alert_management.router,
+    prefix="/alert-management",
+    tags=["alert-management"],
+    # dependencies=protected_dependency,  # 移除路由级别依赖，使用端点级别依赖
+)
+router.include_router(
     dialogue.router,
     prefix="/dialogue",
     tags=["group-ai-dialogue"],

@@ -402,7 +402,7 @@ export default function SessionsPage() {
                       <div className="flex items-start gap-4">
                         {/* 头像 */}
                         <Avatar className="h-12 w-12">
-                          <AvatarImage src={account.avatar_url} alt={getAvatarName(account)} />
+                          <AvatarImage src={account.avatar_url || undefined} alt={getAvatarName(account)} />
                           <AvatarFallback className="bg-primary text-primary-foreground">
                             {getAvatarName(account).slice(0, 2)}
                           </AvatarFallback>

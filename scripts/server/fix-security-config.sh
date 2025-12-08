@@ -97,18 +97,20 @@ echo -e "${GREEN}✅ 已生成新的 JWT_SECRET${NC}"
 echo -e "${BLUE}更新 .env 文件...${NC}"
 
 # 使用 Python 脚本更新配置
-python3 << EOF
+python3 << PYEOF
 import re
+import os
 from pathlib import Path
 
 env_file = Path("$ENV_FILE")
+new_jwt_secret = "$NEW_JWT_SECRET"
 
 # 读取文件内容
 with open(env_file, 'r', encoding='utf-8') as f:
     content = f.read()
 
 # 更新 JWT_SECRET
-content = re.sub(r'^JWT_SECRET=.*', f'JWT_SECRET={NEW_JWT_SECRET}', content, flags=re.MULTILINE)
+content = re.sub(r'^JWT_SECRET=.*', f'JWT_SECRET={new_jwt_secret}', content, flags=re.MULTILINE)
 
 # 更新 CORS_ORIGINS（如果包含 localhost）
 if 'localhost' in content and 'aikz.usdt2026.cc' not in content:
@@ -124,7 +126,7 @@ with open(env_file, 'w', encoding='utf-8') as f:
     f.write(content)
 
 print("✅ 已更新 JWT_SECRET 和 CORS_ORIGINS")
-EOF
+PYEOF
 
 echo ""
 echo -e "${YELLOW}⚠️  注意: ADMIN_DEFAULT_PASSWORD 需要手动设置${NC}"

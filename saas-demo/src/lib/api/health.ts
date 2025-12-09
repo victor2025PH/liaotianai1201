@@ -1,8 +1,8 @@
 /**
  * 健康检查 API 客户端
  */
-import axios from "axios";
 import { getApiBaseUrl } from "./config";
+import { fetchWithAuth } from "./client";
 
 const API_BASE = getApiBaseUrl();
 
@@ -34,19 +34,26 @@ export interface HealthCheckResponse {
 export async function getHealthCheck(
   detailed: boolean = true
 ): Promise<HealthCheckResponse> {
-  const response = await axios.get<HealthCheckResponse>(`${API_BASE}/health`, {
-    params: { detailed },
-  });
-  return response.data;
+  const url = `${API_BASE}/health${detailed ? "?detailed=true" : ""}`;
+  const response = await fetchWithAuth(url);
+  
+  if (!response.ok) {
+    throw new Error(`健康检查失败: ${response.statusText}`);
+  }
+  
+  return response.json();
 }
 
 /**
  * 快速健康检查（仅检查数据库）
  */
 export async function quickHealthCheck(): Promise<{ status: string }> {
-  const response = await axios.get<{ status: string }>(`${API_BASE}/health`, {
-    params: { detailed: false },
-  });
-  return response.data;
+  const response = await fetchWithAuth(`${API_BASE}/health?detailed=false`);
+  
+  if (!response.ok) {
+    throw new Error(`健康检查失败: ${response.statusText}`);
+  }
+  
+  return response.json();
 }
 

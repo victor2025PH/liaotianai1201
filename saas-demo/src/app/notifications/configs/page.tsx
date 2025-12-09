@@ -56,7 +56,6 @@ import {
   type NotificationTemplateCreate,
   type NotificationTemplatePreviewResponse,
 } from "@/lib/api/notifications"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function NotificationConfigsPage() {
   const [activeTab, setActiveTab] = useState<"configs" | "templates">("configs")

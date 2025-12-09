@@ -34,7 +34,6 @@ import {
   type MetricsHistoryData,
   type MetricsStatistics,
 } from "@/lib/api/group-ai"
-import { MetricsChart } from "@/components/monitor/metrics-chart"
 import { PermissionGuard } from "@/components/permissions/permission-guard"
 
 export default function GroupAIMonitorPage() {

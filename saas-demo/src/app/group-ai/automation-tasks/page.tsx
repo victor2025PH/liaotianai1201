@@ -55,10 +55,13 @@ import {
   type AutomationTaskUpdate,
   type AutomationTaskLog,
 } from "@/lib/api/group-ai"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
+const Switch = dynamic(() => import("@/components/ui/switch").then(mod => ({ default: mod.Switch })), { ssr: false })
 import { PermissionGuard } from "@/components/permissions/permission-guard"
-import { StepIndicator, type Step } from "@/components/step-indicator"
+import type { Step } from "@/components/step-indicator"
+const StepIndicator = dynamic(() => import("@/components/step-indicator").then(mod => ({ default: mod.StepIndicator })), { 
+  ssr: false,
+  loading: () => <Skeleton className="h-20 w-full" />
+})
 import Link from "next/link"
 
 const workflowSteps: Step[] = [

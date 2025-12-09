@@ -74,7 +74,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { StepIndicator, type Step } from "@/components/step-indicator"
+import type { Step } from "@/components/step-indicator"
 import Link from "next/link"
 
 const workflowSteps: Step[] = [

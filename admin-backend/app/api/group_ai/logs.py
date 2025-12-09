@@ -429,3 +429,44 @@ async def get_log_statistics(
     except Exception as e:
         logger.error(f"獲取日誌統計失敗: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"獲取日誌統計失敗: {str(e)}")
+
+
+@router.get("/export", dependencies=[Depends(get_current_active_user)])
+async def export_logs(
+    format: str = Query("json", pattern="^(json|csv)$", description="导出格式"),
+    limit: int = Query(1000, ge=1, le=10000, description="导出数量限制"),
+    level: Optional[str] = Query(None, pattern="^(error|warning|info)$"),
+    current_user: User = Depends(get_current_active_user),
+):
+    """导出日志"""
+    try:
+        aggregator = get_log_aggregator()
+        exported_data = aggregator.export_logs(format=format, limit=limit)
+        
+        from fastapi.responses import Response
+        content_type = "application/json" if format == "json" else "text/csv"
+        filename = f"logs_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format}"
+        
+        return Response(
+            content=exported_data,
+            media_type=content_type,
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        logger.error(f"导出日志失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"导出日志失败: {str(e)}")
+
+
+@router.get("/error-trends", dependencies=[Depends(get_current_active_user)])
+async def get_error_trends(
+    hours: int = Query(24, ge=1, le=168, description="分析时间范围（小时）"),
+    current_user: User = Depends(get_current_active_user),
+):
+    """获取错误趋势分析"""
+    try:
+        aggregator = get_log_aggregator()
+        trends = aggregator.get_error_trends(hours=hours)
+        return trends
+    except Exception as e:
+        logger.error(f"获取错误趋势失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取错误趋势失败: {str(e)}")

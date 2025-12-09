@@ -1320,8 +1320,12 @@ async def delete_account(
         if not manager_success and not db_account:
             raise HTTPException(status_code=404, detail=f"賬號 {account_id} 不存在")
         
-        # 清除緩存
-        invalidate_cache("accounts_list*")
+        # 觸發緩存失效事件
+        try:
+            from app.core.cache_invalidation import trigger_cache_invalidation
+            trigger_cache_invalidation("account.deleted", account_id=account_id)
+        except Exception as cache_err:
+            logger.warning(f"觸發緩存失效失敗（不影響主流程）: {cache_err}")
     except HTTPException:
         raise
     except Exception as e:

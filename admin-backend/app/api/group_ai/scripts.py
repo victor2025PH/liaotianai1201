@@ -757,8 +757,12 @@ async def update_script(
 ):
     """更新劇本（需要 script:update 權限）"""
     check_permission(current_user, PermissionCode.SCRIPT_UPDATE.value, db)
-    # 更新後清除劇本列表緩存
-    invalidate_cache("scripts_list")
+    # 觸發緩存失效事件
+    try:
+        from app.core.cache_invalidation import trigger_cache_invalidation
+        trigger_cache_invalidation("script.updated", script_id=script_id)
+    except Exception as cache_err:
+        logger.warning(f"觸發緩存失效失敗（不影響主流程）: {cache_err}")
     script = db.query(GroupAIScript).filter(
         GroupAIScript.script_id == script_id
     ).first()
@@ -957,8 +961,12 @@ async def delete_script(
     import urllib.parse
     script_id = urllib.parse.unquote(script_id)
     
-    # 刪除後清除劇本列表緩存
-    invalidate_cache("scripts_list")
+    # 觸發緩存失效事件
+    try:
+        from app.core.cache_invalidation import trigger_cache_invalidation
+        trigger_cache_invalidation("script.deleted", script_id=script_id)
+    except Exception as cache_err:
+        logger.warning(f"觸發緩存失效失敗（不影響主流程）: {cache_err}")
     
     try:
         script = db.query(GroupAIScript).filter(

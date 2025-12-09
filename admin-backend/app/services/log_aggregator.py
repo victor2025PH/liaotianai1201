@@ -232,6 +232,78 @@ class LogAggregator:
     def get_sources(self) -> Dict[str, Dict[str, Any]]:
         """获取所有注册的日志来源"""
         return self.log_sources.copy()
+    
+    def export_logs(self, format: str = "json", limit: int = 1000) -> str:
+        """
+        导出日志
+        
+        Args:
+            format: 导出格式 (json, csv)
+            limit: 导出数量限制
+        
+        Returns:
+            导出的日志字符串
+        """
+        logs = self.get_logs(limit=limit)
+        
+        if format == "json":
+            import json
+            return json.dumps([log for log in logs], indent=2, ensure_ascii=False, default=str)
+        elif format == "csv":
+            import csv
+            import io
+            output = io.StringIO()
+            if logs:
+                fieldnames = logs[0].keys()
+                writer = csv.DictWriter(output, fieldnames=fieldnames)
+                writer.writeheader()
+                for log in logs:
+                    # 转换datetime为字符串
+                    log_dict = {}
+                    for k, v in log.items():
+                        if isinstance(v, datetime):
+                            log_dict[k] = v.isoformat()
+                        else:
+                            log_dict[k] = v
+                    writer.writerow(log_dict)
+            return output.getvalue()
+        else:
+            raise ValueError(f"不支持的导出格式: {format}")
+    
+    def get_error_trends(self, hours: int = 24) -> Dict[str, Any]:
+        """
+        获取错误趋势分析
+        
+        Args:
+            hours: 分析时间范围（小时）
+        
+        Returns:
+            错误趋势数据
+        """
+        from datetime import timedelta
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=hours)
+        
+        error_logs = self.get_logs(
+            level="error",
+            start_time=start_time,
+            end_time=end_time,
+            limit=10000
+        )
+        
+        # 按小时分组统计
+        hourly_errors = defaultdict(int)
+        for log in error_logs:
+            timestamp = log.get("timestamp")
+            if isinstance(timestamp, datetime):
+                hour_key = timestamp.strftime("%Y-%m-%d %H:00")
+                hourly_errors[hour_key] += 1
+        
+        return {
+            "total_errors": len(error_logs),
+            "hourly_distribution": dict(sorted(hourly_errors.items())),
+            "top_patterns": dict(self.aggregation_stats["error_patterns"].most_common(5))
+        }
 
 
 # 全局日志聚合器实例

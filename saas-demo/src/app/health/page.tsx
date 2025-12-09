@@ -152,9 +152,9 @@ export default function HealthCheckPage() {
     fetchHealthData();
   };
 
-  const overallStatus = healthData?.status || "unknown";
-  const overallIcon = statusIcons[overallStatus] || HelpCircle;
-  const overallBadgeColor = statusBadgeColors[overallStatus] || statusBadgeColors.unknown;
+          const overallStatus = healthData?.status || "unknown";
+          const OverallIcon = statusIcons[overallStatus] || HelpCircle;
+          const overallBadgeColor = statusBadgeColors[overallStatus] || statusBadgeColors.unknown;
 
   // 按状态分组组件
   const componentsByStatus = healthData?.components.reduce(
@@ -226,7 +226,7 @@ export default function HealthCheckPage() {
                   </CardDescription>
                 </div>
                 <Badge className={cn("border text-lg px-4 py-2", overallBadgeColor)}>
-                  <overallIcon className="w-5 h-5 mr-2" />
+                  <OverallIcon className="w-5 h-5 mr-2" />
                   {overallStatus.toUpperCase()}
                 </Badge>
               </div>

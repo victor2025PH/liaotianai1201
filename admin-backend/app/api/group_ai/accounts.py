@@ -424,12 +424,12 @@ async def create_account(
                 detail=f"保存賬號失敗: {str(e)}"
             )
         
-        # 清除賬號列表緩存（確保新創建的賬號立即顯示）
+        # 觸發緩存失效事件
         try:
-            from app.core.cache import invalidate_cache
-            invalidate_cache("accounts_list*")
+            from app.core.cache_invalidation import trigger_cache_invalidation
+            trigger_cache_invalidation("account.created", account_id=request.account_id)
         except Exception as cache_err:
-            logger.warning(f"清除緩存失敗（不影響主流程）: {cache_err}")
+            logger.warning(f"觸發緩存失效失敗（不影響主流程）: {cache_err}")
         
         account_info = service_manager.account_manager.list_accounts()
         account_data = next((a for a in account_info if a.account_id == request.account_id), None)

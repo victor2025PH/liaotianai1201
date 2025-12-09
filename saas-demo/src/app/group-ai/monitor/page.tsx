@@ -1,14 +1,26 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
+import dynamic from "next/dynamic"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Activity, TrendingUp, AlertCircle, Users, RefreshCw, CheckCircle2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+
+// 懒加载重型组件
+const Table = dynamic(() => import("@/components/ui/table").then(mod => ({ default: mod.Table })), { ssr: false })
+const TableBody = dynamic(() => import("@/components/ui/table").then(mod => ({ default: mod.TableBody })), { ssr: false })
+const TableCell = dynamic(() => import("@/components/ui/table").then(mod => ({ default: mod.TableCell })), { ssr: false })
+const TableHead = dynamic(() => import("@/components/ui/table").then(mod => ({ default: mod.TableHead })), { ssr: false })
+const TableHeader = dynamic(() => import("@/components/ui/table").then(mod => ({ default: mod.TableHeader })), { ssr: false })
+const TableRow = dynamic(() => import("@/components/ui/table").then(mod => ({ default: mod.TableRow })), { ssr: false })
+const MetricsChart = dynamic(() => import("@/components/monitor/metrics-chart").then(mod => ({ default: mod.MetricsChart })), { 
+  ssr: false,
+  loading: () => <Skeleton className="h-[300px] w-full" />
+})
 import {
   getSystemMetrics,
   getAccountMetrics,

@@ -399,6 +399,17 @@ async def on_startup() -> None:
             logger.info(f"定時告警檢查服務已啟動，檢查間隔: {checker.interval_seconds} 秒")
         except Exception as e:
             logger.warning(f"啟動定時告警檢查服務失敗: {e}", exc_info=True)
+    
+    # 啟動緩存預熱服務
+    try:
+        from app.core.cache_optimization import CacheOptimizer
+        optimizer = CacheOptimizer()
+        # 在后台任务中执行缓存预热（不阻塞启动）
+        import asyncio
+        asyncio.create_task(optimizer.warmup_cache())
+        logger.info("緩存預熱服務已啟動（後台執行）")
+    except Exception as e:
+        logger.warning(f"啟動緩存預熱服務失敗: {e}", exc_info=True)
 
 
 @app.on_event("shutdown")

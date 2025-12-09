@@ -116,7 +116,7 @@ export default function PerformancePage() {
     );
   }
 
-  const avgResponseTime = stats?.average_response_time || stats?.average_response_time_ms || 0;
+  const avgResponseTime = stats?.average_response_time || 0;
   const slowRequestsCount = stats?.slow_requests?.length || 0;
   const totalRequests = stats?.request_count || 0;
 

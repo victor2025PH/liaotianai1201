@@ -38,39 +38,53 @@ jobs:
               pip install -r requirements.txt
             fi
             
-            # 5. 重启后端服务
+            # 5. 更新 Nginx 配置
+            echo "=========================================="
+            echo "更新 Nginx 配置"
+            echo "=========================================="
+            # 复制新的 Nginx 配置文件
+            if [ -f "deploy/nginx/aikz.conf" ]; then
+              sudo cp deploy/nginx/aikz.conf /etc/nginx/sites-available/aikz.conf
+              sudo ln -sf /etc/nginx/sites-available/aikz.conf /etc/nginx/sites-enabled/aikz.conf
+              sudo nginx -t && sudo systemctl reload nginx
+              echo "✅ Nginx 配置已更新并重载"
+            else
+              echo "⚠️  未找到 deploy/nginx/aikz.conf，跳过 Nginx 配置更新"
+            fi
+            
+            # 6. 重启后端服务
             sudo systemctl restart telegram-backend
             
-            # 6. 重启 Bot 服务
+            # 7. 重启 Bot 服务
             sudo systemctl restart telegram-bot
             
-            # 7. 等待服务启动
+            # 8. 等待服务启动
             sleep 5
             
-            # 8. 检查后端服务状态
+            # 9. 检查后端服务状态
             echo "=========================================="
             echo "检查后端服务状态"
             echo "=========================================="
             sudo systemctl status telegram-backend --no-pager || true
             
-            # 9. 检查后端端口
+            # 10. 检查后端端口
             echo ""
             echo "检查后端端口 (8000)..."
             ss -tlnp | grep :8000 || echo "端口 8000 未监听"
             
-            # 10. 检查后端健康状态
+            # 11. 检查后端健康状态
             echo ""
             echo "检查后端健康状态..."
             curl -s http://localhost:8000/health || echo "后端健康检查失败"
             
-            # 11. 检查 Bot 服务状态
+            # 12. 检查 Bot 服务状态
             echo ""
             echo "=========================================="
             echo "检查 Bot 服务状态"
             echo "=========================================="
             sudo systemctl status telegram-bot --no-pager || true
             
-            # 12. 检查前端服务状态
+            # 13. 检查前端服务状态
             echo ""
             echo "=========================================="
             echo "检查前端服务状态"
@@ -88,7 +102,7 @@ jobs:
               ps aux | grep -E "node.*next|npm.*start" | grep -v grep | head -n 2 || echo "未发现前端进程"
             fi
             
-            # 13. 检查前端端口
+            # 14. 检查前端端口
             echo ""
             echo "检查前端端口 (3000, 3001)..."
             for port in 3000 3001; do
@@ -98,7 +112,7 @@ jobs:
               fi
             done
             
-            # 14. 检查前端 HTTP 响应
+            # 15. 检查前端 HTTP 响应
             echo ""
             echo "检查前端 HTTP 响应..."
             for port in 3000 3001; do
@@ -108,7 +122,7 @@ jobs:
               fi
             done
             
-            # 15. 服务状态总结
+            # 16. 服务状态总结
             echo ""
             echo "=========================================="
             echo "服务状态总结"

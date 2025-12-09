@@ -288,6 +288,14 @@ async def list_logs(
                 logger.warning(f"轉換日誌條目失敗: {e}")
                 continue
         
+        # 将日志添加到聚合器（用于后续分析）
+        aggregator = get_log_aggregator()
+        for log_dict in all_logs:
+            try:
+                aggregator.add_log(log_dict)
+            except Exception as agg_err:
+                logger.debug(f"添加日志到聚合器失败: {agg_err}")
+        
         return LogList(
             items=log_entries,
             total=total,
@@ -303,10 +311,53 @@ async def list_logs(
 @router.get("/statistics", response_model=LogStatistics, dependencies=[Depends(get_current_active_user)])
 async def get_log_statistics(
     hours: int = Query(24, ge=1, le=168, description="統計時間範圍（小時）"),
+    use_aggregation: bool = Query(True, description="是否使用日誌聚合器"),
     current_user: User = Depends(get_current_active_user),
 ) -> LogStatistics:
     """獲取日誌統計信息（錯誤分析、聚合統計）"""
     try:
+        # 优先使用聚合器
+        if use_aggregation:
+            aggregator = get_log_aggregator()
+            stats = aggregator.get_statistics()
+            
+            # 转换recent_errors为LogEntry格式
+            recent_errors = []
+            for idx, error_log in enumerate(stats.get("recent_errors", [])[:10]):
+                try:
+                    timestamp = error_log.get("timestamp")
+                    if isinstance(timestamp, str):
+                        timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                    elif not isinstance(timestamp, datetime):
+                        timestamp = datetime.now()
+                    
+                    recent_errors.append(LogEntry(
+                        id=f"error_{idx}",
+                        level=error_log.get("level", "error"),
+                        type=error_log.get("type", "application"),
+                        message=error_log.get("message", ""),
+                        severity="high",
+                        timestamp=timestamp,
+                        source=error_log.get("source")
+                    ))
+                except Exception as e:
+                    logger.debug(f"转换错误日志失败: {e}")
+                    continue
+            
+            return LogStatistics(
+                total_logs=stats.get("total_logs", 0),
+                logs_by_level=stats.get("logs_by_level", {}),
+                logs_by_source=stats.get("logs_by_source", {}),
+                logs_by_type=stats.get("logs_by_type", {}),
+                error_count=stats.get("error_count", 0),
+                warning_count=stats.get("warning_count", 0),
+                info_count=stats.get("info_count", 0),
+                top_error_patterns=stats.get("top_error_patterns", {}),
+                recent_errors=recent_errors,
+                buffer_size=stats.get("buffer_size", 0)
+            )
+        
+        # 回退到原始方法
         from app.api.group_ai.servers import load_server_configs
         servers_config = load_server_configs()
         

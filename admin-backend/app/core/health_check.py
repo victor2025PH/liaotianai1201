@@ -303,6 +303,81 @@ class HealthChecker:
                 response_time_ms=response_time
             )
     
+    async def check_cache(self) -> ComponentHealth:
+        """检查缓存服务状态"""
+        start_time = time.time()
+        try:
+            from app.core.cache import get_cache_manager
+            cache_manager = get_cache_manager()
+            stats = cache_manager.get_stats()
+            
+            response_time = (time.time() - start_time) * 1000
+            
+            # 判断健康状态
+            hit_rate = stats.get("hit_rate", 0.0)
+            if hit_rate < 0.3:  # 命中率过低
+                status = HealthStatus.DEGRADED
+                message = f"缓存命中率较低：{hit_rate:.1%}"
+            else:
+                status = HealthStatus.HEALTHY
+                message = f"缓存服务正常：命中率 {hit_rate:.1%}"
+            
+            return ComponentHealth(
+                name="cache",
+                status=status,
+                message=message,
+                response_time_ms=response_time,
+                details={
+                    "hit_rate": hit_rate,
+                    "hits": stats.get("hits", 0),
+                    "misses": stats.get("misses", 0),
+                    "backend": stats.get("backend", "memory"),
+                    "memory_cache_size": stats.get("memory_cache_size", 0)
+                }
+            )
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            logger.warning(f"缓存服务健康检查失败: {e}")
+            return ComponentHealth(
+                name="cache",
+                status=HealthStatus.UNKNOWN,
+                message=f"缓存服务检查失败: {str(e)}",
+                response_time_ms=response_time
+            )
+    
+    async def check_service_manager(self) -> ComponentHealth:
+        """检查服务管理器状态"""
+        start_time = time.time()
+        try:
+            from app.services.service_manager import get_service_manager
+            service_manager = get_service_manager()
+            
+            # 检查服务管理器是否正常
+            account_manager = service_manager.account_manager
+            accounts = account_manager.list_accounts()
+            
+            response_time = (time.time() - start_time) * 1000
+            
+            return ComponentHealth(
+                name="service_manager",
+                status=HealthStatus.HEALTHY,
+                message="服务管理器正常",
+                response_time_ms=response_time,
+                details={
+                    "managed_accounts": len(accounts),
+                    "service_type": "ServiceManager"
+                }
+            )
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            logger.warning(f"服务管理器健康检查失败: {e}")
+            return ComponentHealth(
+                name="service_manager",
+                status=HealthStatus.DEGRADED,
+                message=f"服务管理器检查失败: {str(e)}",
+                response_time_ms=response_time
+            )
+    
     async def check_all(self, include_optional: bool = True) -> Dict[str, Any]:
         """
         检查所有组件
@@ -317,6 +392,8 @@ class HealthChecker:
             self.check_database(),
             self.check_session_files(),
             self.check_accounts(),
+            self.check_cache(),
+            self.check_service_manager(),
         ]
         
         if include_optional:

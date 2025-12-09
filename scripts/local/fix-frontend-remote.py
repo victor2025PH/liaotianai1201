@@ -108,32 +108,74 @@ def main():
     try:
         client = connect_server(host, user, password)
         
-        # 上传修复脚本
+        # 拉取最新代码（脚本会自动拉取，这里只是确保）
         print(f"\n{'='*60}")
-        print("📤 上传修复脚本")
+        print("📤 确保代码最新")
         print(f"{'='*60}")
         
-        # 读取本地脚本
-        script_path = Path(__file__).parent.parent / "server" / "fix-frontend-404.sh"
-        with open(script_path, 'r', encoding='utf-8') as f:
-            script_content = f.read()
-        
-        # 写入远程文件
-        sftp = client.open_sftp()
-        remote_script = f"{project_dir}/scripts/server/fix-frontend-404.sh"
-        with sftp.file(remote_script, 'w') as f:
-            f.write(script_content)
-        sftp.chmod(remote_script, 0o755)
-        sftp.close()
-        
-        print("✅ 脚本已上传")
-        
-        # 执行修复脚本
         run_command(
             client,
-            f"cd {project_dir} && sudo bash scripts/server/fix-frontend-404.sh",
-            "执行前端修复"
+            f"cd {project_dir} && rm -f scripts/server/fix-frontend-404.sh 2>/dev/null && git pull origin main",
+            "拉取最新代码"
         )
+        
+        print("✅ 代码已更新")
+        
+        # 直接执行修复步骤
+        print(f"\n{'='*60}")
+        print("📋 执行前端修复")
+        print(f"{'='*60}")
+        
+        # 停止前端服务
+        run_command(
+            client,
+            f"sudo systemctl stop liaotian-frontend 2>/dev/null || pkill -f 'next.*start' 2>/dev/null || true",
+            "停止前端服务",
+            check_output=False
+        )
+        
+        # 清理构建文件（使用 sudo 处理权限问题）
+        run_command(
+            client,
+            f"cd {project_dir}/saas-demo && sudo rm -rf .next node_modules/.cache 2>/dev/null || rm -rf .next node_modules/.cache 2>/dev/null || true",
+            "清理构建文件",
+            check_output=False
+        )
+        
+        # 确保目录权限正确
+        run_command(
+            client,
+            f"sudo chown -R ubuntu:ubuntu {project_dir}/saas-demo 2>/dev/null || true",
+            "修复目录权限",
+            check_output=False
+        )
+        
+        # 重新构建
+        print(f"\n{'='*60}")
+        print("📋 重新构建前端（这可能需要几分钟）")
+        print(f"{'='*60}")
+        
+        stdout, stderr, exit_code = run_command(
+            client,
+            f"cd {project_dir}/saas-demo && export NODE_OPTIONS='--max-old-space-size=1536' && npm run build",
+            "构建前端",
+            check_output=False
+        )
+        
+        if exit_code != 0:
+            print("⚠️  构建失败，查看错误信息...")
+            print(stdout[-500:] if len(stdout) > 500 else stdout)
+            raise Exception("前端构建失败")
+        
+        # 重启前端服务
+        run_command(
+            client,
+            f"sudo systemctl start liaotian-frontend 2>/dev/null || (cd {project_dir}/saas-demo && nohup npm start > /tmp/frontend.log 2>&1 &)",
+            "启动前端服务",
+            check_output=False
+        )
+        
+        time.sleep(5)
         
         # 检查服务状态
         print(f"\n{'='*60}")

@@ -928,12 +928,17 @@ async def list_accounts(
 
 
 @router.get("/{account_id}", response_model=AccountResponse)
+@cached(prefix="account_detail", ttl=15)  # 緩存 15 秒（賬號詳情變化較快）
 async def get_account(
     account_id: str,
     current_user: User = Depends(get_current_active_user),
     manager: AccountManager = Depends(get_account_manager),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _t: Optional[int] = Query(None, description="強制刷新時間戳（繞過緩存）")
 ):
+    # 如果提供了強制刷新時間戳，清除緩存
+    if _t is not None:
+        invalidate_cache(f"account_detail:{account_id}:*")
     """獲取賬號詳情（需要 account:view 權限）"""
     check_permission(current_user, PermissionCode.ACCOUNT_VIEW.value, db)
     logger.info(f"[GET_ACCOUNT] 收到獲取賬號請求: account_id={account_id}")

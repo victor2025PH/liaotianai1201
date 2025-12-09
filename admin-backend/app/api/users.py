@@ -18,7 +18,9 @@ from app.crud.user import (
 from app.middleware.permission import check_permission
 from app.core.permissions import PermissionCode
 from app.utils.audit import log_audit
-from fastapi import Request
+from fastapi import Request, Query
+from app.core.cache import cached, invalidate_cache
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +68,15 @@ def read_current_user(current_user=Depends(get_current_active_user)):
 
 # 预留超级用户接口
 @router.get("/", response_model=List[UserRead], dependencies=[Depends(require_superuser)])
-def list_users(db: Session = Depends(get_db_session)):
+@cached(prefix="users_list", ttl=60)  # 緩存 60 秒
+def list_users(
+    db: Session = Depends(get_db_session),
+    _t: Optional[int] = Query(None, description="強制刷新時間戳（繞過緩存）")
+):
+    """獲取用戶列表（帶緩存）"""
+    # 如果提供了強制刷新時間戳，清除緩存
+    if _t is not None:
+        invalidate_cache("users_list:*")
     return db.query(User).all()
 
 

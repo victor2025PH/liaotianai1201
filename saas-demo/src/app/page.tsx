@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { memo, useState, useEffect, useCallback, useMemo } from "react";
+import { memo, useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import dynamic from "next/dynamic";
 import {
   Card,

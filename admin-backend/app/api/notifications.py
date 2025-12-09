@@ -30,6 +30,7 @@ from app.crud.notification import (
     mark_notifications_as_read,
     delete_notifications,
 )
+from app.core.cache import cached, invalidate_cache
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -228,14 +229,19 @@ async def create_notification_config_endpoint(
 
 
 @router.get("/configs", response_model=List[NotificationConfigRead])
+@cached(prefix="notification_configs_list", ttl=300)  # 緩存 300 秒（配置變化較少）
 async def list_notification_configs_endpoint(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     enabled: Optional[bool] = Query(None),
+    _t: Optional[int] = Query(None, description="強制刷新時間戳（繞過緩存）"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db_session)
 ):
-    """列出通知配置（需要查看權限）"""
+    """列出通知配置（需要查看權限，帶緩存）"""
+    # 如果提供了強制刷新時間戳，清除緩存
+    if _t is not None:
+        invalidate_cache("notification_configs_list:*")
     check_permission(current_user, PermissionCode.ALERT_RULE_VIEW.value, db)
     
     try:

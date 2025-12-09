@@ -21,6 +21,7 @@ from app.models.user import User
 from app.core.errors import UserFriendlyError
 from group_ai_service import ServiceManager
 from app.api.group_ai.accounts import get_service_manager
+from app.core.cache import cached, invalidate_cache
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +208,7 @@ async def create_scheme(
 
 
 @router.get("/", response_model=SchemeListResponse)
+@cached(prefix="role_assignment_schemes_list", ttl=120)  # 緩存 120 秒
 async def list_schemes(
     script_id: Optional[str] = Query(None, description="按劇本ID過濾"),
     search: Optional[str] = Query(None, description="搜索關鍵詞（方案名稱、描述）"),
@@ -215,10 +217,14 @@ async def list_schemes(
     sort_order: Optional[str] = Query("desc", description="排序順序（asc, desc）"),
     page: int = Query(1, ge=1, description="頁碼"),
     page_size: int = Query(20, ge=1, le=100, description="每頁數量"),
+    _t: Optional[int] = Query(None, description="強制刷新時間戳（繞過緩存）"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """列出所有分配方案（需要 role_assignment_scheme:view 權限）"""
+    """列出所有分配方案（需要 role_assignment_scheme:view 權限，帶緩存）"""
+    # 如果提供了強制刷新時間戳，清除緩存
+    if _t is not None:
+        invalidate_cache("role_assignment_schemes_list:*")
     check_permission(current_user, PermissionCode.ROLE_ASSIGNMENT_SCHEME_VIEW.value, db)
     try:
         query = db.query(GroupAIRoleAssignmentScheme)

@@ -690,12 +690,17 @@ async def list_scripts(
 
 
 @router.get("/{script_id}", response_model=ScriptDetailResponse)
+@cached(prefix="script_detail", ttl=60)  # 緩存 60 秒（劇本詳情變化較慢）
 async def get_script(
     script_id: str,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _t: Optional[int] = Query(None, description="強制刷新時間戳（繞過緩存）")
 ):
-    """獲取劇本詳情（需要 script:view 權限）"""
+    """獲取劇本詳情（需要 script:view 權限，帶緩存）"""
+    # 如果提供了強制刷新時間戳，清除緩存
+    if _t is not None:
+        invalidate_cache(f"script_detail:{script_id}:*")
     check_permission(current_user, PermissionCode.SCRIPT_VIEW.value, db)
     script = db.query(GroupAIScript).filter(
         GroupAIScript.script_id == script_id

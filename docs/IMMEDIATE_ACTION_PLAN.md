@@ -13,12 +13,25 @@
 
 **目標**: 確保系統在生產環境正常運行
 
-#### 1.1 檢查服務器狀態
+#### 1.1 使用自動化腳本檢查（推薦）
 
 ```bash
 # SSH 到服務器
 ssh ubuntu@165.154.233.55
 
+# 進入項目目錄
+cd /home/ubuntu/telegram-ai-system
+
+# 運行完整驗證腳本
+bash scripts/server/verify_deployment.sh
+
+# 或運行快速健康檢查
+bash scripts/server/quick_health_check.sh
+```
+
+#### 1.2 手動檢查服務器狀態
+
+```bash
 # 檢查 PM2 服務
 pm2 status
 
@@ -53,7 +66,15 @@ tail -n 50 /var/log/nginx/error.log
 
 **目標**: 確保生產環境安全配置正確
 
-#### 2.1 檢查環境變量
+#### 2.1 使用自動化腳本檢查（推薦）
+
+```bash
+# 在服務器上運行安全檢查腳本
+cd /home/ubuntu/telegram-ai-system
+bash scripts/server/check_security.sh
+```
+
+#### 2.2 手動檢查環境變量
 
 ```bash
 # 在服務器上檢查

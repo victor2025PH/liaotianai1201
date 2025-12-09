@@ -1,25 +1,34 @@
-# API 文档
+# API 文檔
 
-本文档提供完整的 API 接口说明。
+## 概述
 
-## 基础信息
+本系統提供完整的 RESTful API，用於管理 Telegram AI 群組自動化系統。
 
-- **Base URL**: `https://your-domain.com/api/v1`
-- **认证方式**: Bearer Token (JWT)
-- **内容类型**: `application/json`
+## API 基礎信息
 
-## 认证
+- **Base URL**: `https://aikz.usdt2026.cc/api/v1`
+- **API 版本**: `v1`
+- **認證方式**: JWT Bearer Token
+- **文檔地址**: 
+  - Swagger UI: `https://aikz.usdt2026.cc/docs`
+  - OpenAPI JSON: `https://aikz.usdt2026.cc/openapi.json`
+  - ReDoc: `https://aikz.usdt2026.cc/redoc` (如果配置)
 
-### 登录获取Token
+## 認證
+
+### 獲取 Token
 
 ```http
 POST /api/v1/auth/login
-Content-Type: application/x-www-form-urlencoded
+Content-Type: application/json
 
-username=admin@example.com&password=your_password
+{
+  "email": "admin@example.com",
+  "password": "your_password"
+}
 ```
 
-**响应**:
+**響應**:
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -27,349 +36,127 @@ username=admin@example.com&password=your_password
 }
 ```
 
-### 使用Token
+### 使用 Token
 
-在请求头中添加：
-```
-Authorization: Bearer {access_token}
-```
+在後續請求中，將 Token 添加到請求頭：
 
-## 核心API
-
-### 健康检查
-
-#### 基础健康检查
 ```http
-GET /health
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-#### 详细健康检查
-```http
-GET /health?detailed=true
-```
+## 主要 API 端點
 
-#### K8s健康检查
-```http
-GET /healthz
-```
+### 健康檢查
 
-### 性能监控
+- `GET /health` - 基礎健康檢查
+- `GET /healthz` - Kubernetes 健康檢查
+- `GET /health?detailed=true` - 詳細健康檢查（包含所有組件狀態）
 
-#### 获取性能统计
-```http
-GET /api/v1/system/performance
-Authorization: Bearer {token}
-```
+### 賬號管理
 
-**响应**:
-```json
-{
-  "request_count": 1234,
-  "average_response_time_ms": 45.2,
-  "total_response_time_ms": 55800,
-  "slow_requests_count": 5,
-  "slow_requests": [...],
-  "requests_by_endpoint": {...},
-  "requests_by_status": {...}
-}
-```
+- `GET /api/v1/group-ai/accounts` - 獲取賬號列表
+- `GET /api/v1/group-ai/accounts/{account_id}` - 獲取賬號詳情
+- `POST /api/v1/group-ai/accounts` - 創建賬號
+- `PUT /api/v1/group-ai/accounts/{account_id}` - 更新賬號
+- `DELETE /api/v1/group-ai/accounts/{account_id}` - 刪除賬號
 
-## 群组AI API
+### 劇本管理
 
-### 账号管理
+- `GET /api/v1/group-ai/scripts` - 獲取劇本列表
+- `GET /api/v1/group-ai/scripts/{script_id}` - 獲取劇本詳情
+- `POST /api/v1/group-ai/scripts` - 創建劇本
+- `PUT /api/v1/group-ai/scripts/{script_id}` - 更新劇本
+- `DELETE /api/v1/group-ai/scripts/{script_id}` - 刪除劇本
 
-#### 获取账号列表
-```http
-GET /api/v1/group-ai/accounts
-Authorization: Bearer {token}
-```
+### 監控和統計
 
-**查询参数**:
-- `skip`: 跳过数量 (默认: 0)
-- `limit`: 每页数量 (默认: 100)
-- `search`: 搜索关键词
-- `status`: 状态过滤 (active/inactive)
+- `GET /api/v1/group-ai/dashboard` - 獲取儀表板統計
+- `GET /api/v1/group-ai/monitor/accounts/metrics` - 獲取賬號指標
+- `GET /api/v1/group-ai/monitor/system/statistics` - 獲取系統統計
+- `GET /api/v1/group-ai/monitor/alerts` - 獲取告警列表
 
-#### 创建账号
-```http
-POST /api/v1/group-ai/accounts
-Authorization: Bearer {token}
-Content-Type: application/json
+### 日誌管理
 
-{
-  "phone_number": "+1234567890",
-  "script_id": "script-uuid",
-  "server_id": "server-uuid"
-}
-```
+- `GET /api/v1/group-ai/logs` - 獲取日誌列表
+- `GET /api/v1/group-ai/logs/statistics` - 獲取日誌統計
+- `GET /api/v1/group-ai/logs/export` - 導出日誌（JSON/CSV）
+- `GET /api/v1/group-ai/logs/error-trends` - 獲取錯誤趨勢分析
 
-#### 更新账号
-```http
-PUT /api/v1/group-ai/accounts/{account_id}
-Authorization: Bearer {token}
-Content-Type: application/json
+### 通知配置
 
-{
-  "active": true,
-  "script_id": "new-script-uuid"
-}
-```
+- `GET /api/v1/notifications/configs` - 獲取通知配置列表
+- `POST /api/v1/notifications/configs` - 創建通知配置
+- `PUT /api/v1/notifications/configs/{config_id}` - 更新通知配置
+- `DELETE /api/v1/notifications/configs/{config_id}` - 刪除通知配置
 
-#### 删除账号
-```http
-DELETE /api/v1/group-ai/accounts/{account_id}
-Authorization: Bearer {token}
-```
+### 用戶管理
 
-### 脚本管理
+- `GET /api/v1/users` - 獲取用戶列表
+- `GET /api/v1/users/me` - 獲取當前用戶信息
+- `POST /api/v1/users` - 創建用戶
+- `PUT /api/v1/users/{user_id}` - 更新用戶
+- `DELETE /api/v1/users/{user_id}` - 刪除用戶
 
-#### 获取脚本列表
-```http
-GET /api/v1/group-ai/scripts
-Authorization: Bearer {token}
-```
+## 緩存說明
 
-**查询参数**:
-- `skip`: 跳过数量
-- `limit`: 每页数量
-- `search`: 搜索关键词
-- `status`: 状态过滤 (draft/reviewing/published/disabled)
-- `sort_by`: 排序字段 (name/created_at/updated_at/status)
-- `sort_order`: 排序顺序 (asc/desc)
+部分 API 端點已啟用緩存以提高性能：
 
-#### 创建脚本
-```http
-POST /api/v1/group-ai/scripts
-Authorization: Bearer {token}
-Content-Type: application/json
+- **賬號列表**: 30秒緩存
+- **賬號詳情**: 15秒緩存
+- **劇本列表**: 120秒緩存
+- **劇本詳情**: 60秒緩存
+- **用戶列表**: 60秒緩存
+- **通知配置列表**: 300秒緩存
 
-{
-  "name": "脚本名称",
-  "description": "脚本描述",
-  "content": {
-    "script_id": "script-001",
-    "version": "1.0.0",
-    "scenes": [...]
-  }
-}
-```
+緩存會在相關數據更新時自動失效。
 
-#### 更新脚本
-```http
-PUT /api/v1/group-ai/scripts/{script_id}
-Authorization: Bearer {token}
-Content-Type: application/json
+## 錯誤處理
 
-{
-  "name": "更新后的名称",
-  "content": {...}
-}
-```
+API 使用標準 HTTP 狀態碼：
 
-### 监控API
+- `200 OK` - 請求成功
+- `201 Created` - 資源創建成功
+- `400 Bad Request` - 請求參數錯誤
+- `401 Unauthorized` - 未認證或 Token 無效
+- `403 Forbidden` - 無權限
+- `404 Not Found` - 資源不存在
+- `500 Internal Server Error` - 服務器內部錯誤
+- `503 Service Unavailable` - 服務不可用
 
-#### 获取账号指标
-```http
-GET /api/v1/group-ai/monitor/accounts/metrics
-Authorization: Bearer {token}
-```
-
-**查询参数**:
-- `account_id`: 账号ID (可选)
-
-#### 获取系统统计
-```http
-GET /api/v1/group-ai/monitor/system/statistics
-Authorization: Bearer {token}
-```
-
-**查询参数**:
-- `period`: 时间范围 (1h/24h/7d/30d, 默认: 24h)
-
-#### 获取告警列表
-```http
-GET /api/v1/group-ai/monitor/alerts
-Authorization: Bearer {token}
-```
-
-**查询参数**:
-- `limit`: 返回数量 (默认: 50)
-- `alert_type`: 告警类型 (error/warning/info)
-- `resolved`: 是否已解决 (true/false)
-- `use_aggregation`: 是否使用聚合 (默认: true)
-
-### 告警管理API
-
-#### 获取告警统计
-```http
-GET /api/v1/group-ai/alert-management/statistics
-Authorization: Bearer {token}
-```
-
-**响应**:
-```json
-{
-  "total_alerts": 100,
-  "deduplicated": 20,
-  "aggregated": 15,
-  "suppressed": 5,
-  "resolved": 60,
-  "active_by_severity": {
-    "critical": 2,
-    "high": 5,
-    "medium": 8,
-    "low": 5
-  },
-  "total_active": 20,
-  "total_aggregated": 15
-}
-```
-
-#### 静默告警
-```http
-POST /api/v1/group-ai/alert-management/{alert_key}/suppress
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "duration_seconds": 3600,
-  "reason": "正在处理中"
-}
-```
-
-#### 确认告警
-```http
-POST /api/v1/group-ai/alert-management/{alert_key}/acknowledge
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "acknowledged_by": "admin@example.com"
-}
-```
-
-### 日志API
-
-#### 获取日志列表
-```http
-GET /api/v1/group-ai/logs
-Authorization: Bearer {token}
-```
-
-**查询参数**:
-- `page`: 页码 (默认: 1)
-- `page_size`: 每页数量 (默认: 20)
-- `level`: 日志级别 (error/warning/info)
-- `q`: 搜索关键词
-- `source`: 来源过滤
-- `start_time`: 开始时间 (ISO 8601)
-- `end_time`: 结束时间 (ISO 8601)
-
-#### 获取日志统计
-```http
-GET /api/v1/group-ai/logs/statistics
-Authorization: Bearer {token}
-```
-
-### 仪表板API
-
-#### 获取仪表板数据
-```http
-GET /api/v1/group-ai/dashboard
-Authorization: Bearer {token}
-```
-
-**响应**:
-```json
-{
-  "stats": {
-    "total_accounts": 100,
-    "active_accounts": 80,
-    "total_scripts": 20,
-    "total_messages": 50000
-  },
-  "recent_sessions": [...],
-  "recent_errors": [...]
-}
-```
-
-## 用户管理API
-
-### 获取当前用户
-```http
-GET /api/v1/users/me
-Authorization: Bearer {token}
-```
-
-### 获取用户列表
-```http
-GET /api/v1/users
-Authorization: Bearer {token}
-```
-
-### 创建用户
-```http
-POST /api/v1/users
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "secure_password",
-  "full_name": "用户姓名"
-}
-```
-
-## 通知API
-
-### 获取通知列表
-```http
-GET /api/v1/notifications
-Authorization: Bearer {token}
-```
-
-**查询参数**:
-- `skip`: 跳过数量
-- `limit`: 每页数量
-- `read`: 是否已读 (true/false)
-- `notification_type`: 通知类型
-
-### 标记通知为已读
-```http
-PUT /api/v1/notifications/{notification_id}/read
-Authorization: Bearer {token}
-```
-
-## 错误响应
-
-所有API在出错时返回以下格式：
+錯誤響應格式：
 
 ```json
 {
-  "detail": "错误描述",
   "error_code": "ERROR_CODE",
-  "status_code": 400
+  "message": "錯誤描述",
+  "technical_detail": "技術詳情（僅開發環境）"
 }
 ```
 
-### 常见错误码
+## 限流
 
-- `401 Unauthorized`: 未认证或token无效
-- `403 Forbidden`: 权限不足
-- `404 Not Found`: 资源不存在
-- `422 Validation Error`: 请求参数验证失败
-- `500 Internal Server Error`: 服务器内部错误
+API 實施了請求限流以防止濫用：
 
-## 速率限制
+- **認證端點**: 5次/分鐘
+- **其他端點**: 100次/分鐘
 
-- 认证API: 5次/分钟
-- 其他API: 100次/分钟
+超過限流時返回 `429 Too Many Requests`。
 
-超过限制将返回 `429 Too Many Requests`。
+## 性能監控
 
-## OpenAPI文档
+系統提供性能監控端點：
 
-访问 `/docs` 查看完整的交互式API文档（Swagger UI）。
+- `GET /metrics` - Prometheus 格式的指標數據
+- `GET /api/v1/system/performance/cache/stats` - 緩存統計信息
 
-访问 `/openapi.json` 获取OpenAPI规范JSON。
+## 更多信息
 
+詳細的 API 文檔請訪問：
+- Swagger UI: `https://aikz.usdt2026.cc/docs`
+- OpenAPI JSON: `https://aikz.usdt2026.cc/openapi.json`
+
+## 更新日誌
+
+- **2025-12-09**: 添加日誌導出和錯誤趨勢分析 API
+- **2025-12-09**: 增強健康檢查端點，添加組件級別檢查
+- **2025-12-09**: 優化 API 緩存策略，提升響應速度

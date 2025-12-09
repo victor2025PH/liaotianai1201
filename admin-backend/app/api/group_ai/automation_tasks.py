@@ -14,6 +14,7 @@ from app.api.deps import get_current_active_user
 from app.middleware.permission import check_permission
 from app.core.permissions import PermissionCode
 from app.models.user import User
+from app.core.cache import cached, invalidate_cache
 
 logger = logging.getLogger(__name__)
 
@@ -193,15 +194,20 @@ async def create_automation_task(
 
 
 @router.get("", response_model=List[AutomationTaskResponse])
+@cached(prefix="automation_tasks_list", ttl=60)  # 緩存 60 秒
 async def list_automation_tasks(
     page: int = Query(1, ge=1, description="頁碼"),
     page_size: int = Query(20, ge=1, le=100, description="每頁數量"),
     task_type: Optional[str] = Query(None, description="任務類型過濾"),
     enabled: Optional[bool] = Query(None, description="是否啟用過濾"),
+    _t: Optional[int] = Query(None, description="強制刷新時間戳（繞過緩存）"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """列出自動化任務（需要 automation_task:view 權限）"""
+    """列出自動化任務（需要 automation_task:view 權限，帶緩存）"""
+    # 如果提供了強制刷新時間戳，清除緩存
+    if _t is not None:
+        invalidate_cache("automation_tasks_list:*")
     check_permission(current_user, PermissionCode.AUTOMATION_TASK_VIEW.value, db)
     try:
         query = db.query(GroupAIAutomationTask)

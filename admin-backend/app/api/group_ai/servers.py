@@ -3,7 +3,7 @@
 用於查詢和管理遠程服務器狀態
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 from sqlalchemy.orm import Session
@@ -15,6 +15,7 @@ import logging
 
 from app.api.deps import get_db, get_current_active_user
 from app.models.user import User
+from app.core.cache import cached, invalidate_cache
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +68,16 @@ def load_server_configs() -> Dict:
 
 
 @router.get("/", response_model=List[ServerStatus])
+@cached(prefix="servers_list", ttl=60)  # 緩存 60 秒（服務器狀態變化較慢）
 async def list_servers(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    _t: Optional[int] = Query(None, description="強制刷新時間戳（繞過緩存）")
 ):
-    """獲取所有服務器列表（並發優化版本）"""
+    """獲取所有服務器列表（並發優化版本，帶緩存）"""
+    # 如果提供了強制刷新時間戳，清除緩存
+    if _t is not None:
+        invalidate_cache("servers_list:*")
     import asyncio
     servers_config = load_server_configs()
     

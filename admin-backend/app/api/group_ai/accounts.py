@@ -750,6 +750,7 @@ async def upload_session_file(
 
 
 @router.get("/", response_model=AccountListResponse)
+@cached(prefix="accounts_list", ttl=30)  # 緩存 30 秒
 async def list_accounts(
     request: Request,  # 用於限流
     db: Session = Depends(get_db),
@@ -763,40 +764,15 @@ async def list_accounts(
     active: Optional[bool] = Query(None, description="是否激活過濾"),
     sort_by: Optional[str] = Query("created_at", description="排序字段（account_id, display_name, created_at, script_id）"),
     sort_order: Optional[str] = Query("desc", description="排序順序（asc, desc）"),
+    _t: Optional[int] = Query(None, description="強制刷新時間戳（繞過緩存）"),
     service_manager: ServiceManager = Depends(get_service_manager)
 ):
-    """列出所有賬號（支持搜索、過濾、排序）"""
+    """列出所有賬號（支持搜索、過濾、排序，帶緩存）"""
     check_permission(current_user, PermissionCode.ACCOUNT_VIEW.value, db)
     
-    # 生成緩存鍵（僅在無搜索/過濾時使用緩存）
-    # 使用同步内存缓存，避免异步问题
-    use_cache = not (search or status_filter or script_id or server_id or active is not None)
-    cache_key = None
-    if use_cache:
-        from app.core.cache import get_cache_manager
-        cache_manager = get_cache_manager()
-        import hashlib
-        import json
-        # 生成缓存键
-        cache_params = {
-            "page": page,
-            "page_size": page_size,
-            "sort_by": sort_by,
-            "sort_order": sort_order,
-        }
-        cache_key_str = json.dumps(cache_params, sort_keys=True)
-        cache_key = f"accounts_list:{hashlib.md5(cache_key_str.encode()).hexdigest()}"
-        
-        # 尝试从内存缓存获取（同步操作）
-        if cache_key in cache_manager.memory_cache:
-            cache_item = cache_manager.memory_cache[cache_key]
-            from datetime import datetime
-            if datetime.now() < cache_item["expires_at"]:
-                logger.debug(f"從緩存獲取賬號列表: page={page}")
-                return AccountListResponse(**cache_item["value"])
-            else:
-                # 缓存过期，删除
-                del cache_manager.memory_cache[cache_key]
+    # 如果提供了強制刷新時間戳，清除緩存
+    if _t is not None:
+        invalidate_cache("accounts_list:*")
     
     try:
         # 從數據庫獲取賬號列表（包含完整信息）

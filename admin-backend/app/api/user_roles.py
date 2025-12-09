@@ -5,7 +5,7 @@ import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
 from app.models.user import User
@@ -80,7 +80,8 @@ async def list_users(
     check_permission(current_user, PermissionCode.USER_VIEW.value, db)
     
     try:
-        users = db.query(User).all()
+        # 使用 selectinload 预加载 roles，避免 N+1 查询
+        users = db.query(User).options(selectinload(User.roles)).all()
         return [
             UserWithRolesResponse(
                 id=u.id,
@@ -117,7 +118,8 @@ async def get_user(
     check_permission(current_user, PermissionCode.USER_VIEW.value, db)
     
     try:
-        user = db.query(User).filter(User.id == user_id).first()
+        # 使用 selectinload 预加载 roles，避免 N+1 查询
+        user = db.query(User).options(selectinload(User.roles)).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -160,7 +162,8 @@ async def assign_role_to_user_endpoint(
     check_permission(current_user, PermissionCode.USER_ROLE_ASSIGN.value, db)
     
     try:
-        user = db.query(User).filter(User.id == user_id).first()
+        # 使用 selectinload 预加载 roles，避免 N+1 查询
+        user = db.query(User).options(selectinload(User.roles)).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -199,7 +202,8 @@ async def revoke_role_from_user_endpoint(
     check_permission(current_user, PermissionCode.USER_ROLE_ASSIGN.value, db)
     
     try:
-        user = db.query(User).filter(User.id == user_id).first()
+        # 使用 selectinload 预加载 roles，避免 N+1 查询
+        user = db.query(User).options(selectinload(User.roles)).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -246,7 +250,8 @@ async def get_user_roles_endpoint(
     check_permission(current_user, PermissionCode.USER_VIEW.value, db)
     
     try:
-        user = db.query(User).filter(User.id == user_id).first()
+        # 使用 selectinload 预加载 roles，避免 N+1 查询
+        user = db.query(User).options(selectinload(User.roles)).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -305,10 +310,13 @@ async def batch_assign_role(
         failed_count = 0
         errors = []
         
-        # 批量分配角色
+        # 批量分配角色 - 使用 selectinload 预加载所有用户的 roles，避免 N+1 查询
+        users = db.query(User).options(selectinload(User.roles)).filter(User.id.in_(batch.user_ids)).all()
+        user_dict = {u.id: u for u in users}
+        
         for user_id in batch.user_ids:
             try:
-                user = db.query(User).filter(User.id == user_id).first()
+                user = user_dict.get(user_id)
                 if not user:
                     failed_count += 1
                     errors.append(f"用戶 {user_id} 不存在")
@@ -379,10 +387,13 @@ async def batch_revoke_role(
         failed_count = 0
         errors = []
         
-        # 批量撤銷角色
+        # 批量撤銷角色 - 使用 selectinload 预加载所有用户的 roles，避免 N+1 查询
+        users = db.query(User).options(selectinload(User.roles)).filter(User.id.in_(batch.user_ids)).all()
+        user_dict = {u.id: u for u in users}
+        
         for user_id in batch.user_ids:
             try:
-                user = db.query(User).filter(User.id == user_id).first()
+                user = user_dict.get(user_id)
                 if not user:
                     failed_count += 1
                     errors.append(f"用戶 {user_id} 不存在")

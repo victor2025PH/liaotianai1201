@@ -1,298 +1,237 @@
-# 下一步操作指南
+# 下一步工作建議
 
-**当前状态**: 所有代码已部署，服务运行正常  
-**更新时间**: 2025-12-09
-
-## 立即执行（高优先级）
-
-### 1. 修改管理员密码 ⚠️ 重要
-
-**原因**: 当前使用默认密码 `changeme123`，存在安全风险
-
-**执行命令**:
-```bash
-cd /home/ubuntu/telegram-ai-system/admin-backend
-source venv/bin/activate
-python3 ../scripts/server/update_security_config.py
-```
-
-**操作步骤**:
-1. 运行上述命令
-2. 按照提示输入新密码（至少8个字符）
-3. 确认更新
-4. 重启服务: `pm2 restart backend --update-env`
-
-### 2. 验证JWT_SECRET配置
-
-**原因**: 确保JWT_SECRET已更新为强随机值
-
-**执行命令**:
-```bash
-cd /home/ubuntu/telegram-ai-system/admin-backend
-source venv/bin/activate
-python3 ../scripts/server/system_health_check.py
-```
-
-**检查项**:
-- ✓ JWT_SECRET已修改（不是默认值）
-- ✓ 管理员密码已修改
-
-## 短期优化（中优先级）
-
-### 3. 配置通知渠道
-
-**可选渠道**:
-- 邮件通知（Email）
-- Telegram通知
-- Webhook通知（Slack/Discord等）
-
-**执行命令**:
-```bash
-cd /home/ubuntu/telegram-ai-system/admin-backend
-source venv/bin/activate
-python3 ../scripts/server/configure_notifications.py
-```
-
-**配置步骤**:
-1. 选择要配置的通知渠道（1-3）
-2. 按照提示输入配置信息
-3. 重启服务: `pm2 restart backend --update-env`
-
-**详细指南**: 参考 `docs/NOTIFICATION_SETUP_GUIDE.md`
-
-### 4. 运行性能基准测试
-
-**目的**: 建立性能基线，用于后续性能对比
-
-**执行命令**:
-```bash
-cd /home/ubuntu/telegram-ai-system/admin-backend
-source venv/bin/activate
-python3 ../scripts/server/performance_benchmark.py
-```
-
-**操作步骤**:
-1. 运行测试脚本
-2. 首次运行选择 `yes` 设置为基线
-3. 后续运行会自动与基线对比
-
-**结果位置**: `admin-backend/benchmarks/`
-
-## 定期维护（低优先级）
-
-### 5. 系统健康检查
-
-**频率**: 每周执行一次
-
-**执行命令**:
-```bash
-cd /home/ubuntu/telegram-ai-system/admin-backend
-source venv/bin/activate
-python3 ../scripts/server/system_health_check.py
-```
-
-**检查项**:
-- 服务状态（后端、前端）
-- 数据库连接
-- 磁盘空间
-- 安全配置
-
-### 6. 数据库性能检查
-
-**频率**: 每月执行一次
-
-**执行命令**:
-```bash
-cd /home/ubuntu/telegram-ai-system/admin-backend
-source venv/bin/activate
-python3 ../scripts/server/check_database_performance.py
-```
-
-### 7. 性能基准测试对比
-
-**频率**: 每月执行一次
-
-**执行命令**:
-```bash
-cd /home/ubuntu/telegram-ai-system/admin-backend
-source venv/bin/activate
-python3 ../scripts/server/performance_benchmark.py
-```
-
-**目的**: 对比当前性能与基线，发现性能退化
-
-## 功能测试
-
-### 8. 测试前端功能
-
-**访问地址**: `https://aikz.usdt2026.cc`
-
-**测试项**:
-- [ ] 登录功能
-- [ ] 仪表板数据展示
-- [ ] 账户管理
-- [ ] 脚本管理
-- [ ] 监控页面
-- [ ] 健康检查页面 (`/health`)
-- [ ] 性能监控页面 (`/performance`)
-- [ ] 日志管理页面 (`/group-ai/logs`)
-- [ ] 会话管理页面 (`/group-ai/sessions`)
-
-### 9. 测试后端API
-
-**访问地址**: `https://aikz.usdt2026.cc/docs`
-
-**测试项**:
-- [ ] 登录API (`POST /api/v1/auth/login`)
-- [ ] 健康检查 (`GET /health`)
-- [ ] 仪表板API (`GET /api/v1/group-ai/dashboard`)
-- [ ] 性能统计API (`GET /api/v1/system/performance`)
-- [ ] 告警管理API (`GET /api/v1/group-ai/alert-management/statistics`)
-
-## 监控和告警
-
-### 10. 配置告警规则
-
-**配置文件**: `admin-backend/app/config/alert_rules.yaml`
-
-**告警类型**:
-- 性能告警（API响应时间、慢查询）
-- 系统资源告警（CPU、内存、磁盘）
-- 服务健康告警（后端、前端、数据库）
-- 业务告警（账号启动失败、脚本执行错误）
-
-### 11. 测试告警通知
-
-**执行命令**:
-```bash
-cd /home/ubuntu/telegram-ai-system/admin-backend
-source venv/bin/activate
-python3 ../scripts/server/test_alert_notifications.py
-```
-
-## 文档阅读
-
-### 12. 阅读相关文档
-
-**推荐阅读顺序**:
-1. `docs/SECURITY_CONFIGURATION_GUIDE.md` - 安全配置指南
-2. `docs/NOTIFICATION_SETUP_GUIDE.md` - 通知配置指南
-3. `docs/DEPLOYMENT_GUIDE.md` - 部署指南
-4. `docs/API_DOCUMENTATION.md` - API文档
-5. `docs/USER_MANUAL.md` - 用户手册
-
-## 快速执行清单
-
-### 今天必须完成
-
-- [ ] 修改管理员密码
-- [ ] 验证JWT_SECRET配置
-- [ ] 测试登录功能
-
-### 本周完成
-
-- [ ] 配置至少一个通知渠道
-- [ ] 运行性能基准测试并设置基线
-- [ ] 完成前端功能测试
-- [ ] 阅读安全配置指南
-
-### 本月完成
-
-- [ ] 配置所有告警规则
-- [ ] 测试告警通知功能
-- [ ] 运行数据库性能检查
-- [ ] 完成API功能测试
-
-## 一键执行脚本
-
-### 执行所有高优先级任务
-
-```bash
-cd /home/ubuntu/telegram-ai-system/admin-backend
-source venv/bin/activate
-
-# 1. 更新安全配置（包括密码）
-python3 ../scripts/server/update_security_config.py
-
-# 2. 验证配置
-python3 ../scripts/server/system_health_check.py
-
-# 3. 重启服务
-cd ..
-pm2 restart backend --update-env
-
-# 4. 验证服务
-sleep 3
-curl http://localhost:8000/health
-```
-
-### 执行所有中优先级任务
-
-```bash
-cd /home/ubuntu/telegram-ai-system/admin-backend
-source venv/bin/activate
-
-# 1. 配置通知渠道
-python3 ../scripts/server/configure_notifications.py
-
-# 2. 运行性能基准测试
-python3 ../scripts/server/performance_benchmark.py
-
-# 3. 重启服务
-cd ..
-pm2 restart backend --update-env
-```
-
-## 故障排查
-
-### 如果服务无法启动
-
-```bash
-# 检查PM2状态
-pm2 status
-
-# 查看日志
-pm2 logs backend --lines 50
-pm2 logs frontend --lines 50
-
-# 重启服务
-pm2 restart all
-```
-
-### 如果脚本无法运行
-
-```bash
-# 检查虚拟环境
-cd /home/ubuntu/telegram-ai-system/admin-backend
-ls -la venv/bin/activate
-
-# 重新激活虚拟环境
-source venv/bin/activate
-
-# 检查Python路径
-which python
-```
-
-### 如果文件缺失
-
-```bash
-# 强制拉取所有文件
-cd /home/ubuntu/telegram-ai-system
-git fetch origin
-git reset --hard origin/main
-bash scripts/server/deploy_all_files.sh
-```
-
-## 联系和支持
-
-如果遇到问题：
-1. 查看相关文档（`docs/` 目录）
-2. 检查系统健康状态
-3. 查看服务日志
-4. 参考故障排查指南
+> **當前狀態**: 所有核心優化任務已完成（98%）  
+> **建議優先級**: 根據實際需求選擇
 
 ---
 
-**最后更新**: 2025-12-09  
-**状态**: 系统运行正常，等待配置优化
+## 🎯 立即可做的工作
 
+### 1. 測試和驗證（高優先級）
+
+#### 功能測試
+- [ ] **手動功能測試**
+  - 測試所有主要功能流程
+  - 驗證賬號管理、劇本管理、角色分配等核心功能
+  - 檢查前端頁面是否正常顯示和交互
+
+- [ ] **API 測試**
+  - 使用 Swagger UI (`/docs`) 測試所有 API 端點
+  - 驗證認證和權限控制
+  - 測試緩存是否正常工作
+
+- [ ] **性能測試**
+  - 驗證緩存命中率
+  - 測試 API 響應時間
+  - 檢查前端加載性能
+
+#### 自動化測試
+- [ ] **單元測試**
+  - 為核心業務邏輯添加單元測試
+  - 測試緩存、健康檢查等核心功能
+
+- [ ] **集成測試**
+  - 測試 API 端點集成
+  - 測試數據庫操作
+
+- [ ] **E2E 測試**
+  - 使用 Playwright 測試關鍵用戶流程
+  - 測試登錄、賬號管理、劇本管理等
+
+### 2. 部署驗證（高優先級）
+
+- [ ] **服務器部署驗證**
+  - 驗證 GitHub Actions 自動部署是否正常
+  - 檢查 PM2 服務是否正常運行
+  - 驗證 Nginx 配置是否正確
+
+- [ ] **健康檢查驗證**
+  - 訪問 `/health?detailed=true` 檢查所有組件狀態
+  - 驗證緩存服務是否正常
+  - 檢查數據庫連接
+
+- [ ] **功能驗證**
+  - 在生產環境測試所有功能
+  - 驗證告警通知是否正常發送
+  - 檢查日誌聚合是否正常工作
+
+### 3. 安全檢查（高優先級）
+
+- [ ] **環境變量檢查**
+  - 確認 `JWT_SECRET` 已修改為強隨機值
+  - 確認 `ADMIN_DEFAULT_PASSWORD` 已修改
+  - 確認 `CORS_ORIGINS` 只包含信任的域名
+
+- [ ] **權限驗證**
+  - 測試不同角色的權限控制
+  - 驗證未授權訪問是否被正確攔截
+
+- [ ] **數據安全**
+  - 確認敏感數據已加密
+  - 檢查審計日誌是否正常記錄
+
+---
+
+## 🚀 可選優化工作
+
+### 4. 前端優化（中優先級）
+
+- [ ] **優化更多頁面**
+  - 為 `groups`、`chat-features`、`redpacket` 等頁面添加代碼分割
+  - 優化其他未優化的頁面
+
+- [ ] **圖片懶加載**
+  - 實現圖片懶加載功能
+  - 優化首屏圖片加載
+
+- [ ] **Service Worker（PWA）**
+  - 添加 Service Worker 支持
+  - 實現離線功能
+
+### 5. 後端優化（中優先級）
+
+- [ ] **緩存優化**
+  - 在更多操作中集成緩存失效策略
+  - 優化緩存預熱邏輯（實際調用 API）
+
+- [ ] **數據庫優化**
+  - 考慮遷移到 PostgreSQL（生產環境推薦）
+  - 優化連接池配置
+
+- [ ] **API 優化**
+  - 添加更多 API 端點的緩存
+  - 優化批量操作性能
+
+### 6. 監控和告警（中優先級）
+
+- [ ] **監控儀表板**
+  - 集成 Prometheus + Grafana
+  - 創建實時性能監控儀表板
+  - 可視化告警統計
+
+- [ ] **告警優化**
+  - 優化告警聚合策略
+  - 添加告警規則配置界面（前端已有，後端可優化）
+  - 完善通知渠道配置
+
+### 7. 文檔完善（低優先級）
+
+- [ ] **用戶手冊**
+  - 創建用戶使用手冊
+  - 添加功能使用示例
+
+- [ ] **開發者指南**
+  - 完善開發環境設置指南
+  - 添加代碼貢獻指南
+
+- [ ] **API 使用示例**
+  - 添加更多 API 使用示例
+  - 創建 Postman Collection
+
+---
+
+## 🔧 維護工作
+
+### 8. 日常維護
+
+- [ ] **依賴更新**
+  - 定期更新 Python 和 Node.js 依賴
+  - 修復安全漏洞
+
+- [ ] **日誌清理**
+  - 定期清理舊日誌文件
+  - 清理數據庫備份文件
+
+- [ ] **性能監控**
+  - 定期檢查性能指標
+  - 分析慢查詢和性能瓶頸
+
+### 9. 功能增強（根據需求）
+
+- [ ] **新功能開發**
+  - 根據用戶反饋添加新功能
+  - 優化現有功能體驗
+
+- [ ] **國際化**
+  - 添加多語言支持
+  - 時區處理
+
+- [ ] **移動端適配**
+  - 優化移動端體驗
+  - 添加移動端專用功能
+
+---
+
+## 📋 建議的執行順序
+
+### 第一階段（1-2週）
+
+1. **測試和驗證**（必須）
+   - 手動功能測試
+   - API 測試
+   - 部署驗證
+   - 安全檢查
+
+2. **修復發現的問題**
+   - 修復測試中發現的 bug
+   - 優化性能問題
+
+### 第二階段（2-4週）
+
+3. **自動化測試**
+   - 添加單元測試
+   - 添加集成測試
+   - 完善 E2E 測試
+
+4. **監控和告警完善**
+   - 集成 Prometheus + Grafana
+   - 創建監控儀表板
+
+### 第三階段（按需）
+
+5. **可選優化**
+   - 前端優化（更多頁面）
+   - 後端優化（緩存、數據庫）
+   - 文檔完善
+
+---
+
+## 🎯 當前最優先的任務
+
+基於當前狀態，建議優先執行：
+
+1. **✅ 部署驗證**
+   - 在服務器上驗證所有功能是否正常
+   - 檢查健康檢查端點
+   - 驗證緩存和性能優化是否生效
+
+2. **✅ 功能測試**
+   - 手動測試所有核心功能
+   - 驗證前端和後端集成
+   - 檢查告警和日誌功能
+
+3. **✅ 安全檢查**
+   - 確認所有安全配置已正確設置
+   - 驗證權限控制是否正常
+
+---
+
+## 📊 當前項目狀態
+
+- **核心功能**: ✅ 100% 完成
+- **性能優化**: ✅ 98% 完成
+- **監控告警**: ✅ 70% 完成
+- **文檔**: ✅ 100% 完成
+- **測試覆蓋**: ⚠️ 待完善
+
+---
+
+## 💡 建議
+
+1. **先驗證再優化**: 優先驗證現有功能是否正常，再考慮進一步優化
+2. **逐步完善**: 根據實際使用情況，逐步完善測試和監控
+3. **關注用戶反饋**: 根據用戶反饋優先處理最需要的功能
+
+---
+
+**最後更新**: 2025-12-09

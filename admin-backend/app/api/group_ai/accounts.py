@@ -1219,8 +1219,12 @@ async def update_account(
             db.commit()
             db.refresh(db_account)
         
-        # 清除緩存
-        invalidate_cache("accounts_list*")
+        # 觸發緩存失效事件
+        try:
+            from app.core.cache_invalidation import trigger_cache_invalidation
+            trigger_cache_invalidation("account.updated", account_id=account_id)
+        except Exception as cache_err:
+            logger.warning(f"觸發緩存失效失敗（不影響主流程）: {cache_err}")
         
         # 返回更新後的賬號信息
         # 如果賬號在 AccountManager 中，從 AccountManager 獲取狀態；否則從數據庫構建響應

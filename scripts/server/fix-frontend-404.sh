@@ -29,8 +29,17 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# 步骤 0: 拉取最新代码
+echo "[0/7] 拉取最新代码..."
+cd "$PROJECT_ROOT"
+# 先处理可能的冲突文件
+rm -f scripts/server/fix-frontend-404.sh 2>/dev/null || true
+# 拉取代码
+git pull origin main || echo "⚠️  Git pull 失败，继续..."
+echo ""
+
 # 步骤 1: 检查前端目录
-echo "[1/6] 检查前端目录..."
+echo "[1/7] 检查前端目录..."
 if [ ! -d "$FRONTEND_DIR" ]; then
     echo -e "${RED}❌ 前端目录不存在: $FRONTEND_DIR${NC}"
     exit 1
@@ -39,7 +48,7 @@ echo -e "${GREEN}✅ 前端目录存在${NC}"
 echo ""
 
 # 步骤 2: 检查 .next 构建目录
-echo "[2/6] 检查构建文件..."
+echo "[2/7] 检查构建文件..."
 if [ ! -d "$FRONTEND_DIR/.next" ]; then
     echo -e "${YELLOW}⚠️  .next 目录不存在，需要重新构建${NC}"
     NEED_BUILD=true
@@ -50,7 +59,7 @@ fi
 echo ""
 
 # 步骤 3: 停止前端服务
-echo "[3/6] 停止前端服务..."
+echo "[3/7] 停止前端服务..."
 # 检查是否有 systemd 服务
 if systemctl list-units --type=service | grep -q "liaotian-frontend\|smart-tg-frontend\|telegram-frontend"; then
     FRONTEND_SERVICE=$(systemctl list-units --type=service | grep -E "liaotian-frontend|smart-tg-frontend|telegram-frontend" | awk '{print $1}' | head -n 1)
@@ -68,7 +77,7 @@ echo -e "${GREEN}✅ 前端服务已停止${NC}"
 echo ""
 
 # 步骤 4: 清理旧的构建文件
-echo "[4/6] 清理旧的构建文件..."
+echo "[4/7] 清理旧的构建文件..."
 cd "$FRONTEND_DIR"
 rm -rf .next 2>/dev/null || true
 rm -rf node_modules/.cache 2>/dev/null || true
@@ -76,7 +85,7 @@ echo -e "${GREEN}✅ 清理完成${NC}"
 echo ""
 
 # 步骤 5: 重新构建前端
-echo "[5/6] 重新构建前端..."
+echo "[5/7] 重新构建前端..."
 echo "   这可能需要几分钟，请耐心等待..."
 
 # 设置内存限制避免 OOM
@@ -101,7 +110,7 @@ fi
 echo ""
 
 # 步骤 6: 重启前端服务
-echo "[6/6] 重启前端服务..."
+echo "[6/7] 重启前端服务..."
 
 # 检查是否有 systemd 服务
 if [ -n "$FRONTEND_SERVICE" ]; then

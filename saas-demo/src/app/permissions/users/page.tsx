@@ -72,8 +72,6 @@ import { usePermissions } from "@/hooks/use-permissions"
 import { PermissionGuard } from "@/components/permissions/permission-guard"
 import { useQueryClient } from "@tanstack/react-query"
 import { Users, Shield, Plus, X, Loader2, Edit, Trash2, Key, UserPlus } from "lucide-react"
-const Alert = dynamic(() => import("@/components/ui/alert").then(mod => ({ default: mod.Alert })), { ssr: false })
-const AlertDescription = dynamic(() => import("@/components/ui/alert").then(mod => ({ default: mod.AlertDescription })), { ssr: false })
 
 export default function UserRolesPage() {
   const [users, setUsers] = useState<User[]>([])

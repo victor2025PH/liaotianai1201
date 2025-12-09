@@ -243,6 +243,16 @@ async def on_startup() -> None:
     except Exception as e:
         logger.warning(f"啟動性能監控失敗: {e}")
     
+    # 初始化日誌聚合器並註冊日誌來源
+    try:
+        from app.services.log_aggregator import get_log_aggregator
+        aggregator = get_log_aggregator()
+        aggregator.register_source("local", {"name": "本地服務", "type": "application"})
+        aggregator.register_source("remote", {"name": "遠程服務器", "type": "system"})
+        logger.info("日誌聚合服務已初始化")
+    except Exception as e:
+        logger.warning(f"初始化日誌聚合服務失敗: {e}", exc_info=True)
+    
     # 啟動故障恢復服務
     try:
         from app.core.intelligent_allocator import IntelligentAllocator

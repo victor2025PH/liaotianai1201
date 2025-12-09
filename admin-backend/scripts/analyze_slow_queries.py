@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 # 添加项目根目录到路径
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
@@ -327,7 +327,7 @@ def main():
         "missing_indexes": missing_indexes
     }
     
-    report_path = project_root / "admin-backend" / "database_analysis_report.json"
+    report_path = project_root / "database_analysis_report.json"
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False, default=str)
     

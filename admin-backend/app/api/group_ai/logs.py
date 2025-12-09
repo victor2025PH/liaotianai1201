@@ -15,6 +15,7 @@ from collections import Counter, defaultdict
 
 from app.api.deps import get_current_active_user
 from app.models.user import User
+from app.services.log_aggregator import get_log_aggregator
 
 # 延迟导入以避免循环导入
 # from app.api.group_ai.servers import load_server_configs

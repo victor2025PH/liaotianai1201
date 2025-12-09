@@ -26,33 +26,51 @@ jobs:
             # 2. 拉取最新代码
             git pull origin main
             
-            # 3. 更新依赖 (使用 admin-backend 下的 requirements.txt)
-            source admin-backend/venv/bin/activate
-            pip install -r admin-backend/requirements.txt
+            # 3. 更新后端依赖
+            if [ -d "admin-backend/venv" ]; then
+              source admin-backend/venv/bin/activate
+              pip install -r admin-backend/requirements.txt
+            fi
             
-            # 4. 重启后端服务
+            # 4. 更新 Bot 依赖（如果存在虚拟环境）
+            if [ -d "venv" ]; then
+              source venv/bin/activate
+              pip install -r requirements.txt
+            fi
+            
+            # 5. 重启后端服务
             sudo systemctl restart telegram-backend
             
-            # 5. 等待服务启动
+            # 6. 重启 Bot 服务
+            sudo systemctl restart telegram-bot
+            
+            # 7. 等待服务启动
             sleep 5
             
-            # 6. 检查后端服务状态
+            # 8. 检查后端服务状态
             echo "=========================================="
             echo "检查后端服务状态"
             echo "=========================================="
             sudo systemctl status telegram-backend --no-pager || true
             
-            # 7. 检查后端端口
+            # 9. 检查后端端口
             echo ""
             echo "检查后端端口 (8000)..."
             ss -tlnp | grep :8000 || echo "端口 8000 未监听"
             
-            # 8. 检查后端健康状态
+            # 10. 检查后端健康状态
             echo ""
             echo "检查后端健康状态..."
             curl -s http://localhost:8000/health || echo "后端健康检查失败"
             
-            # 9. 检查前端服务状态
+            # 11. 检查 Bot 服务状态
+            echo ""
+            echo "=========================================="
+            echo "检查 Bot 服务状态"
+            echo "=========================================="
+            sudo systemctl status telegram-bot --no-pager || true
+            
+            # 12. 检查前端服务状态
             echo ""
             echo "=========================================="
             echo "检查前端服务状态"
@@ -70,7 +88,7 @@ jobs:
               ps aux | grep -E "node.*next|npm.*start" | grep -v grep | head -n 2 || echo "未发现前端进程"
             fi
             
-            # 10. 检查前端端口
+            # 13. 检查前端端口
             echo ""
             echo "检查前端端口 (3000, 3001)..."
             for port in 3000 3001; do
@@ -80,7 +98,7 @@ jobs:
               fi
             done
             
-            # 11. 检查前端 HTTP 响应
+            # 14. 检查前端 HTTP 响应
             echo ""
             echo "检查前端 HTTP 响应..."
             for port in 3000 3001; do
@@ -90,7 +108,7 @@ jobs:
               fi
             done
             
-            # 12. 服务状态总结
+            # 15. 服务状态总结
             echo ""
             echo "=========================================="
             echo "服务状态总结"
@@ -105,6 +123,13 @@ jobs:
               fi
             else
               echo "❌ 后端服务: 未运行"
+            fi
+            
+            # Bot 状态
+            if systemctl is-active --quiet telegram-bot 2>/dev/null; then
+              echo "✅ Bot 服务: 运行正常"
+            else
+              echo "❌ Bot 服务: 未运行"
             fi
             
             # 前端状态

@@ -1,5 +1,5 @@
 [Unit]
-Description=Telegram AI System Backend Service
+Description=Telegram AI System Backend Service (FastAPI)
 After=network.target
 
 [Service]
@@ -9,8 +9,9 @@ Group=ubuntu
 WorkingDirectory=/home/ubuntu/telegram-ai-system/admin-backend
 Environment="PATH=/home/ubuntu/telegram-ai-system/admin-backend/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONPATH=/home/ubuntu/telegram-ai-system/admin-backend"
 
-# 如果使用虚拟环境
+# 使用虚拟环境中的 uvicorn 运行 FastAPI
 ExecStart=/home/ubuntu/telegram-ai-system/admin-backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 # 如果不使用虚拟环境，使用系统 Python
@@ -34,4 +35,3 @@ LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
-

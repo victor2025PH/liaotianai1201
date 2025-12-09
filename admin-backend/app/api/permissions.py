@@ -357,7 +357,19 @@ async def get_my_permissions_endpoint(
 ):
     """獲取當前用戶的所有權限"""
     try:
-        permissions = get_user_permissions(db, user=current_user)
+        # 重新查询用户并预加载 roles 和 permissions，避免 N+1 查询
+        from sqlalchemy.orm import selectinload
+        from app.models.role import Role
+        from app.models.permission import Permission
+        
+        user = db.query(User).options(
+            selectinload(User.roles).selectinload(Role.permissions)
+        ).filter(User.id == current_user.id).first()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="用戶不存在")
+        
+        permissions = get_user_permissions(db, user=user)
         return [
             PermissionResponse(
                 id=p.id,

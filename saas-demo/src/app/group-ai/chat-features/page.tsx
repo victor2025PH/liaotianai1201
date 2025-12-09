@@ -334,42 +334,42 @@ export default function ChatFeaturesPage() {
             <CardContent className="space-y-6">
               <div className="flex flex-row justify-start gap-10">
                 {/* 功能開關 */}
-                <div className="space-y-4 flex-shrink-0">
+                <div className="space-y-4 flex-shrink-0 min-w-[200px]">
                   <h3 className="font-semibold">功能開關</h3>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="auto_chat">自動聊天</Label>
+                  <div className="flex items-center gap-4">
+                    <Label htmlFor="auto_chat" className="min-w-[100px]">自動聊天</Label>
                     <Switch 
                       id="auto_chat"
                       checked={settings.auto_chat_enabled}
                       onCheckedChange={(checked) => setSettings({...settings, auto_chat_enabled: checked})}
                     />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="games">遊戲功能</Label>
+                  <div className="flex items-center gap-4">
+                    <Label htmlFor="games" className="min-w-[100px]">遊戲功能</Label>
                     <Switch 
                       id="games"
                       checked={settings.games_enabled}
                       onCheckedChange={(checked) => setSettings({...settings, games_enabled: checked})}
                     />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="scripts">劇本功能</Label>
+                  <div className="flex items-center gap-4">
+                    <Label htmlFor="scripts" className="min-w-[100px]">劇本功能</Label>
                     <Switch 
                       id="scripts"
                       checked={settings.scripts_enabled}
                       onCheckedChange={(checked) => setSettings({...settings, scripts_enabled: checked})}
                     />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="scheduler">排程功能</Label>
+                  <div className="flex items-center gap-4">
+                    <Label htmlFor="scheduler" className="min-w-[100px]">排程功能</Label>
                     <Switch 
                       id="scheduler"
                       checked={settings.scheduler_enabled}
                       onCheckedChange={(checked) => setSettings({...settings, scheduler_enabled: checked})}
                     />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="redpacket">紅包功能</Label>
+                  <div className="flex items-center gap-4">
+                    <Label htmlFor="redpacket" className="min-w-[100px]">紅包功能</Label>
                     <Switch 
                       id="redpacket"
                       checked={settings.redpacket_enabled}

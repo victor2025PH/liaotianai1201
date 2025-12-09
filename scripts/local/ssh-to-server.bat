@@ -18,5 +18,5 @@ echo Server: ubuntu@165.154.233.55
 echo.
 
 REM Open PowerShell and execute SSH command
-powershell -NoExit -Command "ssh -o StrictHostKeyChecking=no ubuntu@165.154.233.55"
+powershell -NoExit -Command "ssh -q -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@165.154.233.55"
 

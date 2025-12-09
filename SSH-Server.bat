@@ -1,22 +1,13 @@
 @echo off
 chcp 65001 >nul
 REM ============================================================
-REM SSH to Server - Quick Connect
-REM ============================================================
-REM
-REM Running Environment: Local Windows Environment
-REM Function: Open PowerShell and SSH to server (165.154.233.55)
-REM
-REM One-click execution: Double-click this file
+REM SSH to Server - Quick Connect (Optimized)
 REM ============================================================
 
-echo ============================================================
-echo 🔌 Connecting to Server...
-echo ============================================================
-echo.
-echo Server: ubuntu@165.154.233.55
-echo.
-
-REM Open PowerShell and execute SSH command
-powershell -NoExit -Command "ssh -o StrictHostKeyChecking=no ubuntu@165.154.233.55"
+REM Open PowerShell and execute SSH command with optimized settings
+REM -q: Quiet mode (suppress most output)
+REM -o LogLevel=ERROR: Only show errors
+REM -o StrictHostKeyChecking=no: Skip host key verification
+REM -o UserKnownHostsFile=/dev/null: Don't save host keys
+powershell -NoExit -Command "ssh -q -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@165.154.233.55"
 

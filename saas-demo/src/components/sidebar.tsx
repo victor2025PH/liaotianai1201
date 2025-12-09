@@ -20,6 +20,8 @@ import {
   Download,
   Gift,
   Sparkles,
+  Heart,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -163,14 +165,14 @@ const navigationConfig: NavItem[] = [
   {
     nameKey: "healthCheck",
     href: "/health",
-    icon: Activity,
+    icon: Heart,
     step: null,
     descKey: "healthCheck",
   },
   {
     nameKey: "performanceMonitor",
     href: "/performance",
-    icon: Activity,
+    icon: TrendingUp,
     step: null,
     descKey: "performanceMonitor",
   },

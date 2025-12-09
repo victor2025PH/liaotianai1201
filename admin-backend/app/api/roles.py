@@ -5,7 +5,7 @@ import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
 from app.models.role import Role
@@ -142,15 +142,15 @@ async def get_role(
     check_permission(current_user, PermissionCode.ROLE_VIEW.value, db)
     
     try:
-        role = db.query(Role).filter(Role.id == role_id).first()
+        # 使用 selectinload 预加载 permissions，避免 N+1 查询
+        role = db.query(Role).options(selectinload(Role.permissions)).filter(Role.id == role_id).first()
         if not role:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"角色 {role_id} 不存在"
             )
         
-        permissions = get_role_permissions(db, role=role)
-        
+        # 直接使用预加载的 permissions，避免额外查询
         return RoleWithPermissionsResponse(
             id=role.id,
             name=role.name,
@@ -161,7 +161,7 @@ async def get_role(
                     "code": p.code,
                     "description": p.description
                 }
-                for p in permissions
+                for p in role.permissions
             ]
         )
     except HTTPException:
@@ -249,8 +249,8 @@ async def delete_role(
                 detail="不能刪除系統預設的 'admin' 角色，此角色由系統自動創建和管理"
             )
         
-        # 檢查是否有用戶正在使用此角色
-        users_with_role = db.query(User).join(User.roles).filter(Role.id == role_id).all()
+        # 檢查是否有用戶正在使用此角色 - 使用 selectinload 预加载，避免 N+1 查询
+        users_with_role = db.query(User).options(selectinload(User.roles)).join(User.roles).filter(Role.id == role_id).all()
         if users_with_role:
             user_emails = [u.email for u in users_with_role]
             raise HTTPException(
@@ -359,21 +359,22 @@ async def get_role_permissions_endpoint(
     check_permission(current_user, PermissionCode.ROLE_VIEW.value, db)
     
     try:
-        role = db.query(Role).filter(Role.id == role_id).first()
+        # 使用 selectinload 预加载 permissions，避免 N+1 查询
+        role = db.query(Role).options(selectinload(Role.permissions)).filter(Role.id == role_id).first()
         if not role:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"角色 {role_id} 不存在"
             )
         
-        permissions = get_role_permissions(db, role=role)
+        # 直接使用预加载的 permissions，避免额外查询
         return [
             {
                 "id": p.id,
                 "code": p.code,
                 "description": p.description
             }
-            for p in permissions
+            for p in role.permissions
         ]
     except HTTPException:
         raise

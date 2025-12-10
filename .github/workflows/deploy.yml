@@ -9,7 +9,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -22,7 +22,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
           timeout: 60s
-          command_timeout: 25m
+          command_timeout: 55m
           script_stop: true
           debug: true
           script: |
@@ -57,8 +57,8 @@ jobs:
             if [ ! -d "$PROJECT_DIR" ]; then
               echo "Project directory not found, cloning..."
               cd /home/ubuntu || exit 1
-              if ! git clone https://github.com/${{ github.repository }}.git telegram-ai-system; then
-                echo "❌ Git clone failed"
+              if ! timeout 10m git clone https://github.com/${{ github.repository }}.git telegram-ai-system; then
+                echo "❌ Git clone failed or timeout"
                 exit 1
               fi
               cd "$PROJECT_DIR" || exit 1
@@ -71,20 +71,20 @@ jobs:
             echo "=========================================="
             echo "Step 2: Pull latest code"
             echo "=========================================="
-            if ! git fetch origin main; then
-              echo "⚠️  Git fetch failed, retrying..."
+            if ! timeout 5m git fetch origin main; then
+              echo "⚠️  Git fetch failed or timeout, retrying..."
               git remote set-url origin https://github.com/${{ github.repository }}.git
-              if ! git fetch origin main; then
-                echo "❌ Git fetch failed"
+              if ! timeout 5m git fetch origin main; then
+                echo "❌ Git fetch failed or timeout"
                 exit 1
               fi
             fi
-            if ! git reset --hard origin/main; then
-              echo "❌ Git reset failed"
+            if ! timeout 1m git reset --hard origin/main; then
+              echo "❌ Git reset failed or timeout"
               exit 1
             fi
             echo "✅ Code updated to latest version"
-            git log -1 --oneline
+            timeout 10s git log -1 --oneline || true
             
             echo ""
             echo "=========================================="
@@ -98,9 +98,9 @@ jobs:
               fi
               source venv/bin/activate
               echo "Updating Python packages..."
-              pip install --quiet --upgrade pip
-              pip install --quiet -r requirements.txt || {
-                echo "⚠️  Some dependencies failed, continuing..."
+              timeout 2m pip install --quiet --upgrade pip || echo "⚠️  pip upgrade failed or timeout, continuing..."
+              timeout 10m pip install --quiet -r requirements.txt --timeout=300 --cache-dir=/tmp/pip-cache || {
+                echo "⚠️  Some dependencies failed or timeout, continuing..."
               }
               cd ..
               echo "✅ Backend dependencies updated"
@@ -133,16 +133,20 @@ jobs:
               echo "Installing frontend dependencies..."
               if [ -d "node_modules" ]; then
                 echo "Using incremental install..."
-                npm ci --prefer-offline --no-audit || npm install --prefer-offline --no-audit
+                timeout 15m npm ci --prefer-offline --no-audit --no-fund || timeout 15m npm install --prefer-offline --no-audit --no-fund || {
+                  echo "⚠️  Dependency installation timeout or failed, continuing..."
+                }
               else
                 echo "First-time install..."
-                npm install --prefer-offline --no-audit
+                timeout 20m npm install --prefer-offline --no-audit --no-fund || {
+                  echo "⚠️  Dependency installation timeout or failed, continuing..."
+                }
               fi
               
               echo "Building frontend project..."
               export NODE_OPTIONS="--max-old-space-size=2048"
-              npm run build || {
-                echo "⚠️  Build failed, but continuing..."
+              timeout 20m npm run build || {
+                echo "⚠️  Build failed or timeout, but continuing..."
               }
               
               if [ -d ".next/standalone" ]; then
@@ -171,11 +175,10 @@ jobs:
             if [ -f "deploy/nginx/aikz.conf" ]; then
               sudo cp deploy/nginx/aikz.conf /etc/nginx/sites-available/aikz.conf
               sudo ln -sf /etc/nginx/sites-available/aikz.conf /etc/nginx/sites-enabled/aikz.conf
-              if sudo nginx -t; then
-                sudo systemctl reload nginx
-                echo "✅ Nginx config updated and reloaded"
+              if timeout 30s sudo nginx -t 2>/dev/null; then
+                timeout 30s sudo systemctl reload nginx 2>/dev/null && echo "✅ Nginx config updated and reloaded" || echo "⚠️  Nginx reload failed or timeout"
               else
-                echo "❌ Nginx config test failed"
+                echo "❌ Nginx config test failed or timeout"
               fi
             else
               echo "⚠️  deploy/nginx/aikz.conf not found"
@@ -186,7 +189,7 @@ jobs:
             echo "Step 7: Deploy Systemd services"
             echo "=========================================="
             if [ -f "scripts/server/deploy-systemd.sh" ]; then
-              sudo bash scripts/server/deploy-systemd.sh || echo "⚠️  Systemd deployment failed, continuing..."
+              timeout 5m sudo bash scripts/server/deploy-systemd.sh || echo "⚠️  Systemd deployment failed or timeout, continuing..."
             else
               echo "⚠️  deploy-systemd.sh not found"
             fi
@@ -197,24 +200,28 @@ jobs:
             echo "=========================================="
             
             echo "Restarting backend service..."
-            sudo systemctl restart telegram-backend && echo "✅ Backend restarted" || echo "⚠️  Backend restart failed"
+            timeout 30s sudo systemctl restart telegram-backend && echo "✅ Backend restarted" || echo "⚠️  Backend restart failed or timeout"
             
             echo "Restarting Bot service..."
-            sudo systemctl restart telegram-bot && echo "✅ Bot restarted" || echo "⚠️  Bot restart failed"
+            timeout 30s sudo systemctl restart telegram-bot && echo "✅ Bot restarted" || echo "⚠️  Bot restart failed or timeout"
             
-            if systemctl list-units --type=service --no-legend | grep -q "liaotian-frontend"; then
-              echo "Restarting frontend service (liaotian-frontend)..."
-              sudo systemctl restart liaotian-frontend && echo "✅ Frontend restarted" || echo "⚠️  Frontend restart failed"
-            elif systemctl list-units --type=service --no-legend | grep -q "smart-tg-frontend"; then
-              echo "Restarting frontend service (smart-tg-frontend)..."
-              sudo systemctl restart smart-tg-frontend && echo "✅ Frontend restarted" || echo "⚠️  Frontend restart failed"
+            FRONTEND_SERVICE_NAME=""
+            if timeout 10s systemctl list-units --type=service --no-legend 2>/dev/null | grep -q "liaotian-frontend"; then
+              FRONTEND_SERVICE_NAME="liaotian-frontend"
+            elif timeout 10s systemctl list-units --type=service --no-legend 2>/dev/null | grep -q "smart-tg-frontend"; then
+              FRONTEND_SERVICE_NAME="smart-tg-frontend"
+            fi
+            
+            if [ -n "$FRONTEND_SERVICE_NAME" ]; then
+              echo "Restarting frontend service ($FRONTEND_SERVICE_NAME)..."
+              timeout 30s sudo systemctl restart "$FRONTEND_SERVICE_NAME" && echo "✅ Frontend restarted" || echo "⚠️  Frontend restart failed or timeout"
             else
               echo "⚠️  Frontend systemd service not found"
             fi
             
             echo ""
-            echo "Waiting for services to start (5 seconds)..."
-            sleep 5
+            echo "Waiting for services to start (3 seconds)..."
+            sleep 3
             
             echo ""
             echo "=========================================="
@@ -222,40 +229,40 @@ jobs:
             echo "=========================================="
             
             echo "Checking backend service..."
-            if systemctl is-active --quiet telegram-backend 2>/dev/null; then
+            if timeout 5s systemctl is-active --quiet telegram-backend 2>/dev/null; then
               echo "✅ Backend service: Running"
-              if curl -s -f http://localhost:8000/health > /dev/null 2>&1; then
+              if timeout 10s curl -s -f --max-time 5 http://localhost:8000/health > /dev/null 2>&1; then
                 echo "✅ Backend health check: Passed"
               else
-                echo "⚠️  Backend health check: Failed"
+                echo "⚠️  Backend health check: Failed or timeout"
               fi
             else
               echo "❌ Backend service: Not running"
-              sudo systemctl status telegram-backend --no-pager -l | head -n 5 || true
+              timeout 5s sudo systemctl status telegram-backend --no-pager -l 2>/dev/null | head -n 5 || true
             fi
             
             echo ""
             echo "Checking Bot service..."
-            if systemctl is-active --quiet telegram-bot 2>/dev/null; then
+            if timeout 5s systemctl is-active --quiet telegram-bot 2>/dev/null; then
               echo "✅ Bot service: Running"
             else
               echo "❌ Bot service: Not running"
-              sudo systemctl status telegram-bot --no-pager -l | head -n 5 || true
+              timeout 5s sudo systemctl status telegram-bot --no-pager -l 2>/dev/null | head -n 5 || true
             fi
             
             echo ""
             echo "Checking frontend service..."
             FRONTEND_SERVICE=""
-            if systemctl list-units --type=service --no-legend | grep -q "liaotian-frontend"; then
+            if timeout 10s systemctl list-units --type=service --no-legend 2>/dev/null | grep -q "liaotian-frontend"; then
               FRONTEND_SERVICE="liaotian-frontend"
-            elif systemctl list-units --type=service --no-legend | grep -q "smart-tg-frontend"; then
+            elif timeout 10s systemctl list-units --type=service --no-legend 2>/dev/null | grep -q "smart-tg-frontend"; then
               FRONTEND_SERVICE="smart-tg-frontend"
             fi
             
             if [ -n "$FRONTEND_SERVICE" ]; then
-              if systemctl is-active --quiet "$FRONTEND_SERVICE" 2>/dev/null; then
+              if timeout 5s systemctl is-active --quiet "$FRONTEND_SERVICE" 2>/dev/null; then
                 echo "✅ Frontend service ($FRONTEND_SERVICE): Running"
-                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 2>/dev/null || echo "000")
+                HTTP_CODE=$(timeout 10s curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3000 2>/dev/null || echo "000")
                 if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
                   echo "✅ Frontend HTTP response: Normal (HTTP $HTTP_CODE)"
                 else
@@ -263,7 +270,7 @@ jobs:
                 fi
               else
                 echo "❌ Frontend service ($FRONTEND_SERVICE): Not running"
-                sudo systemctl status "$FRONTEND_SERVICE" --no-pager -l | head -n 5 || true
+                timeout 5s sudo systemctl status "$FRONTEND_SERVICE" --no-pager -l 2>/dev/null | head -n 5 || true
               fi
             else
               echo "⚠️  Frontend systemd service not found"

@@ -78,11 +78,14 @@ jobs:
               test -d "/home/ubuntu/$dir" && DIR_CHECK="exists" || DIR_CHECK="missing" || true
               LINK_CHECK=""
               test -L "/home/ubuntu/$dir" && LINK_CHECK="link" || LINK_CHECK="not_link" || true
-              if [ "$DIR_CHECK" = "exists" ] && [ "$LINK_CHECK" = "not_link" ]; then
+              # 使用 case 語句避免條件判斷的退出碼觸發錯誤
+              case "$DIR_CHECK:$LINK_CHECK" in
+              "exists:not_link")
                 echo "⚠️  發現舊的部署目錄: /home/ubuntu/$dir"
                 echo "   這可能是舊的手動部署遺留，建議手動檢查後刪除"
                 # 不自動刪除，只提示，避免誤刪重要文件
-              fi
+                ;;
+              esac
             done
             cd "$PROJECT_DIR" || handle_error "cd to project directory"
             

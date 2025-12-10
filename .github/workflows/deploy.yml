@@ -73,16 +73,24 @@ jobs:
             echo "清理舊的部署文件（如果存在）..."
             cd /home/ubuntu 2>/dev/null || true
             # 只清理與項目相關的目錄，保留其他重要文件
-            # 使用 ls 命令檢查，避免條件判斷觸發錯誤
             for dir in admin-backend saas-demo deploy scripts; do
-              # 檢查目錄是否存在且不是符號鏈接
-              if ls -d "/home/ubuntu/$dir" >/dev/null 2>&1; then
-                # 檢查是否為符號鏈接，如果不是則提示
-                ls -l "/home/ubuntu/$dir" 2>/dev/null | grep -q "^l" || {
-                  echo "⚠️  發現舊的部署目錄: /home/ubuntu/$dir"
-                  echo "   這可能是舊的手動部署遺留，建議手動檢查後刪除"
-                  # 不自動刪除，只提示，避免誤刪重要文件
-                } || true
+              # 檢查目錄是否存在，使用變量存儲結果避免條件判斷觸發錯誤
+              DIR_EXISTS=""
+              test -d "/home/ubuntu/$dir" && DIR_EXISTS="yes" || DIR_EXISTS="no" || true
+              
+              # 檢查是否為符號鏈接，使用變量存儲結果
+              IS_LINK=""
+              test -L "/home/ubuntu/$dir" && IS_LINK="yes" || IS_LINK="no" || true
+              
+              # 組合兩個檢查結果為一個字符串，用於判斷
+              CHECK_RESULT="${DIR_EXISTS}:${IS_LINK}"
+              
+              # 使用 if-else 語句，檢查組合結果
+              # 只有當目錄存在且不是符號鏈接時才提示
+              if [ "$CHECK_RESULT" = "yes:no" ]; then
+                echo "⚠️  發現舊的部署目錄: /home/ubuntu/$dir"
+                echo "   這可能是舊的手動部署遺留，建議手動檢查後刪除"
+                # 不自動刪除，只提示，避免誤刪重要文件
               fi || true
             done
             cd "$PROJECT_DIR" || handle_error "cd to project directory"

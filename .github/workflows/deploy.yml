@@ -55,7 +55,11 @@ jobs:
             echo "=========================================="
             PROJECT_DIR="/home/ubuntu/telegram-ai-system"
             
-            if [ ! -d "$PROJECT_DIR" ]; then
+            # 檢查目錄是否存在，將結果存儲到變量以避免條件判斷觸發錯誤
+            DIR_EXISTS=""
+            [ -d "$PROJECT_DIR" ] && DIR_EXISTS="yes" || DIR_EXISTS="no"
+            
+            if [ "$DIR_EXISTS" = "no" ]; then
               echo "Project directory not found, cloning..."
               cd /home/ubuntu || handle_error "cd to /home/ubuntu"
               if ! timeout 10m git clone https://github.com/${{ github.repository }}.git telegram-ai-system; then

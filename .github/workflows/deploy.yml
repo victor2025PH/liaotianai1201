@@ -55,22 +55,26 @@ jobs:
             echo "=========================================="
             PROJECT_DIR="/home/ubuntu/telegram-ai-system"
             
-            # 檢查目錄是否存在，使用變量存儲結果以避免 test 命令的退出碼觸發錯誤
+            # 檢查目錄是否存在，使用變量存儲結果以避免條件判斷觸發錯誤
             DIR_EXISTS=""
             test -d "$PROJECT_DIR" && DIR_EXISTS="yes" || DIR_EXISTS="no" || true
             
-            if [ "$DIR_EXISTS" = "no" ]; then
-              echo "Project directory not found, cloning..."
-              cd /home/ubuntu || handle_error "cd to /home/ubuntu"
-              if ! timeout 10m git clone https://github.com/${{ github.repository }}.git telegram-ai-system; then
-                echo "❌ Git clone failed or timeout"
-                handle_error "git clone"
-              fi
-              cd "$PROJECT_DIR" || handle_error "cd to project directory"
-            else
-              echo "✅ Project directory exists"
-              cd "$PROJECT_DIR" || handle_error "cd to project directory"
-            fi
+            # 使用 case 語句代替 if，避免條件判斷的退出碼觸發錯誤
+            case "$DIR_EXISTS" in
+              "no")
+                echo "Project directory not found, cloning..."
+                cd /home/ubuntu || handle_error "cd to /home/ubuntu"
+                if ! timeout 10m git clone https://github.com/${{ github.repository }}.git telegram-ai-system; then
+                  echo "❌ Git clone failed or timeout"
+                  handle_error "git clone"
+                fi
+                cd "$PROJECT_DIR" || handle_error "cd to project directory"
+                ;;
+              *)
+                echo "✅ Project directory exists"
+                cd "$PROJECT_DIR" || handle_error "cd to project directory"
+                ;;
+            esac
             
             # 清理 /home/ubuntu/ 下的重複文件（舊的手動部署遺留）
             echo ""

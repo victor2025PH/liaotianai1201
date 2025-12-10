@@ -115,7 +115,19 @@ jobs:
               if [ ! -d "venv" ] || [ ! -f "venv/bin/activate" ]; then
                 echo "Creating virtual environment (venv is missing or broken)..."
                 rm -rf venv  # 安全起見，先刪除可能存在的壞目錄
-                python3 -m venv venv
+                # 嘗試創建虛擬環境，如果失敗則安裝 python3-venv 包
+                if ! python3 -m venv venv 2>/dev/null; then
+                  echo "python3-venv not available, installing python3-venv package..."
+                  timeout 2m sudo apt-get update -qq && timeout 5m sudo apt-get install -y python3-venv || {
+                    echo "❌ Failed to install python3-venv"
+                    handle_error "install python3-venv"
+                  }
+                  # 重新嘗試創建虛擬環境
+                  python3 -m venv venv || {
+                    echo "❌ Failed to create virtual environment after installing python3-venv"
+                    handle_error "create venv"
+                  }
+                fi
               fi
               source venv/bin/activate
               echo "Updating Python packages..."
@@ -138,7 +150,19 @@ jobs:
               if [ ! -d "venv" ] || [ ! -f "venv/bin/activate" ]; then
                 echo "Creating virtual environment (venv is missing or broken)..."
                 rm -rf venv  # 安全起見，先刪除可能存在的壞目錄
-                python3 -m venv venv
+                # 嘗試創建虛擬環境，如果失敗則安裝 python3-venv 包
+                if ! python3 -m venv venv 2>/dev/null; then
+                  echo "python3-venv not available, installing python3-venv package..."
+                  timeout 2m sudo apt-get update -qq && timeout 5m sudo apt-get install -y python3-venv || {
+                    echo "❌ Failed to install python3-venv"
+                    handle_error "install python3-venv"
+                  }
+                  # 重新嘗試創建虛擬環境
+                  python3 -m venv venv || {
+                    echo "❌ Failed to create virtual environment after installing python3-venv"
+                    handle_error "create venv"
+                  }
+                fi
               fi
               source venv/bin/activate
               timeout 2m pip install --quiet --upgrade pip || echo "⚠️  pip upgrade failed or timeout, continuing..."

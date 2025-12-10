@@ -111,8 +111,10 @@ jobs:
             echo "=========================================="
             if [ -d "admin-backend" ]; then
               cd admin-backend
-              if [ ! -d "venv" ]; then
-                echo "Creating virtual environment..."
+              # 如果 venv 不存在或 activate 文件不存在，則重新創建
+              if [ ! -d "venv" ] || [ ! -f "venv/bin/activate" ]; then
+                echo "Creating virtual environment (venv is missing or broken)..."
+                rm -rf venv  # 安全起見，先刪除可能存在的壞目錄
                 python3 -m venv venv
               fi
               source venv/bin/activate
@@ -131,7 +133,13 @@ jobs:
             echo "=========================================="
             echo "Step 4: Update Bot dependencies"
             echo "=========================================="
-            if [ -d "venv" ] && [ -f "requirements.txt" ]; then
+            if [ -f "requirements.txt" ]; then
+              # 如果 venv 不存在或 activate 文件不存在，則重新創建
+              if [ ! -d "venv" ] || [ ! -f "venv/bin/activate" ]; then
+                echo "Creating virtual environment (venv is missing or broken)..."
+                rm -rf venv  # 安全起見，先刪除可能存在的壞目錄
+                python3 -m venv venv
+              fi
               source venv/bin/activate
               timeout 2m pip install --quiet --upgrade pip || echo "⚠️  pip upgrade failed or timeout, continuing..."
               timeout 10m pip install --quiet -r requirements.txt --timeout=300 --cache-dir=/tmp/pip-cache || {
@@ -139,7 +147,7 @@ jobs:
               }
               echo "✅ Bot dependencies updated"
             else
-              echo "⚠️  Bot venv or requirements.txt not found"
+              echo "⚠️  Bot requirements.txt not found"
             fi
             
             echo ""

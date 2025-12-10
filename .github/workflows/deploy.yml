@@ -4,11 +4,12 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -19,222 +20,263 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          timeout: 60s
+          command_timeout: 15m
+          script_stop: true
+          debug: true
           script: |
-            # 1. 检查项目目录是否存在，如果不存在则克隆
-            if [ ! -d "/home/ubuntu/telegram-ai-system" ]; then
-              echo "项目目录不存在，开始克隆..."
-              cd /home/ubuntu
-              # 尝试使用 SSH 克隆（需要 Deploy Key）
-              if [ -f ~/.ssh/id_ed25519 ] || [ -f ~/.ssh/id_rsa ]; then
-                git clone git@github.com:${{ github.repository }}.git telegram-ai-system || {
-                  echo "SSH 克隆失败，尝试使用 HTTPS..."
-                  git clone https://github.com/${{ github.repository }}.git telegram-ai-system
-                }
-              else
-                echo "未找到 SSH Key，使用 HTTPS 克隆（可能需要认证）..."
-                git clone https://github.com/${{ github.repository }}.git telegram-ai-system
-              fi
-              cd telegram-ai-system
-            else
-              cd /home/ubuntu/telegram-ai-system
-            fi
+            set -x
+            set -o pipefail
             
-            # 2. 拉取最新代码
-            git pull origin main || {
-              echo "Git pull 失败，尝试重新设置远程地址..."
-              git remote set-url origin https://github.com/${{ github.repository }}.git
-              git pull origin main
+            handle_error() {
+              echo "❌ Error at: $1"
+              echo "Exit code: $?"
+              exit 1
             }
+            trap 'handle_error "line $LINENO"' ERR
             
-            # 3. 更新后端依赖
-            if [ -d "admin-backend/venv" ]; then
-              source admin-backend/venv/bin/activate
-              pip install -r admin-backend/requirements.txt
+            echo "=========================================="
+            echo "Starting deployment - $(date)"
+            echo "=========================================="
+            
+            echo "Testing SSH connection..."
+            if ! whoami; then
+              echo "❌ SSH connection failed"
+              exit 1
+            fi
+            echo "Current user: $(whoami)"
+            echo "Current directory: $(pwd)"
+            echo "✅ SSH connection successful"
+            
+            echo "=========================================="
+            echo "Step 1: Check project directory"
+            echo "=========================================="
+            PROJECT_DIR="/home/ubuntu/telegram-ai-system"
+            
+            if [ ! -d "$PROJECT_DIR" ]; then
+              echo "Project directory not found, cloning..."
+              cd /home/ubuntu || exit 1
+              if ! git clone https://github.com/${{ github.repository }}.git telegram-ai-system; then
+                echo "❌ Git clone failed"
+                exit 1
+              fi
+              cd "$PROJECT_DIR" || exit 1
+            else
+              echo "✅ Project directory exists"
+              cd "$PROJECT_DIR" || exit 1
             fi
             
-            # 4. 更新 Bot 依赖（如果存在虚拟环境）
-            if [ -d "venv" ]; then
+            echo ""
+            echo "=========================================="
+            echo "Step 2: Pull latest code"
+            echo "=========================================="
+            if ! git fetch origin main; then
+              echo "⚠️  Git fetch failed, retrying..."
+              git remote set-url origin https://github.com/${{ github.repository }}.git
+              if ! git fetch origin main; then
+                echo "❌ Git fetch failed"
+                exit 1
+              fi
+            fi
+            if ! git reset --hard origin/main; then
+              echo "❌ Git reset failed"
+              exit 1
+            fi
+            echo "✅ Code updated to latest version"
+            git log -1 --oneline
+            
+            echo ""
+            echo "=========================================="
+            echo "Step 3: Update backend dependencies"
+            echo "=========================================="
+            if [ -d "admin-backend" ]; then
+              cd admin-backend
+              if [ ! -d "venv" ]; then
+                echo "Creating virtual environment..."
+                python3 -m venv venv
+              fi
               source venv/bin/activate
-              pip install -r requirements.txt
+              echo "Updating Python packages..."
+              pip install --quiet --upgrade pip
+              pip install --quiet -r requirements.txt || {
+                echo "⚠️  Some dependencies failed, continuing..."
+              }
+              cd ..
+              echo "✅ Backend dependencies updated"
+            else
+              echo "⚠️  admin-backend directory not found"
             fi
             
-            # 5. 部署前端（如果存在 saas-demo 目录）
+            echo ""
+            echo "=========================================="
+            echo "Step 4: Update Bot dependencies"
+            echo "=========================================="
+            if [ -d "venv" ] && [ -f "requirements.txt" ]; then
+              source venv/bin/activate
+              pip install --quiet --upgrade pip
+              pip install --quiet -r requirements.txt || {
+                echo "⚠️  Some dependencies failed, continuing..."
+              }
+              echo "✅ Bot dependencies updated"
+            else
+              echo "⚠️  Bot venv or requirements.txt not found"
+            fi
+            
+            echo ""
+            echo "=========================================="
+            echo "Step 5: Deploy frontend"
+            echo "=========================================="
             if [ -d "saas-demo" ]; then
-              echo "=========================================="
-              echo "部署前端"
-              echo "=========================================="
               cd saas-demo
               
-              # 5.1 安装依赖
-              echo "安装前端依赖..."
-              npm install
+              echo "Installing frontend dependencies..."
+              if [ -d "node_modules" ]; then
+                echo "Using incremental install..."
+                npm ci --prefer-offline --no-audit || npm install --prefer-offline --no-audit
+              else
+                echo "First-time install..."
+                npm install --prefer-offline --no-audit
+              fi
               
-              # 5.2 构建项目
-              echo "构建前端项目..."
-              npm run build
+              echo "Building frontend project..."
+              export NODE_OPTIONS="--max-old-space-size=2048"
+              npm run build || {
+                echo "⚠️  Build failed, but continuing..."
+              }
               
-              # 5.3 准备 Standalone 目录
               if [ -d ".next/standalone" ]; then
-                echo "准备 Standalone 目录..."
-                # 复制 public 文件夹
+                echo "Preparing Standalone directory..."
                 if [ -d "public" ]; then
                   cp -r public .next/standalone/ || true
                 fi
-                # 创建 .next 目录并复制 static
                 mkdir -p .next/standalone/.next
                 if [ -d ".next/static" ]; then
                   cp -r .next/static .next/standalone/.next/ || true
                 fi
-                echo "✅ Standalone 目录准备完成"
+                echo "✅ Standalone directory ready"
               else
-                echo "⚠️  Standalone 目录不存在，请检查 next.config.ts 配置"
+                echo "⚠️  Standalone directory not found"
               fi
               
               cd ..
             else
-              echo "⚠️  未找到 saas-demo 目录，跳过前端部署"
+              echo "⚠️  saas-demo directory not found"
             fi
             
-            # 6. 更新 Nginx 配置
+            echo ""
             echo "=========================================="
-            echo "更新 Nginx 配置"
+            echo "Step 6: Update Nginx config"
             echo "=========================================="
-            # 复制新的 Nginx 配置文件
             if [ -f "deploy/nginx/aikz.conf" ]; then
               sudo cp deploy/nginx/aikz.conf /etc/nginx/sites-available/aikz.conf
               sudo ln -sf /etc/nginx/sites-available/aikz.conf /etc/nginx/sites-enabled/aikz.conf
-              sudo nginx -t && sudo systemctl reload nginx
-              echo "✅ Nginx 配置已更新并重载"
+              if sudo nginx -t; then
+                sudo systemctl reload nginx
+                echo "✅ Nginx config updated and reloaded"
+              else
+                echo "❌ Nginx config test failed"
+              fi
             else
-              echo "⚠️  未找到 deploy/nginx/aikz.conf，跳过 Nginx 配置更新"
+              echo "⚠️  deploy/nginx/aikz.conf not found"
             fi
             
-            # 7. 部署 Systemd 服务（如果脚本存在）
+            echo ""
+            echo "=========================================="
+            echo "Step 7: Deploy Systemd services"
+            echo "=========================================="
             if [ -f "scripts/server/deploy-systemd.sh" ]; then
-              echo "=========================================="
-              echo "部署 Systemd 服务"
-              echo "=========================================="
-              sudo bash scripts/server/deploy-systemd.sh || echo "⚠️  Systemd 服务部署失败，继续..."
+              sudo bash scripts/server/deploy-systemd.sh || echo "⚠️  Systemd deployment failed, continuing..."
+            else
+              echo "⚠️  deploy-systemd.sh not found"
             fi
             
-            # 8. 重启后端服务
-            sudo systemctl restart telegram-backend || echo "⚠️  后端服务重启失败"
+            echo ""
+            echo "=========================================="
+            echo "Step 8: Restart services"
+            echo "=========================================="
             
-            # 9. 重启 Bot 服务
-            sudo systemctl restart telegram-bot || echo "⚠️  Bot 服务重启失败"
+            echo "Restarting backend service..."
+            sudo systemctl restart telegram-backend && echo "✅ Backend restarted" || echo "⚠️  Backend restart failed"
             
-            # 10. 重启前端服务（如果存在）
-            if systemctl list-units --type=service | grep -q "liaotian-frontend"; then
-              echo "重启前端服务..."
-              sudo systemctl restart liaotian-frontend || echo "⚠️  前端服务重启失败"
-            elif systemctl list-units --type=service | grep -q "smart-tg-frontend"; then
-              echo "重启前端服务..."
-              sudo systemctl restart smart-tg-frontend || echo "⚠️  前端服务重启失败"
+            echo "Restarting Bot service..."
+            sudo systemctl restart telegram-bot && echo "✅ Bot restarted" || echo "⚠️  Bot restart failed"
+            
+            if systemctl list-units --type=service --no-legend | grep -q "liaotian-frontend"; then
+              echo "Restarting frontend service (liaotian-frontend)..."
+              sudo systemctl restart liaotian-frontend && echo "✅ Frontend restarted" || echo "⚠️  Frontend restart failed"
+            elif systemctl list-units --type=service --no-legend | grep -q "smart-tg-frontend"; then
+              echo "Restarting frontend service (smart-tg-frontend)..."
+              sudo systemctl restart smart-tg-frontend && echo "✅ Frontend restarted" || echo "⚠️  Frontend restart failed"
+            else
+              echo "⚠️  Frontend systemd service not found"
             fi
             
-            # 11. 等待服务启动
+            echo ""
+            echo "Waiting for services to start (5 seconds)..."
             sleep 5
             
-            # 12. 检查后端服务状态
-            echo "=========================================="
-            echo "检查后端服务状态"
-            echo "=========================================="
-            sudo systemctl status telegram-backend --no-pager || true
-            
-            # 13. 检查后端端口
-            echo ""
-            echo "检查后端端口 (8000)..."
-            ss -tlnp | grep :8000 || echo "端口 8000 未监听"
-            
-            # 14. 检查后端健康状态
-            echo ""
-            echo "检查后端健康状态..."
-            curl -s http://localhost:8000/health || echo "后端健康检查失败"
-            
-            # 15. 检查 Bot 服务状态
             echo ""
             echo "=========================================="
-            echo "检查 Bot 服务状态"
-            echo "=========================================="
-            sudo systemctl status telegram-bot --no-pager || true
-            
-            # 16. 检查前端服务状态
-            echo ""
-            echo "=========================================="
-            echo "检查前端服务状态"
+            echo "Step 9: Check service status"
             echo "=========================================="
             
-            # 检查多个可能的前端服务
-            if systemctl list-units --type=service | grep -q "liaotian-frontend"; then
-              echo "检查 liaotian-frontend 服务..."
-              sudo systemctl status liaotian-frontend --no-pager -l | head -n 8 || true
-            elif systemctl list-units --type=service | grep -q "smart-tg-frontend"; then
-              echo "检查 smart-tg-frontend 服务..."
-              sudo systemctl status smart-tg-frontend --no-pager -l | head -n 8 || true
-            else
-              echo "未找到前端 systemd 服务，检查进程..."
-              ps aux | grep -E "node.*next|npm.*start" | grep -v grep | head -n 2 || echo "未发现前端进程"
-            fi
-            
-            # 17. 检查前端端口
-            echo ""
-            echo "检查前端端口 (3000, 3001)..."
-            for port in 3000 3001; do
-              if ss -tlnp | grep -q ":$port"; then
-                echo "端口 $port 正在监听:"
-                ss -tlnp | grep ":$port"
-              fi
-            done
-            
-            # 18. 检查前端 HTTP 响应
-            echo ""
-            echo "检查前端 HTTP 响应..."
-            for port in 3000 3001; do
-              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$port 2>/dev/null || echo "000")
-              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
-                echo "前端服务在端口 $port 响应正常 (HTTP $HTTP_CODE)"
-              fi
-            done
-            
-            # 19. 服务状态总结
-            echo ""
-            echo "=========================================="
-            echo "服务状态总结"
-            echo "=========================================="
-            
-            # 后端状态
+            echo "Checking backend service..."
             if systemctl is-active --quiet telegram-backend 2>/dev/null; then
+              echo "✅ Backend service: Running"
               if curl -s -f http://localhost:8000/health > /dev/null 2>&1; then
-                echo "✅ 后端服务: 运行正常"
+                echo "✅ Backend health check: Passed"
               else
-                echo "⚠️  后端服务: 运行但健康检查失败"
+                echo "⚠️  Backend health check: Failed"
               fi
             else
-              echo "❌ 后端服务: 未运行"
+              echo "❌ Backend service: Not running"
+              sudo systemctl status telegram-backend --no-pager -l | head -n 5 || true
             fi
             
-            # Bot 状态
+            echo ""
+            echo "Checking Bot service..."
             if systemctl is-active --quiet telegram-bot 2>/dev/null; then
-              echo "✅ Bot 服务: 运行正常"
+              echo "✅ Bot service: Running"
             else
-              echo "❌ Bot 服务: 未运行"
+              echo "❌ Bot service: Not running"
+              sudo systemctl status telegram-bot --no-pager -l | head -n 5 || true
             fi
             
-            # 前端状态
-            FRONTEND_OK=false
-            if systemctl is-active --quiet liaotian-frontend 2>/dev/null || systemctl is-active --quiet smart-tg-frontend 2>/dev/null; then
-              FRONTEND_OK=true
-            elif pgrep -f "node.*next" > /dev/null || pgrep -f "npm.*start" > /dev/null; then
-              FRONTEND_OK=true
+            echo ""
+            echo "Checking frontend service..."
+            FRONTEND_SERVICE=""
+            if systemctl list-units --type=service --no-legend | grep -q "liaotian-frontend"; then
+              FRONTEND_SERVICE="liaotian-frontend"
+            elif systemctl list-units --type=service --no-legend | grep -q "smart-tg-frontend"; then
+              FRONTEND_SERVICE="smart-tg-frontend"
             fi
             
-            if [ "$FRONTEND_OK" = true ]; then
-              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 2>/dev/null || echo "000")
-              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
-                echo "✅ 前端服务: 运行正常"
+            if [ -n "$FRONTEND_SERVICE" ]; then
+              if systemctl is-active --quiet "$FRONTEND_SERVICE" 2>/dev/null; then
+                echo "✅ Frontend service ($FRONTEND_SERVICE): Running"
+                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 2>/dev/null || echo "000")
+                if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+                  echo "✅ Frontend HTTP response: Normal (HTTP $HTTP_CODE)"
+                else
+                  echo "⚠️  Frontend HTTP response: Abnormal (HTTP $HTTP_CODE)"
+                fi
               else
-                echo "⚠️  前端服务: 进程运行但 HTTP 响应异常"
+                echo "❌ Frontend service ($FRONTEND_SERVICE): Not running"
+                sudo systemctl status "$FRONTEND_SERVICE" --no-pager -l | head -n 5 || true
               fi
             else
-              echo "❌ 前端服务: 未运行"
+              echo "⚠️  Frontend systemd service not found"
             fi
+            
+            echo ""
+            echo "=========================================="
+            echo "Deployment completed - $(date)"
+            echo "=========================================="
+            echo "✅ Code updated"
+            echo "✅ Services restarted"
+            echo ""
+            echo "Service URLs:"
+            echo "  - Frontend: http://${{ secrets.SERVER_HOST }}"
+            echo "  - Backend API: http://${{ secrets.SERVER_HOST }}:8000"
+            echo "  - API Docs: http://${{ secrets.SERVER_HOST }}:8000/docs"

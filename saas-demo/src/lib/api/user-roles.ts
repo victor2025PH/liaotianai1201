@@ -45,7 +45,8 @@ export interface BatchOperationResult {
  * 列出所有用戶及其角色
  */
 export async function listUsers(): Promise<User[]> {
-  const response = await fetch(`${API_BASE}/user-roles/users`)
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/user-roles/users`)
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
   }
@@ -56,7 +57,8 @@ export async function listUsers(): Promise<User[]> {
  * 獲取用戶詳情
  */
 export async function getUser(userId: number): Promise<User> {
-  const response = await fetch(`${API_BASE}/user-roles/users/${userId}`)
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/user-roles/users/${userId}`)
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
   }
@@ -70,7 +72,8 @@ export async function assignRoleToUser(
   userId: number,
   assign: UserRoleAssign
 ): Promise<{ message: string }> {
-  const response = await fetch(`${API_BASE}/user-roles/users/${userId}/roles`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/user-roles/users/${userId}/roles`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -90,7 +93,8 @@ export async function revokeRoleFromUser(
   userId: number,
   roleName: string
 ): Promise<{ message: string }> {
-  const response = await fetch(`${API_BASE}/user-roles/users/${userId}/roles/${roleName}`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/user-roles/users/${userId}/roles/${roleName}`, {
     method: "DELETE",
   })
   if (!response.ok) {
@@ -103,7 +107,8 @@ export async function revokeRoleFromUser(
  * 獲取用戶的所有角色
  */
 export async function getUserRoles(userId: number): Promise<Role[]> {
-  const response = await fetch(`${API_BASE}/user-roles/users/${userId}/roles`)
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/user-roles/users/${userId}/roles`)
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
   }
@@ -116,7 +121,8 @@ export async function getUserRoles(userId: number): Promise<Role[]> {
 export async function batchAssignRole(
   batch: BatchRoleAssign
 ): Promise<BatchOperationResult> {
-  const response = await fetch(`${API_BASE}/user-roles/batch-assign`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/user-roles/batch-assign`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -136,7 +142,8 @@ export async function batchAssignRole(
 export async function batchRevokeRole(
   batch: BatchRoleRevoke
 ): Promise<BatchOperationResult> {
-  const response = await fetch(`${API_BASE}/user-roles/batch-revoke`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/user-roles/batch-revoke`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

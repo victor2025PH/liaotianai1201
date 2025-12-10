@@ -681,11 +681,20 @@ async def list_scripts(
         
         return result
     
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"列出劇本失敗: {e}")
+        logger.exception(f"列出劇本失敗: {e}", exc_info=True)
+        # 返回更詳細的錯誤信息（開發環境）
+        import os
+        environment = os.getenv("ENVIRONMENT", "development")
+        if environment == "development":
+            detail = f"列出劇本失敗: {str(e)}\n錯誤類型: {type(e).__name__}"
+        else:
+            detail = "列出劇本失敗，請聯繫管理員"
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"列出劇本失敗: {str(e)}"
+            detail=detail
         )
 
 

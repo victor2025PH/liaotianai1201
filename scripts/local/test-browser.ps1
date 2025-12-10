@@ -49,7 +49,7 @@ $testPages = @(
     },
     @{
         Name = "前端首页"
-        Url = "$FRONTEND_URL"
+        Url = "https://aikz.usdt2026.cc"
     }
 )
 

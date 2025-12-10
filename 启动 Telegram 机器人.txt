@@ -24,9 +24,9 @@ python -m pip install psycopg2-binary
 & ".\.venv\Scripts\python.exe" -m pip install psycopg2-binary
 
 第一步：IP主机
-马尼拉
-ssh ubuntu@165.154.233.55
-洛杉矶
+洛杉矶 聊天AI
+ssh ubuntu@165.154.235.170
+洛杉矶 红包游戏
 ssh ubuntu@165.154.254.99
 用户名
 ubuntu

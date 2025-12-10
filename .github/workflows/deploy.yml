@@ -20,11 +20,31 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            # 1. 进入项目目录
-            cd /home/ubuntu/telegram-ai-system
+            # 1. 检查项目目录是否存在，如果不存在则克隆
+            if [ ! -d "/home/ubuntu/telegram-ai-system" ]; then
+              echo "项目目录不存在，开始克隆..."
+              cd /home/ubuntu
+              # 尝试使用 SSH 克隆（需要 Deploy Key）
+              if [ -f ~/.ssh/id_ed25519 ] || [ -f ~/.ssh/id_rsa ]; then
+                git clone git@github.com:${{ github.repository }}.git telegram-ai-system || {
+                  echo "SSH 克隆失败，尝试使用 HTTPS..."
+                  git clone https://github.com/${{ github.repository }}.git telegram-ai-system
+                }
+              else
+                echo "未找到 SSH Key，使用 HTTPS 克隆（可能需要认证）..."
+                git clone https://github.com/${{ github.repository }}.git telegram-ai-system
+              fi
+              cd telegram-ai-system
+            else
+              cd /home/ubuntu/telegram-ai-system
+            fi
             
             # 2. 拉取最新代码
-            git pull origin main
+            git pull origin main || {
+              echo "Git pull 失败，尝试重新设置远程地址..."
+              git remote set-url origin https://github.com/${{ github.repository }}.git
+              git pull origin main
+            }
             
             # 3. 更新后端依赖
             if [ -d "admin-backend/venv" ]; then
@@ -38,7 +58,44 @@ jobs:
               pip install -r requirements.txt
             fi
             
-            # 5. 更新 Nginx 配置
+            # 5. 部署前端（如果存在 saas-demo 目录）
+            if [ -d "saas-demo" ]; then
+              echo "=========================================="
+              echo "部署前端"
+              echo "=========================================="
+              cd saas-demo
+              
+              # 5.1 安装依赖
+              echo "安装前端依赖..."
+              npm install
+              
+              # 5.2 构建项目
+              echo "构建前端项目..."
+              npm run build
+              
+              # 5.3 准备 Standalone 目录
+              if [ -d ".next/standalone" ]; then
+                echo "准备 Standalone 目录..."
+                # 复制 public 文件夹
+                if [ -d "public" ]; then
+                  cp -r public .next/standalone/ || true
+                fi
+                # 创建 .next 目录并复制 static
+                mkdir -p .next/standalone/.next
+                if [ -d ".next/static" ]; then
+                  cp -r .next/static .next/standalone/.next/ || true
+                fi
+                echo "✅ Standalone 目录准备完成"
+              else
+                echo "⚠️  Standalone 目录不存在，请检查 next.config.ts 配置"
+              fi
+              
+              cd ..
+            else
+              echo "⚠️  未找到 saas-demo 目录，跳过前端部署"
+            fi
+            
+            # 6. 更新 Nginx 配置
             echo "=========================================="
             echo "更新 Nginx 配置"
             echo "=========================================="
@@ -52,39 +109,56 @@ jobs:
               echo "⚠️  未找到 deploy/nginx/aikz.conf，跳过 Nginx 配置更新"
             fi
             
-            # 6. 重启后端服务
-            sudo systemctl restart telegram-backend
+            # 7. 部署 Systemd 服务（如果脚本存在）
+            if [ -f "scripts/server/deploy-systemd.sh" ]; then
+              echo "=========================================="
+              echo "部署 Systemd 服务"
+              echo "=========================================="
+              sudo bash scripts/server/deploy-systemd.sh || echo "⚠️  Systemd 服务部署失败，继续..."
+            fi
             
-            # 7. 重启 Bot 服务
-            sudo systemctl restart telegram-bot
+            # 8. 重启后端服务
+            sudo systemctl restart telegram-backend || echo "⚠️  后端服务重启失败"
             
-            # 8. 等待服务启动
+            # 9. 重启 Bot 服务
+            sudo systemctl restart telegram-bot || echo "⚠️  Bot 服务重启失败"
+            
+            # 10. 重启前端服务（如果存在）
+            if systemctl list-units --type=service | grep -q "liaotian-frontend"; then
+              echo "重启前端服务..."
+              sudo systemctl restart liaotian-frontend || echo "⚠️  前端服务重启失败"
+            elif systemctl list-units --type=service | grep -q "smart-tg-frontend"; then
+              echo "重启前端服务..."
+              sudo systemctl restart smart-tg-frontend || echo "⚠️  前端服务重启失败"
+            fi
+            
+            # 11. 等待服务启动
             sleep 5
             
-            # 9. 检查后端服务状态
+            # 12. 检查后端服务状态
             echo "=========================================="
             echo "检查后端服务状态"
             echo "=========================================="
             sudo systemctl status telegram-backend --no-pager || true
             
-            # 10. 检查后端端口
+            # 13. 检查后端端口
             echo ""
             echo "检查后端端口 (8000)..."
             ss -tlnp | grep :8000 || echo "端口 8000 未监听"
             
-            # 11. 检查后端健康状态
+            # 14. 检查后端健康状态
             echo ""
             echo "检查后端健康状态..."
             curl -s http://localhost:8000/health || echo "后端健康检查失败"
             
-            # 12. 检查 Bot 服务状态
+            # 15. 检查 Bot 服务状态
             echo ""
             echo "=========================================="
             echo "检查 Bot 服务状态"
             echo "=========================================="
             sudo systemctl status telegram-bot --no-pager || true
             
-            # 13. 检查前端服务状态
+            # 16. 检查前端服务状态
             echo ""
             echo "=========================================="
             echo "检查前端服务状态"
@@ -102,7 +176,7 @@ jobs:
               ps aux | grep -E "node.*next|npm.*start" | grep -v grep | head -n 2 || echo "未发现前端进程"
             fi
             
-            # 14. 检查前端端口
+            # 17. 检查前端端口
             echo ""
             echo "检查前端端口 (3000, 3001)..."
             for port in 3000 3001; do
@@ -112,7 +186,7 @@ jobs:
               fi
             done
             
-            # 15. 检查前端 HTTP 响应
+            # 18. 检查前端 HTTP 响应
             echo ""
             echo "检查前端 HTTP 响应..."
             for port in 3000 3001; do
@@ -122,7 +196,7 @@ jobs:
               fi
             done
             
-            # 16. 服务状态总结
+            # 19. 服务状态总结
             echo ""
             echo "=========================================="
             echo "服务状态总结"

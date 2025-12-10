@@ -75,13 +75,14 @@ async def list_servers(
     _t: Optional[int] = Query(None, description="強制刷新時間戳（繞過緩存）")
 ):
     """獲取所有服務器列表（並發優化版本，帶緩存）"""
-    # 如果提供了強制刷新時間戳，清除緩存
-    if _t is not None:
-        invalidate_cache("servers_list:*")
-    import asyncio
-    servers_config = load_server_configs()
-    
-    # 使用並發處理所有服務器，大幅提升速度
+    try:
+        # 如果提供了強制刷新時間戳，清除緩存
+        if _t is not None:
+            invalidate_cache("servers_list:*")
+        import asyncio
+        servers_config = load_server_configs()
+        
+        # 使用並發處理所有服務器，大幅提升速度
     async def get_server_status_safe(node_id: str, config: Dict):
         """安全獲取服務器狀態，捕獲所有異常"""
         try:
@@ -120,9 +121,17 @@ async def list_servers(
     # 使用 asyncio.gather 並發執行，設置總超時時間為 10 秒
     try:
         servers = await asyncio.wait_for(
-            asyncio.gather(*tasks),
+            asyncio.gather(*tasks, return_exceptions=True),  # 添加 return_exceptions=True 避免单个任务失败导致整体失败
             timeout=10.0  # 總超時時間 10 秒
         )
+        # 过滤掉异常结果
+        valid_servers = []
+        for result in servers:
+            if isinstance(result, Exception):
+                logger.warning(f"獲取服務器狀態時發生異常: {result}")
+            else:
+                valid_servers.append(result)
+        servers = valid_servers
     except asyncio.TimeoutError:
         # 如果超時，返回部分結果
         logger.warning("獲取服務器狀態超時，返回部分結果")
@@ -131,11 +140,23 @@ async def list_servers(
         for task in tasks:
             if task.done():
                 try:
-                    servers.append(task.result())
-                except:
-                    pass
+                    result = task.result()
+                    if not isinstance(result, Exception):
+                        servers.append(result)
+                except Exception as e:
+                    logger.warning(f"獲取服務器狀態時發生異常: {e}")
+    except Exception as e:
+        logger.exception(f"獲取服務器列表失敗: {e}", exc_info=True)
+        # 即使發生異常，也返回空列表而不是拋出 500 錯誤
+        servers = []
     
-    return servers
+        return servers
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"獲取服務器列表失敗（外層異常處理）: {e}", exc_info=True)
+        # 返回空列表而不是拋出 500 錯誤，讓前端可以正常顯示（即使沒有服務器數據）
+        return []
 
 
 @router.get("/{node_id}", response_model=ServerStatus)

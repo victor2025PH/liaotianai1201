@@ -742,7 +742,7 @@ export default function AdvancedFeaturesPage() {
                         {rule.level}
                       </Badge>
                       <Switch 
-                        checked={rule.enabled}
+                        checked={rule.enabled ?? false}
                         onCheckedChange={(checked) => toggleAlertRule(rule.rule_id, checked)}
                       />
                     </div>
@@ -958,7 +958,7 @@ export default function AdvancedFeaturesPage() {
                         )}
                       </div>
                     </div>
-                    <Switch checked={webhook.enabled} />
+                    <Switch checked={webhook.enabled ?? false} />
                   </div>
                 ))}
                 {webhooks.length === 0 && (

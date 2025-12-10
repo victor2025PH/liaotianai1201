@@ -52,7 +52,7 @@ router = APIRouter()
 _service_manager: Optional[ServiceManager] = None
 
 
-def get_service_manager() -> ServiceManager:
+def get_service_manager() -> Optional[ServiceManager]:
     """獲取 ServiceManager 實例（單例模式）"""
     global _service_manager
     if _service_manager is None:
@@ -62,10 +62,8 @@ def get_service_manager() -> ServiceManager:
             logger.info("ServiceManager 初始化成功")
         except Exception as e:
             logger.exception(f"ServiceManager 初始化失敗: {e}", exc_info=True)
-            raise HTTPException(
-                status_code=500,
-                detail=f"服務管理器初始化失敗: {str(e)}"
-            )
+            # 不拋出異常，返回 None，讓調用者處理
+            return None
     return _service_manager
 
 
@@ -765,10 +763,15 @@ async def list_accounts(
     sort_by: Optional[str] = Query("created_at", description="排序字段（account_id, display_name, created_at, script_id）"),
     sort_order: Optional[str] = Query("desc", description="排序順序（asc, desc）"),
     _t: Optional[int] = Query(None, description="強制刷新時間戳（繞過緩存）"),
-    service_manager: ServiceManager = Depends(get_service_manager)
+    service_manager: Optional[ServiceManager] = Depends(get_service_manager)
 ):
     """列出所有賬號（支持搜索、過濾、排序，帶緩存）"""
     check_permission(current_user, PermissionCode.ACCOUNT_VIEW.value, db)
+    
+    # 如果 ServiceManager 初始化失敗，返回空列表
+    if service_manager is None:
+        logger.warning("ServiceManager 未初始化，返回空賬號列表")
+        return AccountListResponse(items=[], total=0)
     
     # 如果提供了強制刷新時間戳，清除緩存
     if _t is not None:
@@ -824,7 +827,8 @@ async def list_accounts(
         
         # 獲取 AccountManager（用於獲取實時狀態）
         # 優化：只在需要時獲取，避免不必要的開銷
-        manager = service_manager.account_manager
+        # 如果 ServiceManager 初始化失敗，使用空字典
+        manager = service_manager.account_manager if service_manager else None
         manager_accounts = manager.accounts if manager else {}
         
         # 構建響應數據（優化：批量處理，減少循環開銷）

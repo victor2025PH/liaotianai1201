@@ -45,6 +45,7 @@ export interface AuditLogQueryParams {
 export async function listAuditLogs(
   params?: AuditLogQueryParams
 ): Promise<AuditLogListResponse> {
+  const { fetchWithAuth } = await import("./client")
   const urlParams = new URLSearchParams()
   if (params?.skip !== undefined) urlParams.append("skip", params.skip.toString())
   if (params?.limit !== undefined) urlParams.append("limit", params.limit.toString())
@@ -55,7 +56,7 @@ export async function listAuditLogs(
   if (params?.start_date) urlParams.append("start_date", params.start_date)
   if (params?.end_date) urlParams.append("end_date", params.end_date)
 
-  const response = await fetch(`${API_BASE}/audit-logs/?${urlParams}`, {
+  const response = await fetchWithAuth(`${API_BASE}/audit-logs/?${urlParams}`, {
     credentials: "include",
   })
   if (!response.ok) {
@@ -69,7 +70,8 @@ export async function listAuditLogs(
  * 獲取審計日誌詳情
  */
 export async function getAuditLog(logId: number): Promise<AuditLog> {
-  const response = await fetch(`${API_BASE}/audit-logs/${logId}`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/audit-logs/${logId}`, {
     credentials: "include",
   })
   if (!response.ok) {

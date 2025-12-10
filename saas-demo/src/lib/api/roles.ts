@@ -40,7 +40,8 @@ export interface RolePermissionAssign {
  * 創建角色
  */
 export async function createRole(role: RoleCreate): Promise<Role> {
-  const response = await fetch(`${API_BASE}/roles`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/roles`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -57,7 +58,8 @@ export async function createRole(role: RoleCreate): Promise<Role> {
  * 列出所有角色
  */
 export async function listRoles(): Promise<Role[]> {
-  const response = await fetch(`${API_BASE}/roles`)
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/roles`)
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
   }
@@ -68,7 +70,8 @@ export async function listRoles(): Promise<Role[]> {
  * 獲取角色詳情
  */
 export async function getRole(roleId: number): Promise<RoleWithPermissions> {
-  const response = await fetch(`${API_BASE}/roles/${roleId}`)
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/roles/${roleId}`)
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
   }
@@ -82,7 +85,8 @@ export async function updateRole(
   roleId: number,
   update: RoleUpdate
 ): Promise<Role> {
-  const response = await fetch(`${API_BASE}/roles/${roleId}`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/roles/${roleId}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -99,7 +103,8 @@ export async function updateRole(
  * 刪除角色
  */
 export async function deleteRole(roleId: number): Promise<void> {
-  const response = await fetch(`${API_BASE}/roles/${roleId}`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/roles/${roleId}`, {
     method: "DELETE",
   })
   if (!response.ok) {
@@ -114,7 +119,8 @@ export async function assignPermissionToRole(
   roleId: number,
   assign: RolePermissionAssign
 ): Promise<{ message: string }> {
-  const response = await fetch(`${API_BASE}/roles/${roleId}/permissions`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/roles/${roleId}/permissions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -134,7 +140,8 @@ export async function revokePermissionFromRole(
   roleId: number,
   permissionCode: string
 ): Promise<{ message: string }> {
-  const response = await fetch(`${API_BASE}/roles/${roleId}/permissions/${permissionCode}`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/roles/${roleId}/permissions/${permissionCode}`, {
     method: "DELETE",
   })
   if (!response.ok) {
@@ -147,7 +154,8 @@ export async function revokePermissionFromRole(
  * 獲取角色的所有權限
  */
 export async function getRolePermissions(roleId: number): Promise<Permission[]> {
-  const response = await fetch(`${API_BASE}/roles/${roleId}/permissions`)
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/roles/${roleId}/permissions`)
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
   }

@@ -144,7 +144,8 @@ export interface NotificationTemplatePreviewResponse {
 export async function createNotificationConfig(
   config: NotificationConfigCreate
 ): Promise<NotificationConfig> {
-  const response = await fetch(`${API_BASE}/notifications/configs`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/notifications/configs`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -167,12 +168,13 @@ export async function listNotificationConfigs(params?: {
   limit?: number
   enabled?: boolean
 }): Promise<NotificationConfig[]> {
+  const { fetchWithAuth } = await import("./client")
   const urlParams = new URLSearchParams()
   if (params?.skip !== undefined) urlParams.append("skip", params.skip.toString())
   if (params?.limit !== undefined) urlParams.append("limit", params.limit.toString())
   if (params?.enabled !== undefined) urlParams.append("enabled", params.enabled.toString())
 
-  const response = await fetch(`${API_BASE}/notifications/configs?${urlParams}`, {
+  const response = await fetchWithAuth(`${API_BASE}/notifications/configs?${urlParams}`, {
     credentials: "include",
   })
   if (!response.ok) {
@@ -186,7 +188,8 @@ export async function listNotificationConfigs(params?: {
  * 獲取通知配置詳情
  */
 export async function getNotificationConfig(configId: number): Promise<NotificationConfig> {
-  const response = await fetch(`${API_BASE}/notifications/configs/${configId}`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/notifications/configs/${configId}`, {
     credentials: "include",
   })
   if (!response.ok) {
@@ -203,7 +206,8 @@ export async function updateNotificationConfig(
   configId: number,
   config: NotificationConfigUpdate
 ): Promise<NotificationConfig> {
-  const response = await fetch(`${API_BASE}/notifications/configs/${configId}`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/notifications/configs/${configId}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -222,7 +226,8 @@ export async function updateNotificationConfig(
  * 刪除通知配置
  */
 export async function deleteNotificationConfig(configId: number): Promise<{ message: string }> {
-  const response = await fetch(`${API_BASE}/notifications/configs/${configId}`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/notifications/configs/${configId}`, {
     method: "DELETE",
     credentials: "include",
   })
@@ -241,12 +246,13 @@ export async function listNotificationTemplates(params?: {
   limit?: number
   enabled?: boolean
 }): Promise<NotificationTemplateListResponse> {
+  const { fetchWithAuth } = await import("./client")
   const urlParams = new URLSearchParams()
   if (params?.skip !== undefined) urlParams.append("skip", params.skip.toString())
   if (params?.limit !== undefined) urlParams.append("limit", params.limit.toString())
   if (params?.enabled !== undefined) urlParams.append("enabled", params.enabled.toString())
 
-  const response = await fetch(`${API_BASE}/notifications/templates?${urlParams}`, {
+  const response = await fetchWithAuth(`${API_BASE}/notifications/templates?${urlParams}`, {
     credentials: "include",
   })
   if (!response.ok) {
@@ -262,7 +268,8 @@ export async function listNotificationTemplates(params?: {
 export async function createNotificationTemplate(
   payload: NotificationTemplateCreate
 ): Promise<NotificationTemplate> {
-  const response = await fetch(`${API_BASE}/notifications/templates`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/notifications/templates`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -284,7 +291,8 @@ export async function updateNotificationTemplate(
   templateId: number,
   payload: NotificationTemplateUpdate
 ): Promise<NotificationTemplate> {
-  const response = await fetch(`${API_BASE}/notifications/templates/${templateId}`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/notifications/templates/${templateId}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -303,7 +311,8 @@ export async function updateNotificationTemplate(
  * 刪除通知模板
  */
 export async function deleteNotificationTemplate(templateId: number): Promise<{ message: string }> {
-  const response = await fetch(`${API_BASE}/notifications/templates/${templateId}`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/notifications/templates/${templateId}`, {
     method: "DELETE",
     credentials: "include",
   })
@@ -320,7 +329,8 @@ export async function deleteNotificationTemplate(templateId: number): Promise<{ 
 export async function previewNotificationTemplate(
   payload: NotificationTemplatePreviewRequest
 ): Promise<NotificationTemplatePreviewResponse> {
-  const response = await fetch(`${API_BASE}/notifications/templates/preview`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/notifications/templates/preview`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -380,7 +390,8 @@ export async function getUnreadCount(): Promise<{ unread_count: number }> {
  * 標記通知為已讀
  */
 export async function markNotificationRead(notificationId: number): Promise<{ message: string }> {
-  const response = await fetch(`${API_BASE}/notifications/${notificationId}/read`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/notifications/${notificationId}/read`, {
     method: "POST",
     credentials: "include",
   })
@@ -395,7 +406,8 @@ export async function markNotificationRead(notificationId: number): Promise<{ me
  * 標記所有通知為已讀
  */
 export async function markAllRead(): Promise<{ message: string; count: number }> {
-  const response = await fetch(`${API_BASE}/notifications/mark-all-read`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/notifications/mark-all-read`, {
     method: "POST",
     credentials: "include",
   })
@@ -412,7 +424,8 @@ export async function markAllRead(): Promise<{ message: string; count: number }>
 export async function markNotificationsBulkRead(
   notificationIds: number[]
 ): Promise<{ message: string; count: number }> {
-  const response = await fetch(`${API_BASE}/notifications/batch/read`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/notifications/batch/read`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -433,7 +446,8 @@ export async function markNotificationsBulkRead(
 export async function deleteNotificationsBulk(
   notificationIds: number[]
 ): Promise<{ message: string; count: number }> {
-  const response = await fetch(`${API_BASE}/notifications/batch/delete`, {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/notifications/batch/delete`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -55,11 +55,8 @@ jobs:
             echo "=========================================="
             PROJECT_DIR="/home/ubuntu/telegram-ai-system"
             
-            # 檢查目錄是否存在，將結果存儲到變量以避免條件判斷觸發錯誤
-            DIR_EXISTS=""
-            [ -d "$PROJECT_DIR" ] && DIR_EXISTS="yes" || DIR_EXISTS="no"
-            
-            if [ "$DIR_EXISTS" = "no" ]; then
+            # 檢查目錄是否存在，使用 test 命令並明確處理退出碼
+            if test ! -d "$PROJECT_DIR"; then
               echo "Project directory not found, cloning..."
               cd /home/ubuntu || handle_error "cd to /home/ubuntu"
               if ! timeout 10m git clone https://github.com/${{ github.repository }}.git telegram-ai-system; then
@@ -70,19 +67,19 @@ jobs:
             else
               echo "✅ Project directory exists"
               cd "$PROJECT_DIR" || handle_error "cd to project directory"
-            fi
+            fi || true
             
             # 清理 /home/ubuntu/ 下的重複文件（舊的手動部署遺留）
             echo ""
             echo "清理舊的部署文件（如果存在）..."
-            cd /home/ubuntu || true
+            cd /home/ubuntu 2>/dev/null || true
             # 只清理與項目相關的目錄，保留其他重要文件
             for dir in admin-backend saas-demo deploy scripts; do
-              if [ -d "/home/ubuntu/$dir" ] && [ ! -L "/home/ubuntu/$dir" ]; then
+              if test -d "/home/ubuntu/$dir" && test ! -L "/home/ubuntu/$dir"; then
                 echo "⚠️  發現舊的部署目錄: /home/ubuntu/$dir"
                 echo "   這可能是舊的手動部署遺留，建議手動檢查後刪除"
                 # 不自動刪除，只提示，避免誤刪重要文件
-              fi
+              fi || true
             done
             cd "$PROJECT_DIR" || handle_error "cd to project directory"
             

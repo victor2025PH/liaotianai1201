@@ -28,13 +28,14 @@ jobs:
           script: |
             set -x
             set -o pipefail
+            # 不使用 set -e，因為它會與條件判斷 [ ] 產生衝突
+            # 我們使用手動錯誤檢查來處理關鍵命令的失敗
             
             handle_error() {
               echo "❌ Error at: $1"
               echo "Exit code: $?"
               exit 1
             }
-            trap 'handle_error "line $LINENO"' ERR
             
             echo "=========================================="
             echo "Starting deployment - $(date)"
@@ -43,7 +44,7 @@ jobs:
             echo "Testing SSH connection..."
             if ! whoami; then
               echo "❌ SSH connection failed"
-              exit 1
+              handle_error "SSH connection test"
             fi
             echo "Current user: $(whoami)"
             echo "Current directory: $(pwd)"
@@ -56,15 +57,15 @@ jobs:
             
             if [ ! -d "$PROJECT_DIR" ]; then
               echo "Project directory not found, cloning..."
-              cd /home/ubuntu || exit 1
+              cd /home/ubuntu || handle_error "cd to /home/ubuntu"
               if ! timeout 10m git clone https://github.com/${{ github.repository }}.git telegram-ai-system; then
                 echo "❌ Git clone failed or timeout"
-                exit 1
+                handle_error "git clone"
               fi
-              cd "$PROJECT_DIR" || exit 1
+              cd "$PROJECT_DIR" || handle_error "cd to project directory"
             else
               echo "✅ Project directory exists"
-              cd "$PROJECT_DIR" || exit 1
+              cd "$PROJECT_DIR" || handle_error "cd to project directory"
             fi
             
             echo ""
@@ -76,12 +77,12 @@ jobs:
               git remote set-url origin https://github.com/${{ github.repository }}.git
               if ! timeout 5m git fetch origin main; then
                 echo "❌ Git fetch failed or timeout"
-                exit 1
+                handle_error "git fetch"
               fi
             fi
             if ! timeout 1m git reset --hard origin/main; then
               echo "❌ Git reset failed or timeout"
-              exit 1
+              handle_error "git reset"
             fi
             echo "✅ Code updated to latest version"
             timeout 10s git log -1 --oneline || true
@@ -114,9 +115,9 @@ jobs:
             echo "=========================================="
             if [ -d "venv" ] && [ -f "requirements.txt" ]; then
               source venv/bin/activate
-              pip install --quiet --upgrade pip
-              pip install --quiet -r requirements.txt || {
-                echo "⚠️  Some dependencies failed, continuing..."
+              timeout 2m pip install --quiet --upgrade pip || echo "⚠️  pip upgrade failed or timeout, continuing..."
+              timeout 10m pip install --quiet -r requirements.txt --timeout=300 --cache-dir=/tmp/pip-cache || {
+                echo "⚠️  Some dependencies failed or timeout, continuing..."
               }
               echo "✅ Bot dependencies updated"
             else

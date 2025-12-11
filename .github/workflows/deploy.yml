@@ -345,8 +345,8 @@ jobs:
             
             echo ""
             echo "Checking Bot service..."
-            # 只取第一行，避免多行输出导致判断失败
-            BOT_STATUS=$(systemctl is-active telegram-bot 2>/dev/null | head -n1 || echo "inactive")
+            # 使用 tr -d '\n' 去除换行符，确保只得到一个状态值
+            BOT_STATUS=$(systemctl is-active telegram-bot 2>/dev/null | tr -d '\n' || echo "inactive")
             if [ "$BOT_STATUS" = "active" ]; then
               echo "✅ Bot service: Running"
             else
@@ -367,7 +367,8 @@ jobs:
             fi
             
             if [ -n "$FRONTEND_SERVICE" ]; then
-              FRONTEND_STATUS=$(systemctl is-active "$FRONTEND_SERVICE" 2>/dev/null || echo "inactive")
+              # 使用 tr -d '\n' 去除换行符，确保只得到一个状态值
+              FRONTEND_STATUS=$(systemctl is-active "$FRONTEND_SERVICE" 2>/dev/null | tr -d '\n' || echo "inactive")
               if [ "$FRONTEND_STATUS" = "active" ]; then
                 echo "✅ Frontend service ($FRONTEND_SERVICE): Running"
                 HTTP_CODE=$(timeout 10s curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3000 2>/dev/null || echo "000")

@@ -274,9 +274,8 @@ jobs:
             echo "=========================================="
             
             echo "Restarting backend service..."
-            # 优先使用 luckyred-api，否则使用 telegram-backend（使用变量捕获，避免 grep 退出码问题）
-            SERVICE_LIST=$(timeout 5s systemctl list-units --type=service --no-legend 2>/dev/null || echo "")
-            if echo "$SERVICE_LIST" | grep -q "luckyred-api" 2>/dev/null; then
+            # 优先使用 luckyred-api，否则使用 telegram-backend（使用 systemctl cat 避免管道 SIGPIPE 错误）
+            if systemctl cat luckyred-api.service >/dev/null 2>&1; then
               timeout 30s sudo systemctl restart luckyred-api && echo "✅ Backend (luckyred-api) restarted" || echo "⚠️  Backend restart failed or timeout"
             else
               timeout 30s sudo systemctl restart telegram-backend && echo "✅ Backend (telegram-backend) restarted" || echo "⚠️  Backend restart failed or timeout"

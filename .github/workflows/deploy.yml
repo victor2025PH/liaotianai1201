@@ -356,9 +356,15 @@ jobs:
               fi
             else
               echo "❌ Backend service ($TARGET_SERVICE) failed to start! (Status: $BACKEND_STATUS)"
+              echo ""
+              echo "⬇️ Service Status:"
+              sudo systemctl status "$TARGET_SERVICE" --no-pager -l || true
+              echo ""
               echo "⬇️ Critical Error Logs (Last 50 lines):"
-              # 打印关键日志供调试
               sudo journalctl -u "$TARGET_SERVICE" -n 50 --no-pager || true
+              echo ""
+              echo "⬇️ Service Configuration:"
+              sudo systemctl cat "$TARGET_SERVICE" || true
               handle_error "Backend service failed to start"
             fi
             

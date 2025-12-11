@@ -361,10 +361,19 @@ jobs:
                   echo "✅ Service started successfully!"
                   break
                 elif [ "$BACKEND_STATUS" = "failed" ]; then
-                  echo "❌ Service failed to start."
+                  echo "❌ Service failed to start (status: failed)"
+                  break
+                elif [ "$BACKEND_STATUS" != "activating" ] && [ "$BACKEND_STATUS" != "active" ]; then
+                  # 如果状态不再是 activating 或 active，也退出循环
+                  echo "⚠️  Service status changed to: $BACKEND_STATUS"
                   break
                 fi
               done
+              
+              # 循环结束后再次检查状态
+              BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null | awk 'NR==1 {print $1}' || true)
+              if [ -z "$BACKEND_STATUS" ]; then BACKEND_STATUS="inactive"; fi
+              echo "Final status after wait: $BACKEND_STATUS"
             fi
             
             # 最终检查状态
@@ -379,23 +388,33 @@ jobs:
                 sudo journalctl -u "$TARGET_SERVICE" -n 20 --no-pager || true
               fi
             else
-              echo "❌ Backend service ($TARGET_SERVICE) failed to start! (Final Status: $BACKEND_STATUS)"
               echo ""
-              echo "⬇️ Service Status:"
+              echo "=========================================="
+              echo "❌ Backend service ($TARGET_SERVICE) failed to start!"
+              echo "Final Status: $BACKEND_STATUS"
+              echo "=========================================="
+              echo ""
+              echo "⬇️ Service Status (systemctl status):"
               sudo systemctl status "$TARGET_SERVICE" --no-pager -l || true
               echo ""
-              echo "⬇️ Critical Error Logs (Last 50 lines):"
-              sudo journalctl -u "$TARGET_SERVICE" -n 50 --no-pager || true
+              echo "⬇️ Critical Error Logs (Last 100 lines):"
+              sudo journalctl -u "$TARGET_SERVICE" -n 100 --no-pager || true
               echo ""
-              echo "⬇️ Service Configuration:"
+              echo "⬇️ Service Configuration (systemctl cat):"
               sudo systemctl cat "$TARGET_SERVICE" || true
               echo ""
               echo "⬇️ Checking service files:"
               echo "  - venv/bin/uvicorn exists: $([ -f "$PROJECT_DIR/admin-backend/venv/bin/uvicorn" ] && echo "yes" || echo "no")"
               echo "  - .env file exists: $([ -f "$PROJECT_DIR/admin-backend/.env" ] && echo "yes" || echo "no")"
               echo "  - WorkingDirectory exists: $([ -d "$PROJECT_DIR/admin-backend" ] && echo "yes" || echo "no")"
+              echo ""
+              echo "⬇️ Python syntax check:"
+              cd "$PROJECT_DIR/admin-backend" || true
+              python3 -m py_compile app/api/group_ai/servers.py 2>&1 || echo "  ❌ Syntax error detected!"
+              echo ""
               # 強制刷新輸出緩衝
               sync || true
+              echo "=========================================="
               # 強制退出
               exit 1
             fi

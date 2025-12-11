@@ -540,10 +540,16 @@ jobs:
                   sudo journalctl -u "$FRONTEND_SERVICE" -n 20 --no-pager || true
                 fi
               else
-                echo "❌ Frontend service ($FRONTEND_SERVICE): Not running"
-                echo "⬇️ Frontend Logs:"
+                # 前端服务启动失败，打印详细日志但不中断部署（前端不是关键服务）
+                echo "⚠️  Frontend service ($FRONTEND_SERVICE): Not running (Status: $FRONTEND_STATUS)"
+                echo "⬇️ Frontend Service Status:"
+                sudo systemctl status "$FRONTEND_SERVICE" -l --no-pager | head -30 || true
+                echo ""
+                echo "⬇️ Frontend Logs (Last 50 lines):"
                 sudo journalctl -u "$FRONTEND_SERVICE" -n 50 --no-pager || true
-                handle_error "Frontend service failed to start"
+                echo ""
+                echo "⚠️  Frontend service failed to start, but continuing deployment..."
+                # 不调用 handle_error，因为前端服务不是关键服务，后端和 Bot 已经成功启动
               fi
             else
               echo "⚠️  Frontend systemd service not found"

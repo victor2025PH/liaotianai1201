@@ -218,18 +218,51 @@ if [ -d "saas-demo" ]; then
     }
   fi
   
+  # 无论是否重新构建，都需要确保 standalone 目录结构完整
   if [ -d ".next/standalone" ]; then
     echo "Preparing Standalone directory..."
+    
+    # 复制 public 目录（如果存在且需要更新）
     if [ -d "public" ]; then
-      cp -r public .next/standalone/ || true
+      if [ ! -d ".next/standalone/public" ] || [ "public" -nt ".next/standalone/public" ]; then
+        echo "  Copying public directory..."
+        cp -r public .next/standalone/ || true
+      fi
     fi
+    
+    # 确保 .next 目录存在
     mkdir -p .next/standalone/.next
+    
+    # 复制 .next/static 目录（关键：静态资源必须存在）
     if [ -d ".next/static" ]; then
-      cp -r .next/static .next/standalone/.next/ || true
+      # 如果 standalone 中的 static 不存在或比源文件旧，则更新
+      if [ ! -d ".next/standalone/.next/static" ] || [ ".next/static" -nt ".next/standalone/.next/static" ]; then
+        echo "  Copying .next/static directory..."
+        rm -rf .next/standalone/.next/static
+        cp -r .next/static .next/standalone/.next/ || {
+          echo "❌ Failed to copy .next/static"
+          exit 1
+        }
+      fi
+    else
+      echo "⚠️  .next/static directory not found - build may be incomplete"
     fi
+    
+    # 验证关键文件
+    if [ ! -f ".next/standalone/server.js" ]; then
+      echo "❌ server.js not found in standalone directory"
+      exit 1
+    fi
+    
     echo "✅ Standalone directory ready"
   else
-    echo "⚠️  Standalone directory not found"
+    echo "❌ .next/standalone directory not found - build required"
+    if [ "$FRONTEND_CHANGED" = "false" ]; then
+      echo "⚠️  Frontend code unchanged but standalone missing - forcing rebuild..."
+      FRONTEND_CHANGED=true
+      # 重新执行构建（这里简化处理，实际应该递归调用或重构逻辑）
+      echo "  请手动运行: cd saas-demo && npm run build"
+    fi
   fi
   
   cd ..

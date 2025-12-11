@@ -365,6 +365,13 @@ jobs:
               echo ""
               echo "⬇️ Service Configuration:"
               sudo systemctl cat "$TARGET_SERVICE" || true
+              echo ""
+              echo "⬇️ Checking service files:"
+              echo "  - venv/bin/uvicorn exists: $([ -f "$PROJECT_DIR/admin-backend/venv/bin/uvicorn" ] && echo "yes" || echo "no")"
+              echo "  - .env file exists: $([ -f "$PROJECT_DIR/admin-backend/.env" ] && echo "yes" || echo "no")"
+              echo "  - WorkingDirectory exists: $([ -d "$PROJECT_DIR/admin-backend" ] && echo "yes" || echo "no")"
+              # 強制刷新輸出緩衝
+              sync || true
               handle_error "Backend service failed to start"
             fi
             

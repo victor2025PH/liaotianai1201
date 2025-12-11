@@ -304,14 +304,16 @@ jobs:
             echo "=========================================="
             
             echo "Checking backend service..."
-            # 尝试检测 luckyred-api 或 telegram-backend（使用变量捕获，避免 grep 退出码问题）
-            TARGET_SERVICE=""
-            SERVICE_LIST=$(systemctl list-units --full -all 2>/dev/null || echo "")
-            if echo "$SERVICE_LIST" | grep -q "luckyred-api.service" 2>/dev/null; then
+            # 默认目标服务
+            TARGET_SERVICE="telegram-backend"
+            
+            # 使用 systemctl cat 检查 luckyred-api 是否存在
+            # 这种方式不需要管道，不会触发 SIGPIPE 错误
+            if systemctl cat luckyred-api.service >/dev/null 2>&1; then
               TARGET_SERVICE="luckyred-api"
-            else
-              TARGET_SERVICE="telegram-backend"
             fi
+            
+            echo "Target Service detected: $TARGET_SERVICE"
             
             # 使用变量捕获状态，确保命令总是返回 0，防止脚本意外中断
             BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null || echo "inactive")

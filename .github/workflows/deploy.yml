@@ -320,9 +320,10 @@ jobs:
             
             echo "Target Service detected: $TARGET_SERVICE"
             
-            # 使用变量捕获状态，确保命令总是返回 0，防止脚本意外中断
             # 使用 awk 确保只取第一行的第一个单词，并剔除所有空白字符
-            BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null | awk 'NR==1 {print $1}' || echo "inactive")
+            BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null | awk 'NR==1 {print $1}')
+            # 如果为空则默认为 inactive
+            if [ -z "$BACKEND_STATUS" ]; then BACKEND_STATUS="inactive"; fi
             echo "Backend Status: $BACKEND_STATUS"
             
             if [ "$BACKEND_STATUS" = "active" ]; then
@@ -346,7 +347,9 @@ jobs:
             echo ""
             echo "Checking Bot service..."
             # 使用 awk 确保只取第一行的第一个单词，并剔除所有空白字符
-            BOT_STATUS=$(systemctl is-active telegram-bot 2>/dev/null | awk 'NR==1 {print $1}' || echo "inactive")
+            BOT_STATUS=$(systemctl is-active telegram-bot 2>/dev/null | awk 'NR==1 {print $1}')
+            # 如果为空则默认为 inactive
+            if [ -z "$BOT_STATUS" ]; then BOT_STATUS="inactive"; fi
             echo "Bot Status: $BOT_STATUS"
             if [ "$BOT_STATUS" = "active" ]; then
               echo "✅ Bot service: Running"
@@ -369,7 +372,9 @@ jobs:
             
             if [ -n "$FRONTEND_SERVICE" ]; then
               # 使用 awk 确保只取第一行的第一个单词，并剔除所有空白字符
-              FRONTEND_STATUS=$(systemctl is-active "$FRONTEND_SERVICE" 2>/dev/null | awk 'NR==1 {print $1}' || echo "inactive")
+              FRONTEND_STATUS=$(systemctl is-active "$FRONTEND_SERVICE" 2>/dev/null | awk 'NR==1 {print $1}')
+              # 如果为空则默认为 inactive
+              if [ -z "$FRONTEND_STATUS" ]; then FRONTEND_STATUS="inactive"; fi
               echo "Frontend Status: $FRONTEND_STATUS"
               if [ "$FRONTEND_STATUS" = "active" ]; then
                 echo "✅ Frontend service ($FRONTEND_SERVICE): Running"

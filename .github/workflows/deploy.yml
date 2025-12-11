@@ -212,6 +212,13 @@ jobs:
               
               echo "Building frontend project..."
               export NODE_OPTIONS="--max-old-space-size=2048"
+              
+              # 强制清理可能存在的 Next.js 构建锁，避免 "Unable to acquire lock" 错误
+              if [ -f ".next/lock" ]; then
+                echo "🧹 Found stale lock file, removing..."
+                rm -f .next/lock
+              fi
+              
               timeout 20m npm run build || {
                 echo "⚠️  Build failed or timeout, but continuing..."
               }

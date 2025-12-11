@@ -278,9 +278,11 @@ jobs:
             timeout 30s sudo systemctl restart telegram-bot && echo "✅ Bot restarted" || echo "⚠️  Bot restart failed or timeout"
             
             FRONTEND_SERVICE_NAME=""
-            if timeout 10s systemctl list-units --type=service --no-legend 2>/dev/null | grep -q "liaotian-frontend"; then
+            # 使用变量捕获，避免 grep 退出码问题
+            SERVICE_LIST=$(timeout 10s systemctl list-units --type=service --no-legend 2>/dev/null || echo "")
+            if echo "$SERVICE_LIST" | grep -q "liaotian-frontend" 2>/dev/null; then
               FRONTEND_SERVICE_NAME="liaotian-frontend"
-            elif timeout 10s systemctl list-units --type=service --no-legend 2>/dev/null | grep -q "smart-tg-frontend"; then
+            elif echo "$SERVICE_LIST" | grep -q "smart-tg-frontend" 2>/dev/null; then
               FRONTEND_SERVICE_NAME="smart-tg-frontend"
             fi
             
@@ -301,9 +303,10 @@ jobs:
             echo "=========================================="
             
             echo "Checking backend service..."
-            # 尝试检测 luckyred-api 或 telegram-backend
+            # 尝试检测 luckyred-api 或 telegram-backend（使用变量捕获，避免 grep 退出码问题）
             TARGET_SERVICE=""
-            if systemctl list-units --full -all 2>/dev/null | grep -q "luckyred-api.service"; then
+            SERVICE_LIST=$(systemctl list-units --full -all 2>/dev/null || echo "")
+            if echo "$SERVICE_LIST" | grep -q "luckyred-api.service" 2>/dev/null; then
               TARGET_SERVICE="luckyred-api"
             else
               TARGET_SERVICE="telegram-backend"
@@ -345,9 +348,11 @@ jobs:
             echo ""
             echo "Checking frontend service..."
             FRONTEND_SERVICE=""
-            if systemctl list-units --type=service --no-legend 2>/dev/null | grep -q "liaotian-frontend"; then
+            # 使用变量捕获，避免 grep 退出码问题
+            SERVICE_LIST=$(systemctl list-units --type=service --no-legend 2>/dev/null || echo "")
+            if echo "$SERVICE_LIST" | grep -q "liaotian-frontend" 2>/dev/null; then
               FRONTEND_SERVICE="liaotian-frontend"
-            elif systemctl list-units --type=service --no-legend 2>/dev/null | grep -q "smart-tg-frontend"; then
+            elif echo "$SERVICE_LIST" | grep -q "smart-tg-frontend" 2>/dev/null; then
               FRONTEND_SERVICE="smart-tg-frontend"
             fi
             

@@ -379,7 +379,8 @@ jobs:
               echo "  - WorkingDirectory exists: $([ -d "$PROJECT_DIR/admin-backend" ] && echo "yes" || echo "no")"
               # 強制刷新輸出緩衝
               sync || true
-              handle_error "Backend service failed to start"
+              # 強制退出
+              exit 1
             fi
             
             echo ""

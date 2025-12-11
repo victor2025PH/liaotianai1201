@@ -31,3 +31,4 @@ langchain
 langchain-openai
 langchain-community
 tiktoken
+ffmpeg-python

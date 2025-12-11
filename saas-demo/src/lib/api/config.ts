@@ -83,7 +83,9 @@ export function getWebSocketUrl(): string {
 }
 
 // 導出常量（為了向後兼容）
-export const API_BASE_URL = getApiBaseUrl();
-export const GROUP_AI_API_BASE_URL = getGroupAiApiBaseUrl();
-export const WS_URL = getWebSocketUrl();
+// 注意：這些常量在模塊加載時計算，可能導致 SSR 問題
+// 如果遇到 "location is not defined" 錯誤，請使用函數版本
+export const API_BASE_URL = typeof window !== "undefined" ? getApiBaseUrl() : "/api/v1";
+export const GROUP_AI_API_BASE_URL = typeof window !== "undefined" ? getGroupAiApiBaseUrl() : "/api/v1/group-ai";
+export const WS_URL = typeof window !== "undefined" ? getWebSocketUrl() : "ws://localhost:8000/api/v1/notifications/ws";
 

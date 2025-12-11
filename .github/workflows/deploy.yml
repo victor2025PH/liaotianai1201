@@ -351,11 +351,10 @@ jobs:
             echo ""
             echo "Checking frontend service..."
             FRONTEND_SERVICE=""
-            # 使用变量捕获，避免 grep 退出码问题
-            SERVICE_LIST=$(systemctl list-units --type=service --no-legend 2>/dev/null || echo "")
-            if echo "$SERVICE_LIST" | grep -q "liaotian-frontend" 2>/dev/null; then
+            # 使用 systemctl cat 检查服务是否存在（避免管道 SIGPIPE 错误）
+            if systemctl cat liaotian-frontend.service >/dev/null 2>&1; then
               FRONTEND_SERVICE="liaotian-frontend"
-            elif echo "$SERVICE_LIST" | grep -q "smart-tg-frontend" 2>/dev/null; then
+            elif systemctl cat smart-tg-frontend.service >/dev/null 2>&1; then
               FRONTEND_SERVICE="smart-tg-frontend"
             fi
             

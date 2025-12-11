@@ -310,16 +310,22 @@ jobs:
             # 检查后端服务状态（优先 luckyred-api）
             if timeout 5s systemctl is-active --quiet luckyred-api 2>/dev/null; then
               echo "✅ Backend service (luckyred-api) is running"
-            elif timeout 5s systemctl is-active --quiet telegram-backend 2>/dev/null; then
-              echo "✅ Backend service: Running"
               if timeout 10s curl -s -f --max-time 5 http://localhost:8000/health > /dev/null 2>&1; then
                 echo "✅ Backend health check: Passed"
               else
                 echo "⚠️  Backend health check: Failed or timeout"
               fi
+              timeout 5s sudo systemctl status luckyred-api --no-pager -l 2>/dev/null | head -n 5 || true
+            elif timeout 5s systemctl is-active --quiet telegram-backend 2>/dev/null; then
+              echo "✅ Backend service (telegram-backend) is running"
+              if timeout 10s curl -s -f --max-time 5 http://localhost:8000/health > /dev/null 2>&1; then
+                echo "✅ Backend health check: Passed"
+              else
+                echo "⚠️  Backend health check: Failed or timeout"
+              fi
+              timeout 5s sudo systemctl status telegram-backend --no-pager -l 2>/dev/null | head -n 5 || true
             else
               echo "❌ Backend service: Not running"
-              timeout 5s sudo systemctl status telegram-backend --no-pager -l 2>/dev/null | head -n 5 || true
             fi
             
             echo ""

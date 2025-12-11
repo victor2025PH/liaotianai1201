@@ -380,6 +380,8 @@ jobs:
             BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null | awk 'NR==1 {print $1}' || true)
             if [ -z "$BACKEND_STATUS" ]; then BACKEND_STATUS="inactive"; fi
             echo "Final check - Status: $BACKEND_STATUS"
+            # 强制刷新输出，确保能看到状态
+            sync 2>/dev/null || true
             
             # 立即输出状态判断结果，确保能看到执行流程
             if [ "$BACKEND_STATUS" = "active" ]; then
@@ -387,6 +389,8 @@ jobs:
             else
               echo "Status is NOT active ($BACKEND_STATUS), entering error handler"
             fi
+            # 再次强制刷新输出
+            sync 2>/dev/null || true
             
             if [ "$BACKEND_STATUS" = "active" ]; then
               echo "✅ Backend service ($TARGET_SERVICE) is running"
@@ -401,16 +405,19 @@ jobs:
             else
               # 立即输出错误信息，避免被截断
               echo "Entering error handler..."
+              sync 2>/dev/null || true
               echo ""
               echo "=========================================="
               echo "ERROR: Backend service ($TARGET_SERVICE) failed to start!"
               echo "Final Status: $BACKEND_STATUS"
               echo "=========================================="
+              sync 2>/dev/null || true
               
               # 先输出最关键的错误信息（journalctl 的最后 15 行）
               echo ""
               echo "ERROR LOGS (Last 15 lines):"
               sudo journalctl -u "$TARGET_SERVICE" -n 15 --no-pager --no-hostname 2>&1 | tail -15 || echo "  (No logs)"
+              sync 2>/dev/null || true
               
               # 检查文件是否存在（关键诊断）
               echo ""

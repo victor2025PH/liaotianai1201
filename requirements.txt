@@ -16,6 +16,7 @@ pyttsx3
 langdetect
 cryptography
 tabulate
+ffmpeg-python
 # 自动安装的依赖（完整部署系统）
 pydantic-settings>=2.0.0
 fastapi>=0.104.0

@@ -164,6 +164,17 @@ jobs:
                   }
                 fi
               fi
+              
+              # 安裝系統級 ffmpeg（處理視頻必須）
+              if ! command -v ffmpeg &> /dev/null; then
+                echo "Installing system ffmpeg..."
+                timeout 2m sudo apt-get update -qq && timeout 5m sudo apt-get install -y ffmpeg || {
+                  echo "⚠️  Failed to install ffmpeg, continuing..."
+                }
+              else
+                echo "✅ ffmpeg is already installed"
+              fi
+              
               source venv/bin/activate
               timeout 2m pip install --quiet --upgrade pip || echo "⚠️  pip upgrade failed or timeout, continuing..."
               timeout 10m pip install --quiet -r requirements.txt --timeout=300 --cache-dir=/tmp/pip-cache || {

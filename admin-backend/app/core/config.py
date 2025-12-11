@@ -8,8 +8,10 @@ class Settings(BaseSettings):
     app_name: str = "Smart TG Admin API"
     database_url: str = "sqlite:///./admin.db"
     redis_url: str = "redis://localhost:6379/0"
-    jwt_secret: str = Field(default="change_me", alias="secret_key")  # 支持 secret_key 别名
-    jwt_algorithm: str = Field(default="HS256", alias="algorithm")  # 支持 algorithm 别名
+    # 支持 .env 文件中的 secret_key 和 jwt_secret 两种写法
+    jwt_secret: str = Field(default="change_me", validation_alias="secret_key")
+    # 支持 .env 文件中的 algorithm 和 jwt_algorithm 两种写法
+    jwt_algorithm: str = Field(default="HS256", validation_alias="algorithm")
     access_token_expire_minutes: int = 60
     # 日志级别（可选，用于兼容 .env 文件中的 log_level）
     log_level: str = Field(default="INFO", description="日志级别")
@@ -111,7 +113,7 @@ class Settings(BaseSettings):
         extra="ignore",
         # 允许从环境变量读取（支持小写下划线格式）
         env_prefix="",
-        # 允许使用字段别名
+        # 允许使用字段别名和验证别名
         populate_by_name=True,
     )
 

@@ -8,7 +8,14 @@ import { toast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/api/client";
 import { getApiBaseUrl } from "@/lib/api/config";
 
-const API_BASE_URL = getApiBaseUrl();
+// 使用函数调用而不是常量，避免在 SSR 时访问 window.location
+const getApiBaseUrlSafe = () => {
+  if (typeof window !== "undefined") {
+    return getApiBaseUrl();
+  }
+  return "/api/v1"; // SSR 时使用默认值
+};
+
 const API_TIMEOUT = 30000; // 30 秒超時（增加超时时间以处理较慢的API响应）
 
 // 導入 mock 數據
@@ -168,7 +175,7 @@ export async function apiClient<T>(
     ...fetchOptions
   } = options || {};
 
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = `${getApiBaseUrlSafe()}${endpoint}`;
   
   // 獲取認證頭
   const authHeaders = getAuthHeaders();

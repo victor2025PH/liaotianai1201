@@ -1,0 +1,36 @@
+[Unit]
+Description=LuckyRed API Service (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/telegram-ai-system/admin-backend
+Environment="PATH=/home/ubuntu/telegram-ai-system/admin-backend/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONPATH=/home/ubuntu/telegram-ai-system/admin-backend"
+EnvironmentFile=/home/ubuntu/telegram-ai-system/admin-backend/.env
+
+# 使用虚拟环境中的 uvicorn 运行 FastAPI
+ExecStart=/home/ubuntu/telegram-ai-system/admin-backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 重启策略
+Restart=always
+RestartSec=10
+
+# 日志配置
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=luckyred-api
+
+# 安全设置
+NoNewPrivileges=true
+PrivateTmp=true
+
+# 资源限制
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+

@@ -23,7 +23,7 @@ SERVICE_GROUP="ubuntu"
 
 # Systemd 服务文件路径
 SYSTEMD_DIR="/etc/systemd/system"
-BACKEND_SERVICE="telegram-backend.service"
+BACKEND_SERVICE="luckyred-api.service"
 BOT_SERVICE="telegram-bot.service"
 
 # 脚本目录
@@ -47,10 +47,16 @@ if [ ! -d "$PROJECT_ROOT" ]; then
     exit 1
 fi
 
-# 检查部署文件是否存在
+# 检查部署文件是否存在（优先使用 luckyred-api，否则使用 telegram-backend）
 if [ ! -f "$DEPLOY_DIR/$BACKEND_SERVICE" ]; then
-    echo -e "${RED}❌ 错误：后端服务文件不存在: $DEPLOY_DIR/$BACKEND_SERVICE${NC}"
-    exit 1
+    # 如果 luckyred-api.service 不存在，尝试使用 telegram-backend.service
+    if [ -f "$DEPLOY_DIR/telegram-backend.service" ]; then
+        echo -e "${YELLOW}⚠️  使用 telegram-backend.service 作为备用${NC}"
+        BACKEND_SERVICE="telegram-backend.service"
+    else
+        echo -e "${RED}❌ 错误：后端服务文件不存在: $DEPLOY_DIR/$BACKEND_SERVICE${NC}"
+        exit 1
+    fi
 fi
 
 if [ ! -f "$DEPLOY_DIR/$BOT_SERVICE" ]; then

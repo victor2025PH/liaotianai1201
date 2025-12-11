@@ -323,6 +323,19 @@ fi
 if [ -n "$FRONTEND_SERVICE_NAME" ]; then
   echo "Restarting frontend service ($FRONTEND_SERVICE_NAME)..."
   timeout 30s sudo systemctl restart "$FRONTEND_SERVICE_NAME" && echo "✅ Frontend restarted" || echo "⚠️  Frontend restart failed or timeout"
+  
+  # 等待服务启动并验证端口监听
+  echo "Waiting for frontend service to start (5 seconds)..."
+  sleep 5
+  
+  # 检查端口是否监听
+  PORT_3000=$(sudo ss -tlnp | grep ":3000" || echo "")
+  if [ -n "$PORT_3000" ]; then
+    echo "✅ Frontend port 3000 is listening"
+  else
+    echo "⚠️  Frontend port 3000 is not listening - service may have failed"
+    echo "  查看日志: sudo journalctl -u $FRONTEND_SERVICE_NAME -n 30 --no-pager"
+  fi
 else
   echo "⚠️  Frontend systemd service not found"
 fi

@@ -1,16 +1,18 @@
 from functools import lru_cache
 
-from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic import Field, ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     app_name: str = "Smart TG Admin API"
     database_url: str = "sqlite:///./admin.db"
     redis_url: str = "redis://localhost:6379/0"
-    jwt_secret: str = "change_me"
-    jwt_algorithm: str = "HS256"
+    jwt_secret: str = Field(default="change_me", alias="secret_key")  # 支持 secret_key 别名
+    jwt_algorithm: str = Field(default="HS256", alias="algorithm")  # 支持 algorithm 别名
     access_token_expire_minutes: int = 60
+    # 日志级别（可选，用于兼容 .env 文件中的 log_level）
+    log_level: str = Field(default="INFO", description="日志级别")
     admin_default_email: str = "admin@example.com"
     admin_default_password: str = "changeme123"
     session_service_url: str = "http://localhost:8001"
@@ -99,13 +101,19 @@ class Settings(BaseSettings):
             return raw_val.lower() in ('true', '1', 'yes', 'on')
         return cls.json_schema_extra(field_name, raw_val) if hasattr(cls, 'json_schema_extra') else raw_val
 
-    class Config:
+    # Pydantic v2 配置方式
+    model_config = SettingsConfigDict(
         # 启用 .env 文件读取
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
         # 允许额外字段（忽略未定义的字段，避免测试环境配置错误）
-        extra = "ignore"
+        extra="ignore",
+        # 允许从环境变量读取（支持小写下划线格式）
+        env_prefix="",
+        # 允许使用字段别名
+        populate_by_name=True,
+    )
 
 
 @lru_cache

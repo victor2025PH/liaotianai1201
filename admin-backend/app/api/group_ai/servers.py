@@ -103,6 +103,7 @@ async def list_servers(
                     logger.warning(f"從數據庫獲取賬號數失敗: {db_error}")
                     accounts_count = 0
                 
+                # 返回默認失敗狀態
                 return ServerStatus(
                     node_id=node_id,
                     host=config.get('host', ''),
@@ -110,7 +111,7 @@ async def list_servers(
                     status='error',
                     accounts_count=accounts_count,
                     max_accounts=config.get('max_accounts', 5),
-                    service_status=f"連接失敗: {str(e)}"
+                    service_status=f"Check failed: {str(e)}"
                 )
         
         # 並發獲取所有服務器狀態

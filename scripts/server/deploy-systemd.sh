@@ -109,6 +109,7 @@ cp "$DEPLOY_DIR/$BACKEND_SERVICE" "$SYSTEMD_DIR/"
 cp "$DEPLOY_DIR/$BOT_SERVICE" "$SYSTEMD_DIR/"
 
 # 更新服务文件中的路径和用户（自动替换）
+# 替换所有路径（包括 WorkingDirectory, ExecStart, EnvironmentFile, Environment 中的路径）
 sed -i "s|/home/ubuntu/telegram-ai-system|$PROJECT_ROOT|g" "$SYSTEMD_DIR/$BACKEND_SERVICE"
 sed -i "s|/home/ubuntu/telegram-ai-system|$PROJECT_ROOT|g" "$SYSTEMD_DIR/$BOT_SERVICE"
 # 替换用户和组

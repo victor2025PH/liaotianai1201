@@ -14,20 +14,22 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# 配置变量
-PROJECT_ROOT="/home/ubuntu/telegram-ai-system"
+# 配置变量 - 自动检测实际路径和用户
+# 从脚本位置推断项目根目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/admin-backend"
 BOT_DIR="$PROJECT_ROOT"
-SERVICE_USER="ubuntu"
-SERVICE_GROUP="ubuntu"
+# 自动检测实际用户（从项目目录的所有者）
+SERVICE_USER="$(stat -c '%U' "$PROJECT_ROOT" 2>/dev/null || echo "ubuntu")"
+SERVICE_GROUP="$(stat -c '%G' "$PROJECT_ROOT" 2>/dev/null || echo "ubuntu")"
 
 # Systemd 服务文件路径
 SYSTEMD_DIR="/etc/systemd/system"
 BACKEND_SERVICE="luckyred-api.service"
 BOT_SERVICE="telegram-bot.service"
 
-# 脚本目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 部署文件目录
 DEPLOY_DIR="$(cd "$SCRIPT_DIR/../../deploy/systemd" && pwd)"
 
 echo "============================================================"
@@ -106,9 +108,14 @@ echo "[3/6] 安装 systemd 服务文件..."
 cp "$DEPLOY_DIR/$BACKEND_SERVICE" "$SYSTEMD_DIR/"
 cp "$DEPLOY_DIR/$BOT_SERVICE" "$SYSTEMD_DIR/"
 
-# 更新服务文件中的路径（如果需要）
+# 更新服务文件中的路径和用户（自动替换）
 sed -i "s|/home/ubuntu/telegram-ai-system|$PROJECT_ROOT|g" "$SYSTEMD_DIR/$BACKEND_SERVICE"
 sed -i "s|/home/ubuntu/telegram-ai-system|$PROJECT_ROOT|g" "$SYSTEMD_DIR/$BOT_SERVICE"
+# 替换用户和组
+sed -i "s|^User=.*|User=$SERVICE_USER|g" "$SYSTEMD_DIR/$BACKEND_SERVICE"
+sed -i "s|^Group=.*|Group=$SERVICE_GROUP|g" "$SYSTEMD_DIR/$BACKEND_SERVICE"
+sed -i "s|^User=.*|User=$SERVICE_USER|g" "$SYSTEMD_DIR/$BOT_SERVICE"
+sed -i "s|^Group=.*|Group=$SERVICE_GROUP|g" "$SYSTEMD_DIR/$BOT_SERVICE"
 
 chmod 644 "$SYSTEMD_DIR/$BACKEND_SERVICE"
 chmod 644 "$SYSTEMD_DIR/$BOT_SERVICE"

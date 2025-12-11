@@ -376,7 +376,10 @@ jobs:
               echo "Final status after wait: $BACKEND_STATUS"
             fi
             
-            # 最终检查状态
+            # 最终检查状态 - 确保状态变量是最新的
+            BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null | awk 'NR==1 {print $1}' || true)
+            if [ -z "$BACKEND_STATUS" ]; then BACKEND_STATUS="inactive"; fi
+            
             if [ "$BACKEND_STATUS" = "active" ]; then
               echo "✅ Backend service ($TARGET_SERVICE) is running"
               # 健康检查
@@ -391,14 +394,14 @@ jobs:
               # 立即输出错误信息，避免被截断
               echo ""
               echo "=========================================="
-              echo "❌ Backend service ($TARGET_SERVICE) failed to start!"
+              echo "ERROR: Backend service ($TARGET_SERVICE) failed to start!"
               echo "Final Status: $BACKEND_STATUS"
               echo "=========================================="
               
-              # 先输出最关键的错误信息（journalctl 的最后 20 行，限制输出）
+              # 先输出最关键的错误信息（journalctl 的最后 15 行）
               echo ""
-              echo "CRITICAL ERROR LOGS (Last 20 lines):"
-              sudo journalctl -u "$TARGET_SERVICE" -n 20 --no-pager 2>&1 | tail -20 || echo "  (No logs available)"
+              echo "ERROR LOGS (Last 15 lines):"
+              sudo journalctl -u "$TARGET_SERVICE" -n 15 --no-pager --no-hostname 2>&1 | tail -15 || echo "  (No logs)"
               
               # 检查文件是否存在（关键诊断）
               echo ""
@@ -412,19 +415,19 @@ jobs:
               
               # Python 语法检查（快速检查）
               echo ""
-              echo "PYTHON SYNTAX CHECK:"
+              echo "PYTHON SYNTAX:"
               cd "$PROJECT_DIR/admin-backend" 2>/dev/null || true
               if python3 -m py_compile app/api/group_ai/servers.py 2>&1 >/dev/null; then
-                echo "  ✅ servers.py syntax OK"
+                echo "  OK"
               else
-                echo "  ❌ servers.py has syntax errors:"
-                python3 -m py_compile app/api/group_ai/servers.py 2>&1 | head -5 || true
+                echo "  ERROR:"
+                python3 -m py_compile app/api/group_ai/servers.py 2>&1 | head -3 || true
               fi
               
               # 服务配置（只显示关键部分）
               echo ""
-              echo "SERVICE CONFIG (key parts):"
-              sudo systemctl cat "$TARGET_SERVICE" 2>&1 | grep -E "(ExecStart|WorkingDirectory|User|EnvironmentFile)" | head -10 || echo "  (Config not readable)"
+              echo "SERVICE CONFIG:"
+              sudo systemctl cat "$TARGET_SERVICE" 2>&1 | grep -E "(ExecStart|WorkingDirectory|User|EnvironmentFile)" | head -5 || echo "  (N/A)"
               
               # 强制刷新并退出
               echo ""

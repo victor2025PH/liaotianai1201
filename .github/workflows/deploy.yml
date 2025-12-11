@@ -497,6 +497,38 @@ jobs:
               # 如果为空则默认为 inactive
               if [ -z "$FRONTEND_STATUS" ]; then FRONTEND_STATUS="inactive"; fi
               echo "Frontend Status: $FRONTEND_STATUS"
+              
+              # 如果前端服务正在启动中，等待最多 30 秒
+              if [ "$FRONTEND_STATUS" = "activating" ]; then
+                echo "⏳ Frontend service is activating, waiting up to 30 seconds..."
+                for i in {1..30}; do
+                  sleep 1
+                  FRONTEND_STATUS=$(systemctl is-active "$FRONTEND_SERVICE" 2>/dev/null | awk 'NR==1 {print $1}' || true)
+                  if [ -z "$FRONTEND_STATUS" ]; then FRONTEND_STATUS="inactive"; fi
+                  
+                  # 每 5 秒打印一次状态
+                  if [ $((i % 5)) -eq 0 ]; then
+                    echo "  Attempt $i/30: Status = $FRONTEND_STATUS"
+                  fi
+                  
+                  if [ "$FRONTEND_STATUS" = "active" ]; then
+                    echo "✅ Frontend service started successfully!"
+                    break
+                  elif [ "$FRONTEND_STATUS" = "failed" ]; then
+                    echo "❌ Frontend service failed to start (status: failed)"
+                    break
+                  elif [ "$FRONTEND_STATUS" != "activating" ] && [ "$FRONTEND_STATUS" != "active" ]; then
+                    echo "⚠️  Frontend service status changed to: $FRONTEND_STATUS"
+                    break
+                  fi
+                done
+                
+                # 循环结束后再次检查状态
+                FRONTEND_STATUS=$(systemctl is-active "$FRONTEND_SERVICE" 2>/dev/null | awk 'NR==1 {print $1}' || true)
+                if [ -z "$FRONTEND_STATUS" ]; then FRONTEND_STATUS="inactive"; fi
+                echo "Final frontend status after wait: $FRONTEND_STATUS"
+              fi
+              
               if [ "$FRONTEND_STATUS" = "active" ]; then
                 echo "✅ Frontend service ($FRONTEND_SERVICE): Running"
                 HTTP_CODE=$(timeout 10s curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3000 2>/dev/null || echo "000")

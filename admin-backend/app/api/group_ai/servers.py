@@ -83,73 +83,74 @@ async def list_servers(
         servers_config = load_server_configs()
         
         # 使用並發處理所有服務器，大幅提升速度
-    async def get_server_status_safe(node_id: str, config: Dict):
-        """安全獲取服務器狀態，捕獲所有異常"""
-        try:
-            return await get_server_status(node_id, config, db)
-        except Exception as e:
-            # 如果無法連接，返回錯誤狀態，但從數據庫獲取賬號數
-            accounts_count = 0
+        async def get_server_status_safe(node_id: str, config: Dict):
+            """安全獲取服務器狀態，捕獲所有異常"""
             try:
-                from app.models.group_ai import GroupAIAccount
-                # 只統計激活的賬號
-                accounts_count = db.query(GroupAIAccount).filter(
-                    GroupAIAccount.server_id == node_id,
-                    GroupAIAccount.active == True
-                ).count()
-                logger.debug(f"服務器 {node_id} 連接失敗，從數據庫獲取賬號數: {accounts_count}")
-            except Exception as db_error:
-                logger.warning(f"從數據庫獲取賬號數失敗: {db_error}")
+                return await get_server_status(node_id, config, db)
+            except Exception as e:
+                logger.error(f"Error getting server status for {node_id}: {e}")
+                # 如果無法連接，返回錯誤狀態，但從數據庫獲取賬號數
                 accounts_count = 0
-            
-            return ServerStatus(
-                node_id=node_id,
-                host=config.get('host', ''),
-                port=config.get('port', 8000),
-                status='error',
-                accounts_count=accounts_count,
-                max_accounts=config.get('max_accounts', 5),
-                service_status=f"連接失敗: {str(e)}"
-            )
-    
-    # 並發獲取所有服務器狀態
-    tasks = [
-        get_server_status_safe(node_id, config)
-        for node_id, config in servers_config.items()
-    ]
-    
-    # 使用 asyncio.gather 並發執行，設置總超時時間為 10 秒
-    try:
-        servers = await asyncio.wait_for(
-            asyncio.gather(*tasks, return_exceptions=True),  # 添加 return_exceptions=True 避免单个任务失败导致整体失败
-            timeout=10.0  # 總超時時間 10 秒
-        )
-        # 过滤掉异常结果
-        valid_servers = []
-        for result in servers:
-            if isinstance(result, Exception):
-                logger.warning(f"獲取服務器狀態時發生異常: {result}")
-            else:
-                valid_servers.append(result)
-        servers = valid_servers
-    except asyncio.TimeoutError:
-        # 如果超時，返回部分結果
-        logger.warning("獲取服務器狀態超時，返回部分結果")
-        # 嘗試獲取已完成的部分結果
-        servers = []
-        for task in tasks:
-            if task.done():
                 try:
-                    result = task.result()
-                    if not isinstance(result, Exception):
-                        servers.append(result)
-                except Exception as e:
-                    logger.warning(f"獲取服務器狀態時發生異常: {e}")
-    except Exception as e:
-        logger.exception(f"獲取服務器列表失敗: {e}", exc_info=True)
-        # 即使發生異常，也返回空列表而不是拋出 500 錯誤
-        servers = []
-    
+                    from app.models.group_ai import GroupAIAccount
+                    # 只統計激活的賬號
+                    accounts_count = db.query(GroupAIAccount).filter(
+                        GroupAIAccount.server_id == node_id,
+                        GroupAIAccount.active == True
+                    ).count()
+                    logger.debug(f"服務器 {node_id} 連接失敗，從數據庫獲取賬號數: {accounts_count}")
+                except Exception as db_error:
+                    logger.warning(f"從數據庫獲取賬號數失敗: {db_error}")
+                    accounts_count = 0
+                
+                return ServerStatus(
+                    node_id=node_id,
+                    host=config.get('host', ''),
+                    port=config.get('port', 8000),
+                    status='error',
+                    accounts_count=accounts_count,
+                    max_accounts=config.get('max_accounts', 5),
+                    service_status=f"連接失敗: {str(e)}"
+                )
+        
+        # 並發獲取所有服務器狀態
+        tasks = [
+            get_server_status_safe(node_id, config)
+            for node_id, config in servers_config.items()
+        ]
+        
+        # 使用 asyncio.gather 並發執行，設置總超時時間為 10 秒
+        try:
+            servers = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),  # 添加 return_exceptions=True 避免单个任务失败导致整体失败
+                timeout=10.0  # 總超時時間 10 秒
+            )
+            # 过滤掉异常结果
+            valid_servers = []
+            for result in servers:
+                if isinstance(result, Exception):
+                    logger.warning(f"獲取服務器狀態時發生異常: {result}")
+                else:
+                    valid_servers.append(result)
+            servers = valid_servers
+        except asyncio.TimeoutError:
+            # 如果超時，返回部分結果
+            logger.warning("獲取服務器狀態超時，返回部分結果")
+            # 嘗試獲取已完成的部分結果
+            servers = []
+            for task in tasks:
+                if task.done():
+                    try:
+                        result = task.result()
+                        if not isinstance(result, Exception):
+                            servers.append(result)
+                    except Exception as e:
+                        logger.warning(f"獲取服務器狀態時發生異常: {e}")
+        except Exception as e:
+            logger.exception(f"獲取服務器列表失敗: {e}", exc_info=True)
+            # 即使發生異常，也返回空列表而不是拋出 500 錯誤
+            servers = []
+        
         return servers
     except HTTPException:
         raise

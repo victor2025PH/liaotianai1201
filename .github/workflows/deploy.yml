@@ -301,57 +301,73 @@ jobs:
             echo "=========================================="
             
             echo "Checking backend service..."
-            # 检查后端服务状态（优先 luckyred-api）
-            if timeout 5s systemctl is-active --quiet luckyred-api 2>/dev/null; then
-              echo "✅ Backend service (luckyred-api) is running"
-              if timeout 10s curl -s -f --max-time 5 http://localhost:8000/health > /dev/null 2>&1; then
-                echo "✅ Backend health check: Passed"
-              else
-                echo "⚠️  Backend health check: Failed or timeout"
-              fi
-              timeout 5s sudo systemctl status luckyred-api --no-pager -l 2>/dev/null | head -n 5 || true
-            elif timeout 5s systemctl is-active --quiet telegram-backend 2>/dev/null; then
-              echo "✅ Backend service (telegram-backend) is running"
-              if timeout 10s curl -s -f --max-time 5 http://localhost:8000/health > /dev/null 2>&1; then
-                echo "✅ Backend health check: Passed"
-              else
-                echo "⚠️  Backend health check: Failed or timeout"
-              fi
-              timeout 5s sudo systemctl status telegram-backend --no-pager -l 2>/dev/null | head -n 5 || true
+            # 尝试检测 luckyred-api 或 telegram-backend
+            TARGET_SERVICE=""
+            if systemctl list-units --full -all 2>/dev/null | grep -q "luckyred-api.service"; then
+              TARGET_SERVICE="luckyred-api"
             else
-              echo "❌ Backend service: Not running"
+              TARGET_SERVICE="telegram-backend"
+            fi
+            
+            # 使用变量捕获状态，确保命令总是返回 0，防止脚本意外中断
+            BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null || echo "inactive")
+            
+            if [ "$BACKEND_STATUS" = "active" ]; then
+              echo "✅ Backend service ($TARGET_SERVICE) is running"
+              # 健康检查
+              if timeout 10s curl -s -f --max-time 5 http://localhost:8000/health > /dev/null 2>&1; then
+                echo "✅ Backend health check: Passed"
+              else
+                echo "⚠️  Backend health check: Failed (Service is up but API not responding)"
+                echo "⬇️ Last 20 lines of logs:"
+                sudo journalctl -u "$TARGET_SERVICE" -n 20 --no-pager || true
+              fi
+            else
+              echo "❌ Backend service ($TARGET_SERVICE) failed to start!"
+              echo "⬇️ Critical Error Logs (Last 50 lines):"
+              # 打印关键日志供调试
+              sudo journalctl -u "$TARGET_SERVICE" -n 50 --no-pager || true
+              handle_error "Backend service failed to start"
             fi
             
             echo ""
             echo "Checking Bot service..."
-            if timeout 5s systemctl is-active --quiet telegram-bot 2>/dev/null; then
+            BOT_STATUS=$(systemctl is-active telegram-bot 2>/dev/null || echo "inactive")
+            if [ "$BOT_STATUS" = "active" ]; then
               echo "✅ Bot service: Running"
             else
               echo "❌ Bot service: Not running"
-              timeout 5s sudo systemctl status telegram-bot --no-pager -l 2>/dev/null | head -n 5 || true
+              echo "⬇️ Bot Logs:"
+              sudo journalctl -u telegram-bot -n 50 --no-pager || true
+              handle_error "Bot service failed to start"
             fi
             
             echo ""
             echo "Checking frontend service..."
             FRONTEND_SERVICE=""
-            if timeout 10s systemctl list-units --type=service --no-legend 2>/dev/null | grep -q "liaotian-frontend"; then
+            if systemctl list-units --type=service --no-legend 2>/dev/null | grep -q "liaotian-frontend"; then
               FRONTEND_SERVICE="liaotian-frontend"
-            elif timeout 10s systemctl list-units --type=service --no-legend 2>/dev/null | grep -q "smart-tg-frontend"; then
+            elif systemctl list-units --type=service --no-legend 2>/dev/null | grep -q "smart-tg-frontend"; then
               FRONTEND_SERVICE="smart-tg-frontend"
             fi
             
             if [ -n "$FRONTEND_SERVICE" ]; then
-              if timeout 5s systemctl is-active --quiet "$FRONTEND_SERVICE" 2>/dev/null; then
+              FRONTEND_STATUS=$(systemctl is-active "$FRONTEND_SERVICE" 2>/dev/null || echo "inactive")
+              if [ "$FRONTEND_STATUS" = "active" ]; then
                 echo "✅ Frontend service ($FRONTEND_SERVICE): Running"
                 HTTP_CODE=$(timeout 10s curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3000 2>/dev/null || echo "000")
                 if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
                   echo "✅ Frontend HTTP response: Normal (HTTP $HTTP_CODE)"
                 else
                   echo "⚠️  Frontend HTTP response: Abnormal (HTTP $HTTP_CODE)"
+                  echo "⬇️ Last 20 lines of logs:"
+                  sudo journalctl -u "$FRONTEND_SERVICE" -n 20 --no-pager || true
                 fi
               else
                 echo "❌ Frontend service ($FRONTEND_SERVICE): Not running"
-                timeout 5s sudo systemctl status "$FRONTEND_SERVICE" --no-pager -l 2>/dev/null | head -n 5 || true
+                echo "⬇️ Frontend Logs:"
+                sudo journalctl -u "$FRONTEND_SERVICE" -n 50 --no-pager || true
+                handle_error "Frontend service failed to start"
               fi
             else
               echo "⚠️  Frontend systemd service not found"

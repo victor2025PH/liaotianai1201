@@ -26,7 +26,7 @@ jobs:
           script_stop: true
           debug: true
           script: |
-            set -x
+            # set -x  # 已關閉調試模式，減少日誌輸出
             set -o pipefail
             # 不使用 set -e，因為它會與條件判斷 [ ] 產生衝突
             # 我們使用手動錯誤檢查來處理關鍵命令的失敗
@@ -197,31 +197,48 @@ jobs:
             if [ -d "saas-demo" ]; then
               cd saas-demo
               
-              echo "Installing frontend dependencies..."
-              if [ -d "node_modules" ]; then
-                echo "Using incremental install..."
-                timeout 15m npm ci --prefer-offline --no-audit --no-fund || timeout 15m npm install --prefer-offline --no-audit --no-fund || {
-                  echo "⚠️  Dependency installation timeout or failed, continuing..."
-                }
+              # 智能跳過前端構建：檢查前端代碼是否有變動
+              FRONTEND_CHANGED=true
+              if git diff --quiet HEAD^ HEAD -- saas-demo 2>/dev/null; then
+                # 檢查 .next 目錄是否存在且完整
+                if [ -d ".next/standalone" ] && [ -d ".next/static" ]; then
+                  FRONTEND_CHANGED=false
+                  echo "⏩ Frontend code unchanged, skipping build..."
+                  echo "✅ Reusing existing build artifacts"
+                else
+                  echo "🔨 Frontend code unchanged but build artifacts missing, rebuilding..."
+                fi
               else
-                echo "First-time install..."
-                timeout 20m npm install --prefer-offline --no-audit --no-fund || {
-                  echo "⚠️  Dependency installation timeout or failed, continuing..."
+                echo "🔨 Frontend code changed, rebuilding..."
+              fi
+              
+              if [ "$FRONTEND_CHANGED" = "true" ]; then
+                echo "Installing frontend dependencies..."
+                if [ -d "node_modules" ]; then
+                  echo "Using incremental install..."
+                  timeout 15m npm ci --prefer-offline --no-audit --no-fund || timeout 15m npm install --prefer-offline --no-audit --no-fund || {
+                    echo "⚠️  Dependency installation timeout or failed, continuing..."
+                  }
+                else
+                  echo "First-time install..."
+                  timeout 20m npm install --prefer-offline --no-audit --no-fund || {
+                    echo "⚠️  Dependency installation timeout or failed, continuing..."
+                  }
+                fi
+                
+                echo "Building frontend project..."
+                export NODE_OPTIONS="--max-old-space-size=2048"
+                
+                # 强制清理可能存在的 Next.js 构建锁，避免 "Unable to acquire lock" 错误
+                if [ -f ".next/lock" ]; then
+                  echo "🧹 Found stale lock file, removing..."
+                  rm -f .next/lock
+                fi
+                
+                timeout 20m npm run build || {
+                  echo "⚠️  Build failed or timeout, but continuing..."
                 }
               fi
-              
-              echo "Building frontend project..."
-              export NODE_OPTIONS="--max-old-space-size=2048"
-              
-              # 强制清理可能存在的 Next.js 构建锁，避免 "Unable to acquire lock" 错误
-              if [ -f ".next/lock" ]; then
-                echo "🧹 Found stale lock file, removing..."
-                rm -f .next/lock
-              fi
-              
-              timeout 20m npm run build || {
-                echo "⚠️  Build failed or timeout, but continuing..."
-              }
               
               if [ -d ".next/standalone" ]; then
                 echo "Preparing Standalone directory..."

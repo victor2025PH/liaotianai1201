@@ -286,11 +286,10 @@ jobs:
             timeout 30s sudo systemctl restart telegram-bot && echo "✅ Bot restarted" || echo "⚠️  Bot restart failed or timeout"
             
             FRONTEND_SERVICE_NAME=""
-            # 使用变量捕获，避免 grep 退出码问题
-            SERVICE_LIST=$(timeout 10s systemctl list-units --type=service --no-legend 2>/dev/null || echo "")
-            if echo "$SERVICE_LIST" | grep -q "liaotian-frontend" 2>/dev/null; then
+            # 使用 systemctl cat 检查服务是否存在（避免管道 SIGPIPE 错误）
+            if systemctl cat liaotian-frontend.service >/dev/null 2>&1; then
               FRONTEND_SERVICE_NAME="liaotian-frontend"
-            elif echo "$SERVICE_LIST" | grep -q "smart-tg-frontend" 2>/dev/null; then
+            elif systemctl cat smart-tg-frontend.service >/dev/null 2>&1; then
               FRONTEND_SERVICE_NAME="smart-tg-frontend"
             fi
             
@@ -323,7 +322,8 @@ jobs:
             echo "Target Service detected: $TARGET_SERVICE"
             
             # 使用变量捕获状态，确保命令总是返回 0，防止脚本意外中断
-            BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null || echo "inactive")
+            # 只取第一行，避免多行输出导致判断失败（如 "activating\ninactive"）
+            BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null | head -n1 || echo "inactive")
             
             if [ "$BACKEND_STATUS" = "active" ]; then
               echo "✅ Backend service ($TARGET_SERVICE) is running"
@@ -345,7 +345,8 @@ jobs:
             
             echo ""
             echo "Checking Bot service..."
-            BOT_STATUS=$(systemctl is-active telegram-bot 2>/dev/null || echo "inactive")
+            # 只取第一行，避免多行输出导致判断失败
+            BOT_STATUS=$(systemctl is-active telegram-bot 2>/dev/null | head -n1 || echo "inactive")
             if [ "$BOT_STATUS" = "active" ]; then
               echo "✅ Bot service: Running"
             else

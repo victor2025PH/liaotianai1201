@@ -321,8 +321,9 @@ jobs:
             echo "Target Service detected: $TARGET_SERVICE"
             
             # 使用变量捕获状态，确保命令总是返回 0，防止脚本意外中断
-            # 只取第一行，避免多行输出导致判断失败（如 "activating\ninactive"）
-            BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null | head -n1 || echo "inactive")
+            # 先执行 systemctl is-active，如果失败则使用 inactive
+            # 使用 tr -d '\n' 去除换行符，确保只得到一个状态值
+            BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null | tr -d '\n' || echo "inactive")
             
             if [ "$BACKEND_STATUS" = "active" ]; then
               echo "✅ Backend service ($TARGET_SERVICE) is running"

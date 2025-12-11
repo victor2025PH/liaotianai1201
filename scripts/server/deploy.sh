@@ -301,12 +301,36 @@ echo "=========================================="
 echo "Step 8: Restart services"
 echo "=========================================="
 
+# 清理端口 8000 占用（避免 "address already in use" 错误）
+echo "Checking port 8000..."
+PORT_8000_PID=$(sudo ss -tlnp 2>/dev/null | grep ":8000" | awk '{print $6}' | grep -oP 'pid=\K\d+' | head -n 1 || true)
+if [ -n "$PORT_8000_PID" ]; then
+  echo "⚠️  Port 8000 is occupied by PID $PORT_8000_PID, stopping it..."
+  sudo kill -9 "$PORT_8000_PID" 2>/dev/null || true
+  sleep 1
+  # 再次检查确保端口已释放
+  PORT_8000_PID_AFTER=$(sudo ss -tlnp 2>/dev/null | grep ":8000" | awk '{print $6}' | grep -oP 'pid=\K\d+' | head -n 1 || true)
+  if [ -n "$PORT_8000_PID_AFTER" ]; then
+    echo "⚠️  Port 8000 still occupied, trying harder..."
+    sudo kill -9 "$PORT_8000_PID_AFTER" 2>/dev/null || true
+    sleep 1
+  fi
+  echo "✅ Port 8000 cleared"
+else
+  echo "✅ Port 8000 is free"
+fi
+
 echo "Restarting backend service..."
 # 优先使用 luckyred-api，否则使用 telegram-backend（使用 systemctl cat 避免管道 SIGPIPE 错误）
 if systemctl cat luckyred-api.service >/dev/null 2>&1; then
-  timeout 30s sudo systemctl restart luckyred-api && echo "✅ Backend (luckyred-api) restarted" || echo "⚠️  Backend restart failed or timeout"
+  # 先停止服务，确保完全释放资源
+  timeout 10s sudo systemctl stop luckyred-api 2>/dev/null || true
+  sleep 2
+  timeout 30s sudo systemctl start luckyred-api && echo "✅ Backend (luckyred-api) restarted" || echo "⚠️  Backend restart failed or timeout"
 else
-  timeout 30s sudo systemctl restart telegram-backend && echo "✅ Backend (telegram-backend) restarted" || echo "⚠️  Backend restart failed or timeout"
+  timeout 10s sudo systemctl stop telegram-backend 2>/dev/null || true
+  sleep 2
+  timeout 30s sudo systemctl start telegram-backend && echo "✅ Backend (telegram-backend) restarted" || echo "⚠️  Backend restart failed or timeout"
 fi
 
 echo "Restarting Bot service..."

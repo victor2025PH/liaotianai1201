@@ -379,6 +379,7 @@ jobs:
             # 最终检查状态 - 确保状态变量是最新的
             BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null | awk 'NR==1 {print $1}' || true)
             if [ -z "$BACKEND_STATUS" ]; then BACKEND_STATUS="inactive"; fi
+            echo "Final check - Status: $BACKEND_STATUS"
             
             if [ "$BACKEND_STATUS" = "active" ]; then
               echo "✅ Backend service ($TARGET_SERVICE) is running"
@@ -392,6 +393,7 @@ jobs:
               fi
             else
               # 立即输出错误信息，避免被截断
+              echo "Entering error handler..."
               echo ""
               echo "=========================================="
               echo "ERROR: Backend service ($TARGET_SERVICE) failed to start!"
@@ -432,6 +434,7 @@ jobs:
               # 强制刷新并退出
               echo ""
               echo "=========================================="
+              echo "Exiting with error code 1"
               sync 2>/dev/null || true
               exit 1
             fi

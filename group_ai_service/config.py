@@ -3,7 +3,7 @@
 """
 import os
 from typing import List, Optional
-from pydantic import Field
+from pydantic import Field, AliasChoices
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,8 +36,8 @@ class GroupAIConfig(BaseSettings):
     ai_api_key: Optional[str] = Field(
         default=None,
         description="AI API 密鑰",
-        # 支持从 OPENAI_API_KEY 环境变量读取（向后兼容）
-        validation_alias="OPENAI_API_KEY"
+        # 支持从多个环境变量名读取（向后兼容）
+        validation_alias=AliasChoices("OPENAI_API_KEY", "GROUP_AI_AI_API_KEY", "AI_API_KEY")
     )
     
     # 紅包配置

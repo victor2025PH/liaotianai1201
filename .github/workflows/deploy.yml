@@ -381,6 +381,13 @@ jobs:
             if [ -z "$BACKEND_STATUS" ]; then BACKEND_STATUS="inactive"; fi
             echo "Final check - Status: $BACKEND_STATUS"
             
+            # 立即输出状态判断结果，确保能看到执行流程
+            if [ "$BACKEND_STATUS" = "active" ]; then
+              echo "Status is active, entering success branch"
+            else
+              echo "Status is NOT active ($BACKEND_STATUS), entering error handler"
+            fi
+            
             if [ "$BACKEND_STATUS" = "active" ]; then
               echo "✅ Backend service ($TARGET_SERVICE) is running"
               # 健康检查

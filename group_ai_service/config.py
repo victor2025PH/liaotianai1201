@@ -3,7 +3,8 @@
 """
 import os
 from typing import List, Optional
-from pydantic_settings import BaseSettings
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class GroupAIConfig(BaseSettings):
@@ -30,8 +31,14 @@ class GroupAIConfig(BaseSettings):
     ai_max_tokens: int = 500
     
     # AI 生成器配置
+    # 支持 .env 文件中的 OPENAI_API_KEY 或 GROUP_AI_AI_API_KEY
     ai_provider: str = "mock"  # openai, mock 等
-    ai_api_key: Optional[str] = None  # AI API 密鑰
+    ai_api_key: Optional[str] = Field(
+        default=None,
+        description="AI API 密鑰",
+        # 支持从 OPENAI_API_KEY 环境变量读取（向后兼容）
+        validation_alias="OPENAI_API_KEY"
+    )
     
     # 紅包配置
     redpacket_detection_enabled: bool = True
@@ -104,10 +111,19 @@ class GroupAIConfig(BaseSettings):
     message_processing_timeout: int = 10  # 秒
     enable_message_queue: bool = False
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        env_prefix = "GROUP_AI_"
+    # Pydantic v2 配置方式
+    model_config = SettingsConfigDict(
+        # 启用 .env 文件读取
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        # 允许额外字段（忽略未定义的字段，避免 .env 文件中的其他配置导致错误）
+        extra="ignore",
+        # 允许从环境变量读取（支持 GROUP_AI_ 前缀）
+        env_prefix="GROUP_AI_",
+        # 允许使用字段别名
+        populate_by_name=True,
+    )
 
 
 def get_group_ai_config() -> GroupAIConfig:

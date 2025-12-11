@@ -384,6 +384,8 @@ jobs:
             sync 2>/dev/null || true
             echo "DEBUG: About to check if status is active..."
             sync 2>/dev/null || true
+            echo "DEBUG: Status value is: [$BACKEND_STATUS]"
+            sync 2>/dev/null || true
             
             # 立即输出状态判断结果，确保能看到执行流程
             if [ "$BACKEND_STATUS" = "active" ]; then
@@ -391,6 +393,8 @@ jobs:
               sync 2>/dev/null || true
             else
               echo "Status is NOT active ($BACKEND_STATUS), entering error handler"
+              sync 2>/dev/null || true
+              echo "DEBUG: Confirmed status is NOT active, will enter else branch"
               sync 2>/dev/null || true
             fi
             

@@ -388,51 +388,48 @@ jobs:
                 sudo journalctl -u "$TARGET_SERVICE" -n 20 --no-pager || true
               fi
             else
+              # 立即输出错误信息，避免被截断
               echo ""
               echo "=========================================="
               echo "❌ Backend service ($TARGET_SERVICE) failed to start!"
               echo "Final Status: $BACKEND_STATUS"
               echo "=========================================="
-              echo ""
               
-              # 先输出最关键的错误信息（journalctl 的最后 30 行）
-              echo "⬇️ CRITICAL: Last 30 lines of service logs:"
-              sudo journalctl -u "$TARGET_SERVICE" -n 30 --no-pager 2>&1 | head -50 || true
+              # 先输出最关键的错误信息（journalctl 的最后 20 行，限制输出）
               echo ""
+              echo "CRITICAL ERROR LOGS (Last 20 lines):"
+              sudo journalctl -u "$TARGET_SERVICE" -n 20 --no-pager 2>&1 | tail -20 || echo "  (No logs available)"
               
-              # 检查文件是否存在
-              echo "⬇️ Service files check:"
-              echo "  venv/bin/uvicorn: $([ -f "$PROJECT_DIR/admin-backend/venv/bin/uvicorn" ] && echo "✅ yes" || echo "❌ no")"
-              echo "  .env file: $([ -f "$PROJECT_DIR/admin-backend/.env" ] && echo "✅ yes" || echo "❌ no")"
-              echo "  WorkingDirectory: $([ -d "$PROJECT_DIR/admin-backend" ] && echo "✅ yes" || echo "❌ no")"
+              # 检查文件是否存在（关键诊断）
               echo ""
+              echo "FILE CHECK:"
+              UVCORN_EXISTS=$([ -f "$PROJECT_DIR/admin-backend/venv/bin/uvicorn" ] && echo "YES" || echo "NO")
+              ENV_EXISTS=$([ -f "$PROJECT_DIR/admin-backend/.env" ] && echo "YES" || echo "NO")
+              DIR_EXISTS=$([ -d "$PROJECT_DIR/admin-backend" ] && echo "YES" || echo "NO")
+              echo "  uvicorn: $UVCORN_EXISTS"
+              echo "  .env: $ENV_EXISTS"
+              echo "  WorkingDir: $DIR_EXISTS"
               
-              # Python 语法检查
-              echo "⬇️ Python syntax check:"
+              # Python 语法检查（快速检查）
+              echo ""
+              echo "PYTHON SYNTAX CHECK:"
               cd "$PROJECT_DIR/admin-backend" 2>/dev/null || true
-              if python3 -m py_compile app/api/group_ai/servers.py 2>&1; then
+              if python3 -m py_compile app/api/group_ai/servers.py 2>&1 >/dev/null; then
                 echo "  ✅ servers.py syntax OK"
               else
-                echo "  ❌ servers.py has syntax errors!"
-                python3 -m py_compile app/api/group_ai/servers.py 2>&1 || true
+                echo "  ❌ servers.py has syntax errors:"
+                python3 -m py_compile app/api/group_ai/servers.py 2>&1 | head -5 || true
               fi
-              echo ""
-              
-              # 服务状态（简化输出）
-              echo "⬇️ Service status (brief):"
-              sudo systemctl status "$TARGET_SERVICE" --no-pager -l 2>&1 | head -30 || true
-              echo ""
               
               # 服务配置（只显示关键部分）
-              echo "⬇️ Service config (ExecStart, WorkingDirectory, User):"
-              sudo systemctl cat "$TARGET_SERVICE" 2>&1 | grep -E "(ExecStart|WorkingDirectory|User|EnvironmentFile)" || true
               echo ""
+              echo "SERVICE CONFIG (key parts):"
+              sudo systemctl cat "$TARGET_SERVICE" 2>&1 | grep -E "(ExecStart|WorkingDirectory|User|EnvironmentFile)" | head -10 || echo "  (Config not readable)"
               
-              # 强制刷新输出
+              # 强制刷新并退出
+              echo ""
+              echo "=========================================="
               sync 2>/dev/null || true
-              echo "=========================================="
-              echo "Deployment failed. Check logs above for details."
-              echo "=========================================="
               exit 1
             fi
             

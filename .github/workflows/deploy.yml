@@ -327,23 +327,30 @@ jobs:
             if [ -z "$BACKEND_STATUS" ]; then BACKEND_STATUS="inactive"; fi
             echo "Backend Status: $BACKEND_STATUS"
             
-            # 如果服务正在启动中，等待最多 10 秒
+            # 如果服务正在启动中，等待最多 60 秒
             if [ "$BACKEND_STATUS" = "activating" ]; then
-              echo "⏳ Backend service is activating, waiting up to 10 seconds..."
-              for i in {1..10}; do
+              echo "⏳ Backend service is activating, waiting up to 60 seconds..."
+              for i in {1..60}; do
                 sleep 1
                 BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null | awk 'NR==1 {print $1}' || true)
                 if [ -z "$BACKEND_STATUS" ]; then BACKEND_STATUS="inactive"; fi
-                echo "  Attempt $i/10: Status = $BACKEND_STATUS"
+                
+                # 只在状态变化时打印，避免刷屏（每 5 秒打印一次）
+                if [ $((i % 5)) -eq 0 ]; then
+                  echo "  Attempt $i/60: Status = $BACKEND_STATUS"
+                fi
+                
                 if [ "$BACKEND_STATUS" = "active" ]; then
+                  echo "✅ Service started successfully!"
                   break
-                elif [ "$BACKEND_STATUS" != "activating" ]; then
-                  # 如果状态不再是 activating，也退出循环
+                elif [ "$BACKEND_STATUS" = "failed" ]; then
+                  echo "❌ Service failed to start."
                   break
                 fi
               done
             fi
             
+            # 最终检查状态
             if [ "$BACKEND_STATUS" = "active" ]; then
               echo "✅ Backend service ($TARGET_SERVICE) is running"
               # 健康检查
@@ -355,7 +362,7 @@ jobs:
                 sudo journalctl -u "$TARGET_SERVICE" -n 20 --no-pager || true
               fi
             else
-              echo "❌ Backend service ($TARGET_SERVICE) failed to start! (Status: $BACKEND_STATUS)"
+              echo "❌ Backend service ($TARGET_SERVICE) failed to start! (Final Status: $BACKEND_STATUS)"
               echo ""
               echo "⬇️ Service Status:"
               sudo systemctl status "$TARGET_SERVICE" --no-pager -l || true

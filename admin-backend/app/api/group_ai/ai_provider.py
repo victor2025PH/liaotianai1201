@@ -326,10 +326,19 @@ async def update_api_key(
     config = _load_ai_provider_config(db)
     provider_config = config["providers"].get(provider, {})
     
+    # 检查 API Key 是否发生变化
+    old_api_key = provider_config.get("api_key")
+    new_api_key = api_key.strip()
+    
     # 更新 API Key
-    provider_config["api_key"] = api_key.strip()
-    provider_config["is_valid"] = False  # 需要重新测试
-    provider_config["last_tested"] = None
+    provider_config["api_key"] = new_api_key
+    
+    # 只有当 API Key 发生变化时，才重置验证状态
+    # 如果 API Key 没有变化，保留原有的验证状态
+    if old_api_key != new_api_key:
+        provider_config["is_valid"] = False  # 需要重新测试
+        provider_config["last_tested"] = None
+    # 如果 API Key 没有变化，保留原有的 is_valid 和 last_tested 状态
     
     # 保存到数据库
     _save_ai_provider_config(db, config)

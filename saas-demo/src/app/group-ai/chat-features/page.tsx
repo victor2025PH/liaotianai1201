@@ -97,6 +97,16 @@ export default function ChatFeaturesPage() {
       gemini: "",
       grok: "",
     },
+    keyList: {
+      openai: [] as any[],
+      gemini: [] as any[],
+      grok: [] as any[],
+    },
+    selectedKeys: {
+      openai: "",
+      gemini: "",
+      grok: "",
+    },
     testing: {
       openai: false,
       gemini: false,
@@ -306,12 +316,17 @@ export default function ChatFeaturesPage() {
     }
   }
 
-  // 更新 API Key
+  // 更新 API Key（保存到当前激活的 Key）
   const updateAPIKey = async (provider: string, apiKey: string) => {
     try {
       setLoading(true)
       const { fetchWithAuth } = await import("@/lib/api/client")
-      const res = await fetchWithAuth(`${API_BASE}/group-ai/ai-provider/update-key?provider=${provider}&api_key=${encodeURIComponent(apiKey)}`, {
+      const keyId = aiProvider.selectedKeys[provider as keyof typeof aiProvider.selectedKeys]
+      const url = keyId 
+        ? `${API_BASE}/group-ai/ai-provider/update-key?provider=${provider}&api_key=${encodeURIComponent(apiKey)}&key_id=${keyId}`
+        : `${API_BASE}/group-ai/ai-provider/update-key?provider=${provider}&api_key=${encodeURIComponent(apiKey)}`
+      
+      const res = await fetchWithAuth(url, {
         method: "POST",
       })
       
@@ -323,6 +338,76 @@ export default function ChatFeaturesPage() {
       }
     } catch (error) {
       toast({ title: "更新失敗", description: String(error), variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 添加新 API Key
+  const addAPIKey = async (provider: string, apiKey: string, keyName: string) => {
+    try {
+      setLoading(true)
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(
+        `${API_BASE}/group-ai/ai-provider/keys/add?provider=${provider}&api_key=${encodeURIComponent(apiKey)}&key_name=${encodeURIComponent(keyName)}`,
+        { method: "POST" }
+      )
+      
+      if (res.ok) {
+        toast({ title: "添加成功", description: `${provider} 的新 Key 已添加` })
+        await fetchAIProviderStatus()
+      } else {
+        const error = await res.json()
+        throw new Error(error.detail || "添加失敗")
+      }
+    } catch (error) {
+      toast({ title: "添加失敗", description: String(error), variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 删除 API Key
+  const deleteAPIKey = async (keyId: string, provider: string, keyName: string) => {
+    try {
+      setLoading(true)
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(
+        `${API_BASE}/group-ai/ai-provider/keys/${keyId}`,
+        { method: "DELETE" }
+      )
+      
+      if (res.ok) {
+        toast({ title: "删除成功", description: `${provider} 的 Key "${keyName}" 已删除` })
+        await fetchAIProviderStatus()
+      } else {
+        throw new Error("删除失敗")
+      }
+    } catch (error) {
+      toast({ title: "删除失敗", description: String(error), variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 激活 API Key
+  const activateAPIKey = async (keyId: string) => {
+    try {
+      setLoading(true)
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(
+        `${API_BASE}/group-ai/ai-provider/keys/${keyId}/activate`,
+        { method: "POST" }
+      )
+      
+      if (res.ok) {
+        toast({ title: "激活成功", description: "已切换到选中的 Key" })
+        await fetchAIProviderStatus()
+      } else {
+        throw new Error("激活失敗")
+      }
+    } catch (error) {
+      toast({ title: "激活失敗", description: String(error), variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -622,10 +707,20 @@ export default function ChatFeaturesPage() {
 
               {/* API Key 配置 */}
               <div className="space-y-4">
-                <h3 className="font-semibold">API Key 配置</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold">API Key 配置</h3>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchAIProviderStatus}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    刷新列表
+                  </Button>
+                </div>
                 
                 {/* OpenAI */}
-                <div className="space-y-2">
+                <div className="space-y-3 p-4 border rounded-lg">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="openai-key">OpenAI API Key</Label>
                     {aiProvider.providers.find((p: any) => p.name === "openai")?.is_valid && (
@@ -635,34 +730,88 @@ export default function ChatFeaturesPage() {
                       </Badge>
                     )}
                   </div>
+                  
+                  {/* Key 列表和选择 */}
+                  {aiProvider.keyList.openai.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-sm text-muted-foreground">已保存的 Key</Label>
+                      <div className="space-y-2">
+                        {aiProvider.keyList.openai.map((key: any) => (
+                          <div key={key.id} className="flex items-center gap-2 p-2 bg-muted rounded">
+                            <Select
+                              value={aiProvider.selectedKeys.openai}
+                              onValueChange={(value) => {
+                                if (value === key.id) {
+                                  activateAPIKey(key.id)
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="flex-1">
+                                <SelectValue>
+                                  {key.key_name} {key.is_active && "(当前使用)"}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {aiProvider.keyList.openai.map((k: any) => (
+                                  <SelectItem key={k.id} value={k.id}>
+                                    {k.key_name} {k.is_active && "(当前使用)"}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Badge variant={key.is_valid ? "default" : "secondary"}>
+                              {key.is_valid ? "有效" : "无效"}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (confirm(`确定要删除 Key "${key.key_name}" 吗？`)) {
+                                  deleteAPIKey(key.id, "openai", key.key_name)
+                                }
+                              }}
+                              disabled={loading}
+                            >
+                              <XCircle className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 添加新 Key */}
                   <div className="flex gap-2">
                     <Input
                       id="openai-key"
                       type="password"
-                      placeholder={aiProvider.apiKeys.openai !== "未配置" ? aiProvider.apiKeys.openai : "輸入 OpenAI API Key"}
-                      onChange={(e) => {
-                        const key = e.target.value
-                        if (key) {
-                          setAiProvider(prev => ({
-                            ...prev,
-                            apiKeys: { ...prev.apiKeys, openai: key }
-                          }))
-                        }
-                      }}
+                      placeholder="輸入新的 OpenAI API Key"
                       className="flex-1"
+                    />
+                    <Input
+                      id="openai-key-name"
+                      type="text"
+                      placeholder="Key 名稱（可選）"
+                      className="w-32"
                     />
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => {
                         const key = (document.getElementById("openai-key") as HTMLInputElement)?.value
+                        const keyName = (document.getElementById("openai-key-name") as HTMLInputElement)?.value || "default"
                         if (key) {
-                          updateAPIKey("openai", key)
+                          addAPIKey("openai", key, keyName)
+                          // 清空输入框
+                          ;(document.getElementById("openai-key") as HTMLInputElement).value = ""
+                          ;(document.getElementById("openai-key-name") as HTMLInputElement).value = ""
+                        } else {
+                          toast({ title: "請先輸入 API Key", variant: "destructive" })
                         }
                       }}
                       disabled={loading}
                     >
-                      保存
+                      添加
                     </Button>
                     <Button
                       variant="outline"
@@ -687,7 +836,7 @@ export default function ChatFeaturesPage() {
                 </div>
 
                 {/* Gemini */}
-                <div className="space-y-2">
+                <div className="space-y-3 p-4 border rounded-lg">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="gemini-key">Google Gemini API Key</Label>
                     {aiProvider.providers.find((p: any) => p.name === "gemini")?.is_valid && (
@@ -697,34 +846,87 @@ export default function ChatFeaturesPage() {
                       </Badge>
                     )}
                   </div>
+                  
+                  {/* Key 列表和选择 */}
+                  {aiProvider.keyList.gemini.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-sm text-muted-foreground">已保存的 Key</Label>
+                      <div className="space-y-2">
+                        {aiProvider.keyList.gemini.map((key: any) => (
+                          <div key={key.id} className="flex items-center gap-2 p-2 bg-muted rounded">
+                            <Select
+                              value={aiProvider.selectedKeys.gemini}
+                              onValueChange={(value) => {
+                                if (value === key.id) {
+                                  activateAPIKey(key.id)
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="flex-1">
+                                <SelectValue>
+                                  {key.key_name} {key.is_active && "(当前使用)"}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {aiProvider.keyList.gemini.map((k: any) => (
+                                  <SelectItem key={k.id} value={k.id}>
+                                    {k.key_name} {k.is_active && "(当前使用)"}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Badge variant={key.is_valid ? "default" : "secondary"}>
+                              {key.is_valid ? "有效" : "无效"}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (confirm(`确定要删除 Key "${key.key_name}" 吗？`)) {
+                                  deleteAPIKey(key.id, "gemini", key.key_name)
+                                }
+                              }}
+                              disabled={loading}
+                            >
+                              <XCircle className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 添加新 Key */}
                   <div className="flex gap-2">
                     <Input
                       id="gemini-key"
                       type="password"
-                      placeholder={aiProvider.apiKeys.gemini !== "未配置" ? aiProvider.apiKeys.gemini : "輸入 Gemini API Key"}
-                      onChange={(e) => {
-                        const key = e.target.value
-                        if (key) {
-                          setAiProvider(prev => ({
-                            ...prev,
-                            apiKeys: { ...prev.apiKeys, gemini: key }
-                          }))
-                        }
-                      }}
+                      placeholder="輸入新的 Gemini API Key"
                       className="flex-1"
+                    />
+                    <Input
+                      id="gemini-key-name"
+                      type="text"
+                      placeholder="Key 名稱（可選）"
+                      className="w-32"
                     />
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => {
                         const key = (document.getElementById("gemini-key") as HTMLInputElement)?.value
+                        const keyName = (document.getElementById("gemini-key-name") as HTMLInputElement)?.value || "default"
                         if (key) {
-                          updateAPIKey("gemini", key)
+                          addAPIKey("gemini", key, keyName)
+                          ;(document.getElementById("gemini-key") as HTMLInputElement).value = ""
+                          ;(document.getElementById("gemini-key-name") as HTMLInputElement).value = ""
+                        } else {
+                          toast({ title: "請先輸入 API Key", variant: "destructive" })
                         }
                       }}
                       disabled={loading}
                     >
-                      保存
+                      添加
                     </Button>
                     <Button
                       variant="outline"

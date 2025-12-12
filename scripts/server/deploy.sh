@@ -374,15 +374,46 @@ fi
 
 echo "Restarting backend service..."
 # 优先使用 luckyred-api，否则使用 telegram-backend（使用 systemctl cat 避免管道 SIGPIPE 错误）
+BACKEND_SERVICE=""
 if systemctl cat luckyred-api.service >/dev/null 2>&1; then
+  BACKEND_SERVICE="luckyred-api"
+elif systemctl cat telegram-backend.service >/dev/null 2>&1; then
+  BACKEND_SERVICE="telegram-backend"
+fi
+
+if [ -n "$BACKEND_SERVICE" ]; then
   # 先停止服务，确保完全释放资源
-  timeout 10s sudo systemctl stop luckyred-api 2>/dev/null || true
+  timeout 10s sudo systemctl stop "$BACKEND_SERVICE" 2>/dev/null || true
   sleep 2
-  timeout 30s sudo systemctl start luckyred-api && echo "✅ Backend (luckyred-api) restarted" || echo "⚠️  Backend restart failed or timeout"
+  
+  # 启动服务
+  timeout 30s sudo systemctl start "$BACKEND_SERVICE" && echo "✅ Backend ($BACKEND_SERVICE) restarted" || echo "⚠️  Backend restart failed or timeout"
+  
+  # 等待服务启动
+  echo "Waiting for backend service to start (10 seconds)..."
+  sleep 10
+  
+  # 验证后端健康检查
+  echo "Verifying backend health..."
+  for i in {1..6}; do
+    if curl -s http://localhost:8000/health >/dev/null 2>&1; then
+      echo "✅ Backend health check passed"
+      break
+    fi
+    if [ $i -lt 6 ]; then
+      echo "  Waiting for backend... ($i/6)"
+      sleep 5
+    else
+      echo "⚠️  Backend health check failed after 30 seconds"
+      echo "  查看日志: sudo journalctl -u $BACKEND_SERVICE -n 50 --no-pager"
+    fi
+  done
 else
-  timeout 10s sudo systemctl stop telegram-backend 2>/dev/null || true
-  sleep 2
-  timeout 30s sudo systemctl start telegram-backend && echo "✅ Backend (telegram-backend) restarted" || echo "⚠️  Backend restart failed or timeout"
+  echo "⚠️  Backend systemd service not found"
+  echo "  尝试部署systemd服务..."
+  if [ -f "scripts/server/deploy-systemd.sh" ]; then
+    timeout 5m sudo bash scripts/server/deploy-systemd.sh || echo "⚠️  Systemd deployment failed"
+  fi
 fi
 
 echo "Restarting Bot service..."

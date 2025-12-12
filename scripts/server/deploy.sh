@@ -414,6 +414,22 @@ if [ -n "$BACKEND_SERVICE" ]; then
       echo "  查看日志: sudo journalctl -u $BACKEND_SERVICE -n 50 --no-pager"
     fi
   done
+  
+  # 验证 AI Provider API 路由是否可用
+  echo "Verifying AI Provider API routes..."
+  sleep 2
+  AI_PROVIDER_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" http://localhost:8000/api/v1/group-ai/ai-provider/providers 2>/dev/null || echo "ERROR")
+  AI_PROVIDER_HTTP_CODE=$(echo "$AI_PROVIDER_RESPONSE" | grep "HTTP_CODE" | cut -d: -f2 || echo "000")
+  
+  if [ "$AI_PROVIDER_HTTP_CODE" = "200" ] || [ "$AI_PROVIDER_HTTP_CODE" = "401" ] || [ "$AI_PROVIDER_HTTP_CODE" = "403" ]; then
+    echo "✅ AI Provider API route is accessible (HTTP $AI_PROVIDER_HTTP_CODE)"
+  elif [ "$AI_PROVIDER_HTTP_CODE" = "404" ]; then
+    echo "⚠️  AI Provider API route returned 404 - route may not be registered"
+    echo "  检查路由注册: grep -r 'ai-provider' $PROJECT_DIR/admin-backend/app/api/group_ai/__init__.py"
+    echo "  查看后端日志: sudo journalctl -u $BACKEND_SERVICE -n 100 --no-pager | grep -i 'ai-provider\|ai_provider' || true"
+  else
+    echo "⚠️  AI Provider API route check failed (HTTP $AI_PROVIDER_HTTP_CODE)"
+  fi
 else
   echo "⚠️  Backend systemd service not found"
   echo "  尝试部署systemd服务..."

@@ -6,6 +6,7 @@
 """
 
 import requests
+import os
 import json
 import sys
 from typing import List, Dict, Any
@@ -16,10 +17,9 @@ API_BASE_URL = "http://localhost:8000/api/v1"
 if len(sys.argv) > 1 and sys.argv[1] == "--prod":
     API_BASE_URL = "/api/v1"
 
-# 认证信息（需要从环境变量或配置文件读取）
-# 这里使用默认的测试账号，实际使用时应该从环境变量读取
-EMAIL = "admin@example.com"
-PASSWORD = "changeme123"  # 默认密码，生产环境应该修改
+# 认证信息（从环境变量读取，如果没有则使用默认值）
+EMAIL = os.getenv("ADMIN_EMAIL", "admin@example.com")
+PASSWORD = os.getenv("ADMIN_PASSWORD", "changeme123")  # 默认密码，生产环境应该修改
 
 def get_auth_token() -> str:
     """获取认证 token"""

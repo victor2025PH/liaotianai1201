@@ -36,7 +36,7 @@ echo   start-ai-chat-test.bat 6        - 启动6个在线账号的聊天
 echo   start-ai-chat-test.bat 6 12345  - 启动6个账号在群组12345中聊天
 echo.
 
-python scripts\local\start-ai-chat-test.py %*
+python3 scripts\local\start-ai-chat-test.py %*
 
 if errorlevel 1 (
     echo.

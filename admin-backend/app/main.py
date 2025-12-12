@@ -321,7 +321,9 @@ async def on_startup() -> None:
         GroupAIRedpacketLog,
         GroupAIAutomationTask,
         GroupAIAutomationTaskLog,
-        AllocationHistory  # 新增的分配历史模型
+        AllocationHistory,
+        AIProviderConfig,
+        AIProviderSettings  # 新增的分配历史模型
     )
     
     # 確保所有表已創建（開發環境後備方案）

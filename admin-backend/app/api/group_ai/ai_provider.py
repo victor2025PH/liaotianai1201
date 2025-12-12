@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, get_current_active_user
 from app.models.user import User
+from app.models.group_ai import AIProviderConfig, AIProviderSettings
 from app.api.workers import _add_command, _get_all_workers
 
 logger = logging.getLogger(__name__)
@@ -75,34 +76,105 @@ class AIProviderUsageStats(BaseModel):
 
 # ============ 存储管理 ============
 
-# 简单的内存存储（生产环境应使用数据库或Redis）
-_ai_provider_config: Dict[str, Any] = {
-    "current_provider": "openai",
-    "providers": {
-        "openai": {
-            "api_key": None,
-            "is_valid": False,
-            "last_tested": None,
-        },
-        "gemini": {
-            "api_key": None,
-            "is_valid": False,
-            "last_tested": None,
-        },
-        "grok": {
-            "api_key": None,
-            "is_valid": False,
-            "last_tested": None,
-        },
-    },
-    "auto_failover_enabled": True,
-    "failover_providers": ["gemini", "grok"],
-    "usage_stats": {
-        "openai": {"total_requests": 0, "successful_requests": 0, "failed_requests": 0, "total_tokens": 0, "total_cost": 0.0},
-        "gemini": {"total_requests": 0, "successful_requests": 0, "failed_requests": 0, "total_tokens": 0, "total_cost": 0.0},
-        "grok": {"total_requests": 0, "successful_requests": 0, "failed_requests": 0, "total_tokens": 0, "total_cost": 0.0},
+def _load_ai_provider_config(db: Session) -> Dict[str, Any]:
+    """从数据库加载 AI Provider 配置"""
+    # 加载全局设置
+    settings = db.query(AIProviderSettings).filter(AIProviderSettings.id == "singleton").first()
+    if not settings:
+        # 创建默认设置
+        settings = AIProviderSettings(
+            id="singleton",
+            current_provider="openai",
+            auto_failover_enabled=True,
+            failover_providers=["gemini", "grok"]
+        )
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    
+    # 加载各提供商的配置
+    providers = {}
+    for provider_name in ["openai", "gemini", "grok"]:
+        provider_config = db.query(AIProviderConfig).filter(
+            AIProviderConfig.provider_name == provider_name
+        ).first()
+        
+        if not provider_config:
+            # 创建默认配置
+            provider_config = AIProviderConfig(
+                provider_name=provider_name,
+                api_key=None,
+                is_valid=False,
+                last_tested=None,
+                usage_stats={}
+            )
+            db.add(provider_config)
+            db.commit()
+            db.refresh(provider_config)
+        
+        providers[provider_name] = {
+            "api_key": provider_config.api_key,
+            "is_valid": provider_config.is_valid,
+            "last_tested": provider_config.last_tested.isoformat() if provider_config.last_tested else None,
+            "usage_stats": provider_config.usage_stats or {}
+        }
+    
+    return {
+        "current_provider": settings.current_provider,
+        "providers": providers,
+        "auto_failover_enabled": settings.auto_failover_enabled,
+        "failover_providers": settings.failover_providers or [],
+        "usage_stats": {
+            provider_name: providers[provider_name].get("usage_stats", {})
+            for provider_name in ["openai", "gemini", "grok"]
+        }
     }
-}
+
+
+def _save_ai_provider_config(db: Session, config: Dict[str, Any]):
+    """保存 AI Provider 配置到数据库"""
+    # 保存全局设置
+    settings = db.query(AIProviderSettings).filter(AIProviderSettings.id == "singleton").first()
+    if not settings:
+        settings = AIProviderSettings(id="singleton")
+        db.add(settings)
+    
+    settings.current_provider = config.get("current_provider", "openai")
+    settings.auto_failover_enabled = config.get("auto_failover_enabled", True)
+    settings.failover_providers = config.get("failover_providers", [])
+    settings.updated_at = datetime.now()
+    
+    # 保存各提供商的配置
+    for provider_name, provider_data in config.get("providers", {}).items():
+        provider_config = db.query(AIProviderConfig).filter(
+            AIProviderConfig.provider_name == provider_name
+        ).first()
+        
+        if not provider_config:
+            provider_config = AIProviderConfig(provider_name=provider_name)
+            db.add(provider_config)
+        
+        if "api_key" in provider_data:
+            provider_config.api_key = provider_data["api_key"]
+        if "is_valid" in provider_data:
+            provider_config.is_valid = provider_data["is_valid"]
+        if "last_tested" in provider_data:
+            if provider_data["last_tested"]:
+                try:
+                    if isinstance(provider_data["last_tested"], str):
+                        provider_config.last_tested = datetime.fromisoformat(provider_data["last_tested"].replace("Z", "+00:00"))
+                    else:
+                        provider_config.last_tested = provider_data["last_tested"]
+                except:
+                    provider_config.last_tested = datetime.now()
+            else:
+                provider_config.last_tested = None
+        if "usage_stats" in provider_data:
+            provider_config.usage_stats = provider_data["usage_stats"]
+        
+        provider_config.updated_at = datetime.now()
+    
+    db.commit()
 
 
 def _get_api_key_preview(api_key: Optional[str]) -> str:
@@ -122,8 +194,9 @@ async def get_ai_provider_status(
     db: Session = Depends(get_db_session)
 ):
     """获取当前 AI 提供商状态"""
-    current_provider = _ai_provider_config["current_provider"]
-    provider_config = _ai_provider_config["providers"].get(current_provider, {})
+    config = _load_ai_provider_config(db)
+    current_provider = config["current_provider"]
+    provider_config = config["providers"].get(current_provider, {})
     
     return AIProviderStatus(
         provider=current_provider,
@@ -131,9 +204,9 @@ async def get_ai_provider_status(
         api_key_preview=_get_api_key_preview(provider_config.get("api_key")),
         is_valid=provider_config.get("is_valid", False),
         last_tested=provider_config.get("last_tested"),
-        auto_failover_enabled=_ai_provider_config.get("auto_failover_enabled", True),
-        failover_providers=_ai_provider_config.get("failover_providers", []),
-        usage_stats=_ai_provider_config.get("usage_stats", {}).get(current_provider, {})
+        auto_failover_enabled=config.get("auto_failover_enabled", True),
+        failover_providers=config.get("failover_providers", []),
+        usage_stats=config.get("usage_stats", {}).get(current_provider, {})
     )
 
 
@@ -143,24 +216,25 @@ async def get_all_providers(
     db: Session = Depends(get_db_session)
 ):
     """获取所有提供商状态"""
+    config = _load_ai_provider_config(db)
     providers = []
     for provider_name in ["openai", "gemini", "grok"]:
-        provider_config = _ai_provider_config["providers"].get(provider_name, {})
+        provider_config = config["providers"].get(provider_name, {})
         providers.append({
             "name": provider_name,
             "api_key_configured": provider_config.get("api_key") is not None,
             "api_key_preview": _get_api_key_preview(provider_config.get("api_key")),
             "is_valid": provider_config.get("is_valid", False),
             "last_tested": provider_config.get("last_tested"),
-            "is_current": _ai_provider_config["current_provider"] == provider_name,
-            "usage_stats": _ai_provider_config.get("usage_stats", {}).get(provider_name, {})
+            "is_current": config["current_provider"] == provider_name,
+            "usage_stats": config.get("usage_stats", {}).get(provider_name, {})
         })
     
     return {
         "success": True,
         "providers": providers,
-        "current_provider": _ai_provider_config["current_provider"],
-        "auto_failover_enabled": _ai_provider_config.get("auto_failover_enabled", True)
+        "current_provider": config["current_provider"],
+        "auto_failover_enabled": config.get("auto_failover_enabled", True)
     }
 
 
@@ -177,8 +251,9 @@ async def switch_ai_provider(
             detail=f"不支持的提供商: {request.provider}"
         )
     
-    # 更新提供商配置
-    provider_config = _ai_provider_config["providers"].get(request.provider, {})
+    # 从数据库加载配置
+    config = _load_ai_provider_config(db)
+    provider_config = config["providers"].get(request.provider, {})
     
     # 如果提供了新的 API Key，更新它
     if request.api_key:
@@ -194,9 +269,12 @@ async def switch_ai_provider(
         )
     
     # 切换提供商
-    _ai_provider_config["current_provider"] = request.provider
-    _ai_provider_config["auto_failover_enabled"] = request.auto_failover_enabled
-    _ai_provider_config["failover_providers"] = request.failover_providers
+    config["current_provider"] = request.provider
+    config["auto_failover_enabled"] = request.auto_failover_enabled
+    config["failover_providers"] = request.failover_providers
+    
+    # 保存到数据库
+    _save_ai_provider_config(db, config)
     
     # 发送命令到所有工作节点
     command = {
@@ -244,14 +322,20 @@ async def update_api_key(
             detail="API Key 格式无效"
         )
     
+    # 从数据库加载配置
+    config = _load_ai_provider_config(db)
+    provider_config = config["providers"].get(provider, {})
+    
     # 更新 API Key
-    provider_config = _ai_provider_config["providers"].get(provider, {})
     provider_config["api_key"] = api_key.strip()
     provider_config["is_valid"] = False  # 需要重新测试
     provider_config["last_tested"] = None
     
+    # 保存到数据库
+    _save_ai_provider_config(db, config)
+    
     # 如果这是当前提供商，发送更新命令到工作节点
-    if _ai_provider_config["current_provider"] == provider:
+    if config["current_provider"] == provider:
         command = {
             "action": "update_ai_api_key",
             "params": {
@@ -345,12 +429,22 @@ async def test_api_key(
                 detail=f"不支持的提供商: {request.provider}"
             )
         
-        # 更新配置
+        # 从数据库加载配置并更新
+        config = _load_ai_provider_config(db)
+        provider_config = config["providers"].get(request.provider, {})
+        
+        # 如果测试成功，更新配置
         if is_valid:
-            provider_config = _ai_provider_config["providers"].get(request.provider, {})
             provider_config["api_key"] = request.api_key
             provider_config["is_valid"] = True
             provider_config["last_tested"] = datetime.now().isoformat()
+        else:
+            # 即使测试失败，也更新 last_tested 时间
+            provider_config["is_valid"] = False
+            provider_config["last_tested"] = None
+        
+        # 保存到数据库
+        _save_ai_provider_config(db, config)
         
         return TestAPIKeyResponse(
             success=is_valid,
@@ -380,7 +474,8 @@ async def get_usage_stats(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"不支持的提供商: {provider}"
             )
-        stats = _ai_provider_config.get("usage_stats", {}).get(provider, {})
+        config = _load_ai_provider_config(db)
+        stats = config.get("usage_stats", {}).get(provider, {})
         return {
             "success": True,
             "provider": provider,
@@ -390,6 +485,6 @@ async def get_usage_stats(
         # 返回所有提供商统计
         return {
             "success": True,
-            "stats": _ai_provider_config.get("usage_stats", {})
+            "stats": config.get("usage_stats", {})
         }
 

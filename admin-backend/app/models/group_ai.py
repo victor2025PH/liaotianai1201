@@ -237,3 +237,29 @@ class GroupAIAutomationTaskLog(Base):
     result = Column(Text, nullable=True)  # 執行結果或錯誤信息
     error_message = Column(Text, nullable=True)
     execution_data = Column(JSON, nullable=True)  # 執行時的數據快照
+
+
+class AIProviderConfig(Base):
+    """AI 提供商配置表"""
+    __tablename__ = "ai_provider_configs"
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    provider_name = Column(String(50), unique=True, nullable=False, index=True)  # openai, gemini, grok
+    api_key = Column(Text, nullable=True)  # 加密存储的 API Key
+    is_valid = Column(Boolean, default=False, nullable=False)
+    last_tested = Column(DateTime, nullable=True)
+    usage_stats = Column(JSON, default=dict)  # 使用统计
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class AIProviderSettings(Base):
+    """AI 提供商全局设置表（单例）"""
+    __tablename__ = "ai_provider_settings"
+    
+    id = Column(String(36), primary_key=True, default=lambda: "singleton")  # 单例，固定ID
+    current_provider = Column(String(50), default="openai", nullable=False)  # 当前使用的提供商
+    auto_failover_enabled = Column(Boolean, default=True, nullable=False)
+    failover_providers = Column(JSON, default=list)  # 备用提供商列表
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)

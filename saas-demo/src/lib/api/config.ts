@@ -17,6 +17,7 @@ export function getApiBaseUrl(): string {
   // 如果是在瀏覽器環境
   if (typeof window !== "undefined") {
     const host = window.location.host;
+    const protocol = window.location.protocol;
     
     // 開發環境：localhost 使用 8000 端口
     if (host.includes("localhost") || host.includes("127.0.0.1")) {
@@ -25,7 +26,8 @@ export function getApiBaseUrl(): string {
     
     // 生產環境：使用相對路徑，讓 Nginx 處理代理
     // 這樣可以避免 CORS 問題，並且讓 Nginx 正確代理到後端
-    return "/api/v1";
+    // 使用當前協議和主機，確保在生產環境中正確工作
+    return `${protocol}//${host}/api/v1`;
   }
 
   // 服務端渲染：檢查是否在生產環境

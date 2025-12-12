@@ -298,6 +298,25 @@ if [ -d "saas-demo" ]; then
     fi
   fi
   
+  # 确保前端环境变量正确设置（生产环境使用相对路径）
+  echo "Setting frontend environment variables..."
+  if [ ! -f ".env.local" ]; then
+    echo "Creating .env.local..."
+    cat > .env.local << 'EOF'
+NODE_ENV=production
+NEXT_PUBLIC_API_BASE_URL=/api/v1
+EOF
+    echo "✅ .env.local created"
+  else
+    # 更新或添加API_BASE_URL
+    if grep -q "NEXT_PUBLIC_API_BASE_URL" .env.local; then
+      sed -i 's|NEXT_PUBLIC_API_BASE_URL=.*|NEXT_PUBLIC_API_BASE_URL=/api/v1|' .env.local
+    else
+      echo "NEXT_PUBLIC_API_BASE_URL=/api/v1" >> .env.local
+    fi
+    echo "✅ .env.local updated"
+  fi
+  
   cd ..
 else
   echo "⚠️  saas-demo directory not found"

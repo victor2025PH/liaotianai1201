@@ -92,20 +92,30 @@ def _load_ai_provider_config(db: Session) -> Dict[str, Any]:
         db.commit()
         db.refresh(settings)
     
-    # 加载各提供商的配置
+    # 加载各提供商的配置（支持多个 Key，但返回当前激活的 Key）
     providers = {}
     for provider_name in ["openai", "gemini", "grok"]:
+        # 获取当前激活的 Key
         provider_config = db.query(AIProviderConfig).filter(
-            AIProviderConfig.provider_name == provider_name
+            AIProviderConfig.provider_name == provider_name,
+            AIProviderConfig.is_active == True
         ).first()
+        
+        if not provider_config:
+            # 如果没有激活的 Key，尝试获取任意一个
+            provider_config = db.query(AIProviderConfig).filter(
+                AIProviderConfig.provider_name == provider_name
+            ).first()
         
         if not provider_config:
             # 创建默认配置
             provider_config = AIProviderConfig(
                 provider_name=provider_name,
+                key_name="default",
                 api_key=None,
                 is_valid=False,
                 last_tested=None,
+                is_active=True,
                 usage_stats={}
             )
             db.add(provider_config)
@@ -116,7 +126,9 @@ def _load_ai_provider_config(db: Session) -> Dict[str, Any]:
             "api_key": provider_config.api_key,
             "is_valid": provider_config.is_valid,
             "last_tested": provider_config.last_tested.isoformat() if provider_config.last_tested else None,
-            "usage_stats": provider_config.usage_stats or {}
+            "usage_stats": provider_config.usage_stats or {},
+            "key_id": provider_config.id,
+            "key_name": provider_config.key_name
         }
     
     return {
@@ -144,14 +156,21 @@ def _save_ai_provider_config(db: Session, config: Dict[str, Any]):
     settings.failover_providers = config.get("failover_providers", [])
     settings.updated_at = datetime.now()
     
-    # 保存各提供商的配置
+    # 保存各提供商的配置（更新当前激活的 Key）
     for provider_name, provider_data in config.get("providers", {}).items():
+        # 获取当前激活的 Key
         provider_config = db.query(AIProviderConfig).filter(
-            AIProviderConfig.provider_name == provider_name
+            AIProviderConfig.provider_name == provider_name,
+            AIProviderConfig.is_active == True
         ).first()
         
         if not provider_config:
-            provider_config = AIProviderConfig(provider_name=provider_name)
+            # 如果没有激活的 Key，创建新的
+            provider_config = AIProviderConfig(
+                provider_name=provider_name,
+                key_name=provider_data.get("key_name", "default"),
+                is_active=True
+            )
             db.add(provider_config)
         
         if "api_key" in provider_data:
@@ -171,6 +190,8 @@ def _save_ai_provider_config(db: Session, config: Dict[str, Any]):
                 provider_config.last_tested = None
         if "usage_stats" in provider_data:
             provider_config.usage_stats = provider_data["usage_stats"]
+        if "key_name" in provider_data:
+            provider_config.key_name = provider_data["key_name"]
         
         provider_config.updated_at = datetime.now()
     
@@ -492,8 +513,212 @@ async def get_usage_stats(
         }
     else:
         # 返回所有提供商统计
+        config = _load_ai_provider_config(db)
         return {
             "success": True,
             "stats": config.get("usage_stats", {})
         }
+
+
+# ============ 多 Key 管理 API ============
+
+@router.get("/keys", status_code=status.HTTP_200_OK)
+async def list_api_keys(
+    provider: Optional[str] = None,
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """列出所有 API Key（支持按提供商筛选）"""
+    query = db.query(AIProviderConfig)
+    
+    if provider:
+        if provider not in ["openai", "gemini", "grok"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"不支持的提供商: {provider}"
+            )
+        query = query.filter(AIProviderConfig.provider_name == provider)
+    
+    keys = query.order_by(AIProviderConfig.created_at.desc()).all()
+    
+    return {
+        "success": True,
+        "keys": [
+            {
+                "id": key.id,
+                "provider": key.provider_name,
+                "key_name": key.key_name,
+                "api_key_preview": _get_api_key_preview(key.api_key),
+                "is_valid": key.is_valid,
+                "is_active": key.is_active,
+                "last_tested": key.last_tested.isoformat() if key.last_tested else None,
+                "created_at": key.created_at.isoformat(),
+                "updated_at": key.updated_at.isoformat(),
+                "usage_stats": key.usage_stats or {}
+            }
+            for key in keys
+        ]
+    }
+
+
+@router.post("/keys/add", status_code=status.HTTP_200_OK)
+async def add_api_key(
+    provider: str = Query(..., description="AI提供商: openai/gemini/grok"),
+    api_key: str = Query(..., description="API Key"),
+    key_name: str = Query("default", description="Key 名称/别名"),
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """添加新的 API Key"""
+    if provider not in ["openai", "gemini", "grok"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"不支持的提供商: {provider}"
+        )
+    
+    if not api_key or len(api_key.strip()) < 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="API Key 格式无效"
+        )
+    
+    # 检查是否已存在同名 Key
+    existing = db.query(AIProviderConfig).filter(
+        AIProviderConfig.provider_name == provider,
+        AIProviderConfig.key_name == key_name
+    ).first()
+    
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Key 名称 '{key_name}' 已存在，请使用不同的名称或先删除旧 Key"
+        )
+    
+    # 创建新 Key（默认不激活）
+    new_key = AIProviderConfig(
+        provider_name=provider,
+        key_name=key_name,
+        api_key=api_key.strip(),
+        is_valid=False,
+        is_active=False,  # 新添加的 Key 默认不激活
+        usage_stats={}
+    )
+    db.add(new_key)
+    db.commit()
+    db.refresh(new_key)
+    
+    logger.info(f"已添加 {provider} 的新 Key: {key_name}")
+    
+    return {
+        "success": True,
+        "message": f"已添加 {provider} 的 Key: {key_name}",
+        "key": {
+            "id": new_key.id,
+            "provider": new_key.provider_name,
+            "key_name": new_key.key_name,
+            "api_key_preview": _get_api_key_preview(new_key.api_key),
+            "is_valid": new_key.is_valid,
+            "is_active": new_key.is_active
+        }
+    }
+
+
+@router.delete("/keys/{key_id}", status_code=status.HTTP_200_OK)
+async def delete_api_key(
+    key_id: str,
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """删除指定的 API Key"""
+    key = db.query(AIProviderConfig).filter(AIProviderConfig.id == key_id).first()
+    
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API Key 不存在"
+        )
+    
+    # 如果删除的是当前激活的 Key，需要激活另一个 Key
+    if key.is_active:
+        # 查找同一提供商的其他 Key
+        other_key = db.query(AIProviderConfig).filter(
+            AIProviderConfig.provider_name == key.provider_name,
+            AIProviderConfig.id != key_id
+        ).first()
+        
+        if other_key:
+            other_key.is_active = True
+            db.commit()
+    
+    provider_name = key.provider_name
+    key_name = key.key_name
+    
+    db.delete(key)
+    db.commit()
+    
+    logger.info(f"已删除 {provider_name} 的 Key: {key_name}")
+    
+    return {
+        "success": True,
+        "message": f"已删除 {provider_name} 的 Key: {key_name}"
+    }
+
+
+@router.post("/keys/{key_id}/activate", status_code=status.HTTP_200_OK)
+async def activate_api_key(
+    key_id: str,
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """激活指定的 API Key（取消激活同一提供商的其他 Key）"""
+    key = db.query(AIProviderConfig).filter(AIProviderConfig.id == key_id).first()
+    
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API Key 不存在"
+        )
+    
+    # 取消激活同一提供商的其他 Key
+    db.query(AIProviderConfig).filter(
+        AIProviderConfig.provider_name == key.provider_name,
+        AIProviderConfig.id != key_id,
+        AIProviderConfig.is_active == True
+    ).update({"is_active": False})
+    
+    # 激活当前 Key
+    key.is_active = True
+    db.commit()
+    db.refresh(key)
+    
+    # 如果这是当前提供商，发送更新命令到工作节点
+    config = _load_ai_provider_config(db)
+    if config["current_provider"] == key.provider_name:
+        command = {
+            "action": "update_ai_api_key",
+            "params": {
+                "provider": key.provider_name,
+                "api_key": key.api_key
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        workers = _get_all_workers()
+        for node_id in workers:
+            _add_command(node_id, command)
+    
+    logger.info(f"已激活 {key.provider_name} 的 Key: {key.key_name}")
+    
+    return {
+        "success": True,
+        "message": f"已激活 {key.provider_name} 的 Key: {key.key_name}",
+        "key": {
+            "id": key.id,
+            "provider": key.provider_name,
+            "key_name": key.key_name,
+            "api_key_preview": _get_api_key_preview(key.api_key),
+            "is_valid": key.is_valid,
+            "is_active": key.is_active
+        }
+    }
 

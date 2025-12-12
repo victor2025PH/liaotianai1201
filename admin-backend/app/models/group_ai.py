@@ -240,17 +240,24 @@ class GroupAIAutomationTaskLog(Base):
 
 
 class AIProviderConfig(Base):
-    """AI 提供商配置表"""
+    """AI 提供商配置表（支持多个 Key）"""
     __tablename__ = "ai_provider_configs"
     
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    provider_name = Column(String(50), unique=True, nullable=False, index=True)  # openai, gemini, grok
+    provider_name = Column(String(50), nullable=False, index=True)  # openai, gemini, grok
+    key_name = Column(String(100), nullable=False, default="default")  # Key 名称/别名，用于区分多个 Key
     api_key = Column(Text, nullable=True)  # 加密存储的 API Key
     is_valid = Column(Boolean, default=False, nullable=False)
     last_tested = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)  # 是否激活（当前使用的 Key）
     usage_stats = Column(JSON, default=dict)  # 使用统计
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+    
+    # 唯一约束：同一提供商的同一名称只能有一个
+    __table_args__ = (
+        {'sqlite_autoincrement': True},
+    )
 
 
 class AIProviderSettings(Base):

@@ -518,6 +518,105 @@ async def stop_chat(
     
     return {
         "success": True,
+        "message": f"聊天已停止",
+        "node_id": node_id or "all"
+    }
+
+
+@router.post("/chat/start-all-accounts", status_code=status.HTTP_200_OK)
+async def start_all_accounts_chat(
+    group_id: Optional[int] = None,
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """一鍵啟動所有在線賬號的聊天功能"""
+    try:
+        from app.api.group_ai.accounts import get_service_manager
+        from app.models.group_ai import GroupAIAccount
+        
+        service_manager = get_service_manager()
+        if not service_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="ServiceManager 未初始化"
+            )
+        
+        # 獲取所有在線賬號
+        db_accounts = db.query(GroupAIAccount).filter(
+            GroupAIAccount.active == True
+        ).all()
+        
+        if not db_accounts:
+            return {
+                "success": False,
+                "message": "沒有找到在線賬號",
+                "accounts_started": 0,
+                "accounts_total": 0
+            }
+        
+        started_count = 0
+        failed_accounts = []
+        
+        # 先啟動所有賬號
+        for db_account in db_accounts:
+            account_id = db_account.account_id
+            try:
+                # 檢查賬號是否已在內存中
+                if account_id not in service_manager.account_manager.accounts:
+                    # 如果不在內存中，嘗試啟動賬號
+                    logger.info(f"賬號 {account_id} 不在內存中，嘗試啟動...")
+                    success = await service_manager.start_account(account_id)
+                    if not success:
+                        failed_accounts.append({
+                            "account_id": account_id,
+                            "error": "啟動賬號失敗"
+                        })
+                        continue
+                
+                # 啟動聊天功能
+                chat_command = {
+                    "action": "start_enhanced_chat",
+                    "params": {"group_id": group_id, "account_id": account_id},
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                # 如果賬號已分配到服務器，發送到對應節點
+                if db_account.server_id:
+                    _add_command(db_account.server_id, chat_command)
+                else:
+                    # 發送到所有節點（兼容舊邏輯）
+                    workers = _get_all_workers()
+                    for nid in workers:
+                        _add_command(nid, chat_command)
+                
+                started_count += 1
+                logger.info(f"已啟動賬號 {account_id} 的聊天功能")
+                
+            except Exception as e:
+                logger.error(f"啟動賬號 {account_id} 聊天失敗: {e}", exc_info=True)
+                failed_accounts.append({
+                    "account_id": account_id,
+                    "error": str(e)
+                })
+        
+        return {
+            "success": True,
+            "message": f"已啟動 {started_count}/{len(db_accounts)} 個賬號的聊天功能",
+            "accounts_started": started_count,
+            "accounts_total": len(db_accounts),
+            "failed_accounts": failed_accounts,
+            "group_id": group_id
+        }
+        
+    except Exception as e:
+        logger.error(f"一鍵啟動所有賬號聊天失敗: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"啟動失敗: {str(e)}"
+        )
+    
+    return {
+        "success": True,
         "message": "聊天已停止"
     }
 

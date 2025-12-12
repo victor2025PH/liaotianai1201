@@ -176,7 +176,7 @@ export default function ChatFeaturesPage() {
     }
   }
 
-  // 啟動聊天
+  // 啟動聊天（所有節點）
   const startChat = async () => {
     try {
       setLoading(true)
@@ -189,6 +189,44 @@ export default function ChatFeaturesPage() {
         toast({ title: "聊天已啟動", description: "AI 開始自動聊天" })
       } else {
         throw new Error("啟動失敗")
+      }
+    } catch (error) {
+      toast({ title: "啟動失敗", description: String(error), variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 一鍵啟動所有賬號聊天
+  const startAllAccountsChat = async () => {
+    try {
+      setLoading(true)
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/group-ai/chat-features/chat/start-all-accounts`, {
+        method: "POST",
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success) {
+          toast({ 
+            title: "啟動成功", 
+            description: `已啟動 ${data.accounts_started}/${data.accounts_total} 個賬號的聊天功能` 
+          })
+          if (data.failed_accounts && data.failed_accounts.length > 0) {
+            console.warn("部分賬號啟動失敗:", data.failed_accounts)
+            toast({ 
+              title: "部分失敗", 
+              description: `${data.failed_accounts.length} 個賬號啟動失敗，請查看控制台`, 
+              variant: "destructive" 
+            })
+          }
+        } else {
+          toast({ title: "啟動失敗", description: data.message || "啟動失敗", variant: "destructive" })
+        }
+      } else {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.detail || "啟動失敗")
       }
     } catch (error) {
       toast({ title: "啟動失敗", description: String(error), variant: "destructive" })
@@ -465,6 +503,10 @@ export default function ChatFeaturesPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="default" onClick={startAllAccountsChat} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
+            一鍵啟動所有賬號
+          </Button>
           <Button variant="outline" onClick={startChat} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Play className="h-4 w-4 mr-2" />}
             啟動聊天

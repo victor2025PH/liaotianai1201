@@ -320,6 +320,14 @@ EOF
     else
       echo "NEXT_PUBLIC_API_BASE_URL=/api/v1" >> .env.local
     fi
+    
+    # 更新或添加WS_URL（使用相对路径，让浏览器自动判断协议）
+    if grep -q "NEXT_PUBLIC_WS_URL" .env.local; then
+      # 如果存在，删除旧的行（因为我们要让浏览器自动判断）
+      sed -i '/NEXT_PUBLIC_WS_URL/d' .env.local
+    fi
+    # 不设置 NEXT_PUBLIC_WS_URL，让 getWebSocketUrl() 函数自动判断
+    
     echo "✅ .env.local updated"
   fi
   
@@ -389,15 +397,25 @@ fi
 
 if [ -n "$BACKEND_SERVICE" ]; then
   # 先停止服务，确保完全释放资源
+  echo "Stopping backend service..."
   timeout 10s sudo systemctl stop "$BACKEND_SERVICE" 2>/dev/null || true
-  sleep 2
+  sleep 3
+  
+  # 确保进程完全停止
+  BACKEND_PID=$(systemctl show -p MainPID --value "$BACKEND_SERVICE" 2>/dev/null || echo "0")
+  if [ "$BACKEND_PID" != "0" ] && [ -n "$BACKEND_PID" ]; then
+    echo "⚠️  Backend process still running (PID: $BACKEND_PID), forcing stop..."
+    sudo kill -9 "$BACKEND_PID" 2>/dev/null || true
+    sleep 2
+  fi
   
   # 启动服务
+  echo "Starting backend service..."
   timeout 30s sudo systemctl start "$BACKEND_SERVICE" && echo "✅ Backend ($BACKEND_SERVICE) restarted" || echo "⚠️  Backend restart failed or timeout"
   
   # 等待服务启动
-  echo "Waiting for backend service to start (10 seconds)..."
-  sleep 10
+  echo "Waiting for backend service to start (15 seconds)..."
+  sleep 15
   
   # 验证后端健康检查
   echo "Verifying backend health..."

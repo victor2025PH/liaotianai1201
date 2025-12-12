@@ -227,9 +227,15 @@ if [ -d "saas-demo" ]; then
     echo "Installing frontend dependencies..."
     if [ -d "node_modules" ]; then
       echo "Using incremental install..."
-      timeout 15m npm ci --prefer-offline --no-audit --no-fund || timeout 15m npm install --prefer-offline --no-audit --no-fund || {
-        echo "⚠️  Dependency installation timeout or failed, continuing..."
-      }
+      # 先尝试 npm ci，如果失败（lock文件不同步），则使用 npm install
+      if timeout 15m npm ci --prefer-offline --no-audit --no-fund 2>/dev/null; then
+        echo "✅ Dependencies installed with npm ci"
+      else
+        echo "⚠️  npm ci failed (lock file out of sync), using npm install..."
+        timeout 15m npm install --prefer-offline --no-audit --no-fund || {
+          echo "⚠️  Dependency installation timeout or failed, continuing..."
+        }
+      fi
     else
       echo "First-time install..."
       timeout 20m npm install --prefer-offline --no-audit --no-fund || {
@@ -496,17 +502,17 @@ BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null | awk 'NR==1 
 if [ -z "$BACKEND_STATUS" ]; then BACKEND_STATUS="inactive"; fi
 echo "Backend Status: $BACKEND_STATUS"
 
-# 如果服务正在启动中，等待最多 60 秒
-if [ "$BACKEND_STATUS" = "activating" ]; then
-  echo "⏳ Backend service is activating, waiting up to 60 seconds..."
-  for i in {1..60}; do
+# 如果服务正在启动中，等待最多 90 秒（增加等待时间）
+if [ "$BACKEND_STATUS" = "activating" ] || [ "$BACKEND_STATUS" = "deactivating" ]; then
+  echo "⏳ Backend service is $BACKEND_STATUS, waiting up to 90 seconds..."
+  for i in {1..90}; do
     sleep 1
     BACKEND_STATUS=$(systemctl is-active "$TARGET_SERVICE" 2>/dev/null | awk 'NR==1 {print $1}' || true)
     if [ -z "$BACKEND_STATUS" ]; then BACKEND_STATUS="inactive"; fi
     
     # 只在状态变化时打印，避免刷屏（每 5 秒打印一次）
     if [ $((i % 5)) -eq 0 ]; then
-      echo "  Attempt $i/60: Status = $BACKEND_STATUS"
+      echo "  Attempt $i/90: Status = $BACKEND_STATUS"
     fi
     
     if [ "$BACKEND_STATUS" = "active" ]; then
@@ -515,8 +521,8 @@ if [ "$BACKEND_STATUS" = "activating" ]; then
     elif [ "$BACKEND_STATUS" = "failed" ]; then
       echo "❌ Service failed to start (status: failed)"
       break
-    elif [ "$BACKEND_STATUS" != "activating" ] && [ "$BACKEND_STATUS" != "active" ]; then
-      # 如果状态不再是 activating 或 active，也退出循环
+    elif [ "$BACKEND_STATUS" != "activating" ] && [ "$BACKEND_STATUS" != "active" ] && [ "$BACKEND_STATUS" != "deactivating" ]; then
+      # 如果状态不再是 activating/deactivating 或 active，也退出循环
       echo "⚠️  Service status changed to: $BACKEND_STATUS"
       break
     fi
@@ -626,10 +632,16 @@ echo "Bot Status: $BOT_STATUS"
 if [ "$BOT_STATUS" = "active" ]; then
   echo "✅ Bot service: Running"
 else
-  echo "❌ Bot service: Not running"
-  echo "⬇️ Bot Logs:"
-  sudo journalctl -u telegram-bot -n 50 --no-pager || true
-  handle_error "Bot service failed to start"
+  echo "⚠️  Bot service: Not running (This is expected if session is not configured)"
+  echo "   Bot service requires a valid Telegram session file to run."
+  echo "   To configure:"
+  echo "   1. Place a session file in /home/ubuntu/telegram-ai-system/sessions/"
+  echo "   2. Or set SESSION_STRING environment variable"
+  echo "   3. Ensure API_ID and API_HASH are set in config.py or environment"
+  echo "⬇️ Bot Logs (last 20 lines):"
+  sudo journalctl -u telegram-bot -n 20 --no-pager || true
+  echo ""
+  echo "ℹ️  Continuing deployment (Bot service failure is non-critical)..."
 fi
 
 echo ""

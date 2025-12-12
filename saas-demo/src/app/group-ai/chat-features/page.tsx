@@ -951,7 +951,7 @@ export default function ChatFeaturesPage() {
                 </div>
 
                 {/* Grok */}
-                <div className="space-y-2">
+                <div className="space-y-3 p-4 border rounded-lg">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="grok-key">xAI Grok API Key</Label>
                     {aiProvider.providers.find((p: any) => p.name === "grok")?.is_valid && (
@@ -961,34 +961,87 @@ export default function ChatFeaturesPage() {
                       </Badge>
                     )}
                   </div>
+                  
+                  {/* Key 列表和选择 */}
+                  {aiProvider.keyList.grok.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-sm text-muted-foreground">已保存的 Key</Label>
+                      <div className="space-y-2">
+                        {aiProvider.keyList.grok.map((key: any) => (
+                          <div key={key.id} className="flex items-center gap-2 p-2 bg-muted rounded">
+                            <Select
+                              value={aiProvider.selectedKeys.grok}
+                              onValueChange={(value) => {
+                                if (value === key.id) {
+                                  activateAPIKey(key.id)
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="flex-1">
+                                <SelectValue>
+                                  {key.key_name} {key.is_active && "(当前使用)"}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {aiProvider.keyList.grok.map((k: any) => (
+                                  <SelectItem key={k.id} value={k.id}>
+                                    {k.key_name} {k.is_active && "(当前使用)"}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Badge variant={key.is_valid ? "default" : "secondary"}>
+                              {key.is_valid ? "有效" : "无效"}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (confirm(`确定要删除 Key "${key.key_name}" 吗？`)) {
+                                  deleteAPIKey(key.id, "grok", key.key_name)
+                                }
+                              }}
+                              disabled={loading}
+                            >
+                              <XCircle className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 添加新 Key */}
                   <div className="flex gap-2">
                     <Input
                       id="grok-key"
                       type="password"
-                      placeholder={aiProvider.apiKeys.grok !== "未配置" ? aiProvider.apiKeys.grok : "輸入 Grok API Key"}
-                      onChange={(e) => {
-                        const key = e.target.value
-                        if (key) {
-                          setAiProvider(prev => ({
-                            ...prev,
-                            apiKeys: { ...prev.apiKeys, grok: key }
-                          }))
-                        }
-                      }}
+                      placeholder="輸入新的 Grok API Key"
                       className="flex-1"
+                    />
+                    <Input
+                      id="grok-key-name"
+                      type="text"
+                      placeholder="Key 名稱（可選）"
+                      className="w-32"
                     />
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => {
                         const key = (document.getElementById("grok-key") as HTMLInputElement)?.value
+                        const keyName = (document.getElementById("grok-key-name") as HTMLInputElement)?.value || "default"
                         if (key) {
-                          updateAPIKey("grok", key)
+                          addAPIKey("grok", key, keyName)
+                          ;(document.getElementById("grok-key") as HTMLInputElement).value = ""
+                          ;(document.getElementById("grok-key-name") as HTMLInputElement).value = ""
+                        } else {
+                          toast({ title: "請先輸入 API Key", variant: "destructive" })
                         }
                       }}
                       disabled={loading}
                     >
-                      保存
+                      添加
                     </Button>
                     <Button
                       variant="outline"

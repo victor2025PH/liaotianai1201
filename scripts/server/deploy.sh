@@ -177,17 +177,50 @@ if [ -d "saas-demo" ]; then
   
   # 智能跳過前端構建：檢查前端代碼是否有變動
   FRONTEND_CHANGED=true
-  if git diff --quiet HEAD^ HEAD -- saas-demo 2>/dev/null; then
-    # 檢查 .next 目錄是否存在且完整
-    if [ -d ".next/standalone" ] && [ -d ".next/static" ]; then
-      FRONTEND_CHANGED=false
-      echo "⏩ Frontend code unchanged, skipping build..."
-      echo "✅ Reusing existing build artifacts"
+  
+  # 方法1: 检查最近的commit是否包含前端文件变化
+  # 获取最近2个commit的hash
+  LAST_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "")
+  PREV_COMMIT=$(git rev-parse HEAD^ 2>/dev/null || echo "")
+  
+  if [ -n "$LAST_COMMIT" ] && [ -n "$PREV_COMMIT" ]; then
+    # 检查最近commit是否包含前端文件变化
+    if git diff --quiet "$PREV_COMMIT" "$LAST_COMMIT" -- saas-demo/ 2>/dev/null; then
+      # 检查 .next 目录是否存在且完整
+      if [ -d ".next/standalone" ] && [ -d ".next/static" ] && [ -f ".next/standalone/server.js" ]; then
+        # 额外检查：如果standalone目录的修改时间比最近commit时间新，说明已经构建过
+        BUILD_TIME=$(stat -c %Y .next/standalone/server.js 2>/dev/null || echo "0")
+        COMMIT_TIME=$(git log -1 --format=%ct "$LAST_COMMIT" 2>/dev/null || echo "0")
+        
+        if [ "$BUILD_TIME" -gt "$COMMIT_TIME" ]; then
+          FRONTEND_CHANGED=false
+          echo "⏩ Frontend code unchanged, skipping build..."
+          echo "✅ Reusing existing build artifacts (built after last commit)"
+        else
+          echo "🔨 Frontend build is older than last commit, rebuilding..."
+        fi
+      else
+        echo "🔨 Frontend code unchanged but build artifacts missing, rebuilding..."
+      fi
     else
-      echo "🔨 Frontend code unchanged but build artifacts missing, rebuilding..."
+      echo "🔨 Frontend code changed in recent commits, rebuilding..."
     fi
   else
-    echo "🔨 Frontend code changed, rebuilding..."
+    # 如果无法获取commit信息，检查文件是否存在
+    if [ -d ".next/standalone" ] && [ -d ".next/static" ] && [ -f ".next/standalone/server.js" ]; then
+      echo "⚠️  Cannot determine git history, but build artifacts exist"
+      echo "   To force rebuild, delete .next directory or set FORCE_FRONTEND_BUILD=true"
+      # 如果设置了强制构建环境变量，则强制构建
+      if [ "${FORCE_FRONTEND_BUILD:-false}" = "true" ]; then
+        echo "🔨 FORCE_FRONTEND_BUILD=true, forcing rebuild..."
+        FRONTEND_CHANGED=true
+      else
+        FRONTEND_CHANGED=false
+        echo "⏩ Skipping build (use FORCE_FRONTEND_BUILD=true to force)"
+      fi
+    else
+      echo "🔨 Build artifacts missing, rebuilding..."
+    fi
   fi
   
   if [ "$FRONTEND_CHANGED" = "true" ]; then
@@ -346,19 +379,40 @@ fi
 
 if [ -n "$FRONTEND_SERVICE_NAME" ]; then
   echo "Restarting frontend service ($FRONTEND_SERVICE_NAME)..."
+  
+  # 如果前端代码有变化，确保重新加载
+  if [ "$FRONTEND_CHANGED" = "true" ]; then
+    echo "  Frontend code was rebuilt, ensuring service reloads new build..."
+    # 停止服务
+    timeout 10s sudo systemctl stop "$FRONTEND_SERVICE_NAME" 2>/dev/null || true
+    sleep 2
+  fi
+  
+  # 启动/重启服务
   timeout 30s sudo systemctl restart "$FRONTEND_SERVICE_NAME" && echo "✅ Frontend restarted" || echo "⚠️  Frontend restart failed or timeout"
   
   # 等待服务启动并验证端口监听
-  echo "Waiting for frontend service to start (5 seconds)..."
-  sleep 5
+  echo "Waiting for frontend service to start (10 seconds)..."
+  sleep 10
   
-  # 检查端口是否监听
-  PORT_3000=$(sudo ss -tlnp | grep ":3000" || echo "")
-  if [ -n "$PORT_3000" ]; then
-    echo "✅ Frontend port 3000 is listening"
-  else
-    echo "⚠️  Frontend port 3000 is not listening - service may have failed"
-    echo "  查看日志: sudo journalctl -u $FRONTEND_SERVICE_NAME -n 30 --no-pager"
+  # 检查端口是否监听（最多等待30秒）
+  PORT_3000=""
+  for i in {1..6}; do
+    PORT_3000=$(sudo ss -tlnp 2>/dev/null | grep ":3000" || echo "")
+    if [ -n "$PORT_3000" ]; then
+      echo "✅ Frontend port 3000 is listening"
+      break
+    fi
+    if [ $i -lt 6 ]; then
+      echo "  Waiting for port 3000... ($i/6)"
+      sleep 5
+    fi
+  done
+  
+  if [ -z "$PORT_3000" ]; then
+    echo "⚠️  Frontend port 3000 is not listening after 30 seconds - service may have failed"
+    echo "  查看日志: sudo journalctl -u $FRONTEND_SERVICE_NAME -n 50 --no-pager"
+    echo "  检查服务状态: sudo systemctl status $FRONTEND_SERVICE_NAME --no-pager | head -20"
   fi
 else
   echo "⚠️  Frontend systemd service not found"

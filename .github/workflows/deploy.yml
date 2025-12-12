@@ -36,6 +36,8 @@ jobs:
             fi
             
             # 执行部署脚本
+            # 设置环境变量强制前端重新构建（确保新功能被部署）
+            export FORCE_FRONTEND_BUILD=true
             if [ -f "$PROJECT_DIR/scripts/server/deploy.sh" ]; then
               chmod +x "$PROJECT_DIR/scripts/server/deploy.sh"
               bash "$PROJECT_DIR/scripts/server/deploy.sh"

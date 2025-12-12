@@ -21,10 +21,12 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          timeout: 60s
+          timeout: 120s
           command_timeout: 55m
           script_stop: true
           debug: true
+          use_insecure_cipher: false
+          cipher: aes128-ctr,aes192-ctr,aes256-ctr
           envs: GITHUB_REPO=${{ github.repository }},SERVER_HOST=${{ secrets.SERVER_HOST }}
           script: |
             # 先拉取最新代码，然后执行部署脚本

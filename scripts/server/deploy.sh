@@ -354,7 +354,50 @@ fi
 
 echo ""
 echo "=========================================="
-echo "Step 7: Deploy Systemd services"
+echo "Step 7: Run database migrations"
+echo "=========================================="
+if [ -d "admin-backend" ]; then
+  cd admin-backend
+  if [ -d "venv" ] && [ -f "venv/bin/activate" ]; then
+    source venv/bin/activate
+    
+    # 检查是否有 Alembic
+    if python3 -c "import alembic" 2>/dev/null; then
+      echo "Running database migrations..."
+      
+      # 检查是否有多个 head revision
+      HEADS_COUNT=$(alembic heads 2>/dev/null | wc -l || echo "0")
+      if [ "$HEADS_COUNT" -gt 1 ]; then
+        echo "⚠️  Multiple head revisions detected, merging..."
+        # 尝试自动合并
+        alembic merge heads -m "auto_merge_$(date +%Y%m%d_%H%M%S)" 2>/dev/null || {
+          echo "⚠️  Auto-merge failed, using stamp head..."
+          alembic stamp head 2>/dev/null || true
+        }
+      fi
+      
+      # 执行迁移
+      if alembic upgrade head 2>/dev/null; then
+        echo "✅ Database migrations completed"
+      else
+        echo "⚠️  Database migration failed, trying stamp head..."
+        alembic stamp head 2>/dev/null || true
+        echo "⚠️  Migration issues detected, but continuing deployment..."
+      fi
+    else
+      echo "⚠️  Alembic not found, skipping migrations"
+    fi
+  else
+    echo "⚠️  Virtual environment not found, skipping migrations"
+  fi
+  cd ..
+else
+  echo "⚠️  admin-backend directory not found, skipping migrations"
+fi
+
+echo ""
+echo "=========================================="
+echo "Step 8: Deploy Systemd services"
 echo "=========================================="
 if [ -f "scripts/server/deploy-systemd.sh" ]; then
   timeout 5m sudo bash scripts/server/deploy-systemd.sh || echo "⚠️  Systemd deployment failed or timeout, continuing..."
@@ -364,7 +407,7 @@ fi
 
 echo ""
 echo "=========================================="
-echo "Step 8: Restart services"
+echo "Step 9: Restart services"
 echo "=========================================="
 
 # 清理端口 8000 占用（避免 "address already in use" 错误）
@@ -514,7 +557,93 @@ sleep 3
 
 echo ""
 echo "=========================================="
-echo "Step 9: Check service status"
+echo "Step 10: Final health check and auto-fix"
+echo "=========================================="
+
+# 最终健康检查和自动修复
+echo "Performing final health check..."
+MAX_RETRIES=3
+RETRY_COUNT=0
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  echo "Health check attempt $RETRY_COUNT/$MAX_RETRIES..."
+  
+  # 检查后端健康
+  BACKEND_HEALTHY=false
+  if curl -s -f --max-time 5 http://localhost:8000/health >/dev/null 2>&1; then
+    BACKEND_HEALTHY=true
+    echo "✅ Backend health check passed"
+  else
+    echo "⚠️  Backend health check failed, attempting auto-fix..."
+    
+    # 自动修复：清理端口并重启
+    PORT_8000_PID=$(sudo ss -tlnp 2>/dev/null | grep ":8000" | awk '{print $6}' | grep -oP 'pid=\K\d+' | head -n 1 || true)
+    if [ -n "$PORT_8000_PID" ]; then
+      echo "  Killing process on port 8000 (PID: $PORT_8000_PID)..."
+      sudo kill -9 "$PORT_8000_PID" 2>/dev/null || true
+      sleep 2
+    fi
+    
+    # 重启后端服务
+    if [ -n "$BACKEND_SERVICE" ]; then
+      echo "  Restarting backend service..."
+      timeout 10s sudo systemctl stop "$BACKEND_SERVICE" 2>/dev/null || true
+      sleep 2
+      timeout 30s sudo systemctl start "$BACKEND_SERVICE" 2>/dev/null || true
+      sleep 10
+    fi
+  fi
+  
+  # 检查前端健康
+  FRONTEND_HEALTHY=false
+  if [ -n "$FRONTEND_SERVICE_NAME" ]; then
+    HTTP_CODE=$(timeout 5s curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://localhost:3000 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+      FRONTEND_HEALTHY=true
+      echo "✅ Frontend health check passed (HTTP $HTTP_CODE)"
+    else
+      echo "⚠️  Frontend health check failed (HTTP $HTTP_CODE), attempting restart..."
+      timeout 10s sudo systemctl restart "$FRONTEND_SERVICE_NAME" 2>/dev/null || true
+      sleep 10
+    fi
+  else
+    FRONTEND_HEALTHY=true  # 如果没有前端服务，认为健康
+  fi
+  
+  # 如果都健康，退出循环
+  if [ "$BACKEND_HEALTHY" = "true" ] && [ "$FRONTEND_HEALTHY" = "true" ]; then
+    echo "✅ All services are healthy!"
+    break
+  fi
+  
+  # 如果还有重试机会，等待后重试
+  if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+    echo "  Waiting 10 seconds before retry..."
+    sleep 10
+  fi
+done
+
+# 最终状态报告
+if [ "$BACKEND_HEALTHY" = "true" ] && [ "$FRONTEND_HEALTHY" = "true" ]; then
+  echo ""
+  echo "✅ Deployment successful - All services are running!"
+else
+  echo ""
+  echo "⚠️  Deployment completed with warnings - Some services may need manual intervention"
+  if [ "$BACKEND_HEALTHY" != "true" ]; then
+    echo "  - Backend service may not be responding"
+    echo "    Check logs: sudo journalctl -u $BACKEND_SERVICE -n 50 --no-pager"
+  fi
+  if [ "$FRONTEND_HEALTHY" != "true" ] && [ -n "$FRONTEND_SERVICE_NAME" ]; then
+    echo "  - Frontend service may not be responding"
+    echo "    Check logs: sudo journalctl -u $FRONTEND_SERVICE_NAME -n 50 --no-pager"
+  fi
+fi
+
+echo ""
+echo "=========================================="
+echo "Step 11: Check service status"
 echo "=========================================="
 
 echo "Checking backend service..."

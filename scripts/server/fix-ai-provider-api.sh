@@ -69,24 +69,81 @@ pip install --quiet google-generativeai>=0.3.0 openai>=1.3.7 requests 2>/dev/nul
 echo "  ✅ 依赖安装完成"
 echo ""
 
-# 3. 清理端口占用
+# 3. 清理端口占用（强制彻底清理）
 echo "[3/6] 清理端口占用..."
-PORT_8000_PID=$(sudo ss -tlnp 2>/dev/null | grep ":8000" | awk '{print $6}' | grep -oP 'pid=\K\d+' | head -n 1 || echo "")
+MAX_RETRIES=5
+RETRY_COUNT=0
 
-if [ -n "$PORT_8000_PID" ]; then
-    echo "  ⚠️  端口 8000 被进程 $PORT_8000_PID 占用，正在清理..."
-    sudo kill -9 "$PORT_8000_PID" 2>/dev/null || true
-    sudo pkill -9 -f "uvicorn.*8000" 2>/dev/null || true
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    PORT_8000_PID=$(sudo ss -tlnp 2>/dev/null | grep ":8000" | awk '{print $6}' | grep -oP 'pid=\K\d+' | head -n 1 || echo "")
+    
+    if [ -z "$PORT_8000_PID" ]; then
+        echo "  ✅ 端口 8000 已释放"
+        break
+    fi
+    
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    echo "  ⚠️  端口 8000 被进程 $PORT_8000_PID 占用，正在清理 (尝试 $RETRY_COUNT/$MAX_RETRIES)..."
+    
+    # 获取所有占用端口的进程
+    ALL_PIDS=$(sudo ss -tlnp 2>/dev/null | grep ":8000" | awk '{print $6}' | grep -oP 'pid=\K\d+' || echo "")
+    
+    # 终止所有占用端口的进程
+    for pid in $ALL_PIDS; do
+        if [ -n "$pid" ]; then
+            echo "    终止进程: $pid"
+            sudo kill -9 "$pid" 2>/dev/null || true
+        fi
+    done
+    
+    # 强制终止所有 uvicorn 进程
+    sudo pkill -9 -f "uvicorn" 2>/dev/null || true
+    
+    # 强制终止所有可能占用端口的 python 进程
+    sudo pkill -9 -f "python.*8000" 2>/dev/null || true
+    
+    sleep 3
+    
+    # 再次检查
+    PORT_8000_AFTER=$(sudo ss -tlnp 2>/dev/null | grep ":8000" | awk '{print $6}' | grep -oP 'pid=\K\d+' | head -n 1 || echo "")
+    if [ -z "$PORT_8000_AFTER" ]; then
+        echo "  ✅ 端口 8000 已释放"
+        break
+    fi
+done
+
+# 最终检查
+FINAL_CHECK=$(sudo ss -tlnp 2>/dev/null | grep ":8000" || echo "")
+if [ -n "$FINAL_CHECK" ]; then
+    echo "  ❌ 端口 8000 仍被占用，无法清理"
+    echo "  占用信息: $FINAL_CHECK"
+    echo "  请手动检查: sudo ss -tlnp | grep 8000"
+    exit 1
+fi
+
+echo ""
+
+# 4. 停止服务（确保完全停止）
+echo "[4/6] 停止后端服务..."
+sudo systemctl stop "$BACKEND_SERVICE" 2>/dev/null || true
+sleep 5
+
+# 检查服务进程是否完全停止
+SERVICE_PID=$(systemctl show -p MainPID --value "$BACKEND_SERVICE" 2>/dev/null || echo "0")
+if [ "$SERVICE_PID" != "0" ] && [ -n "$SERVICE_PID" ]; then
+    echo "  ⚠️  服务进程仍在运行 (PID: $SERVICE_PID)，强制终止..."
+    sudo kill -9 "$SERVICE_PID" 2>/dev/null || true
     sleep 2
 fi
 
-echo "  ✅ 端口清理完成"
-echo ""
+# 再次检查端口
+PORT_CHECK=$(sudo ss -tlnp 2>/dev/null | grep ":8000" || echo "")
+if [ -n "$PORT_CHECK" ]; then
+    echo "  ⚠️  端口 8000 仍被占用，再次清理..."
+    sudo pkill -9 -f "uvicorn" 2>/dev/null || true
+    sleep 3
+fi
 
-# 4. 停止服务
-echo "[4/6] 停止后端服务..."
-sudo systemctl stop "$BACKEND_SERVICE" 2>/dev/null || true
-sleep 3
 echo "  ✅ 服务已停止"
 echo ""
 

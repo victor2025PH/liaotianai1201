@@ -16,8 +16,10 @@ import {
   MessageSquare, Play, Square, Settings, Users, Clock, 
   Gamepad2, FileText, BarChart3, Target, Sparkles, 
   RefreshCw, Send, Dice5, HelpCircle, Gift, Loader2,
-  User, Smile, TrendingUp, Zap, Calendar, Bot
+  User, Smile, TrendingUp, Zap, Calendar, Bot, Key,
+  CheckCircle, XCircle, AlertCircle, Brain
 } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 import { getApiBaseUrl } from "@/lib/api/config"
 
@@ -84,6 +86,24 @@ export default function ChatFeaturesPage() {
     active_users: 0,
     games_played: 0,
     conversion_rate: 0,
+  })
+  
+  // AI 提供商狀態
+  const [aiProvider, setAiProvider] = useState({
+    current: "openai",
+    providers: [] as any[],
+    apiKeys: {
+      openai: "",
+      gemini: "",
+      grok: "",
+    },
+    testing: {
+      openai: false,
+      gemini: false,
+      grok: false,
+    },
+    autoFailover: true,
+    failoverProviders: [] as string[],
   })
   
   // 轉化漏斗
@@ -218,8 +238,121 @@ export default function ChatFeaturesPage() {
     }
   }
 
+  // 獲取 AI 提供商狀態
+  const fetchAIProviderStatus = async () => {
+    try {
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/group-ai/ai-provider/providers`)
+      if (res.ok) {
+        const data = await res.json()
+        setAiProvider({
+          current: data.current_provider || "openai",
+          providers: data.providers || [],
+          apiKeys: {
+            openai: data.providers?.find((p: any) => p.name === "openai")?.api_key_preview || "",
+            gemini: data.providers?.find((p: any) => p.name === "gemini")?.api_key_preview || "",
+            grok: data.providers?.find((p: any) => p.name === "grok")?.api_key_preview || "",
+          },
+          testing: {
+            openai: false,
+            gemini: false,
+            grok: false,
+          },
+          autoFailover: data.auto_failover_enabled || false,
+          failoverProviders: data.failover_providers || [],
+        })
+      }
+    } catch (error) {
+      console.warn("獲取 AI 提供商狀態失敗:", error)
+    }
+  }
+
+  // 切換 AI 提供商
+  const switchAIProvider = async (provider: string) => {
+    try {
+      setLoading(true)
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/group-ai/ai-provider/switch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          auto_failover_enabled: aiProvider.autoFailover,
+          failover_providers: aiProvider.failoverProviders,
+        }),
+      })
+      
+      if (res.ok) {
+        toast({ title: "切換成功", description: `已切換到 ${provider}` })
+        await fetchAIProviderStatus()
+      } else {
+        throw new Error("切換失敗")
+      }
+    } catch (error) {
+      toast({ title: "切換失敗", description: String(error), variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 更新 API Key
+  const updateAPIKey = async (provider: string, apiKey: string) => {
+    try {
+      setLoading(true)
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/group-ai/ai-provider/update-key?provider=${provider}&api_key=${encodeURIComponent(apiKey)}`, {
+        method: "POST",
+      })
+      
+      if (res.ok) {
+        toast({ title: "更新成功", description: `${provider} API Key 已更新` })
+        await fetchAIProviderStatus()
+      } else {
+        throw new Error("更新失敗")
+      }
+    } catch (error) {
+      toast({ title: "更新失敗", description: String(error), variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 測試 API Key
+  const testAPIKey = async (provider: string, apiKey: string) => {
+    try {
+      setAiProvider(prev => ({
+        ...prev,
+        testing: { ...prev.testing, [provider]: true }
+      }))
+      
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/group-ai/ai-provider/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, api_key: apiKey }),
+      })
+      
+      const data = await res.json()
+      
+      if (data.success) {
+        toast({ title: "測試成功", description: data.message })
+        await fetchAIProviderStatus()
+      } else {
+        toast({ title: "測試失敗", description: data.message, variant: "destructive" })
+      }
+    } catch (error) {
+      toast({ title: "測試失敗", description: String(error), variant: "destructive" })
+    } finally {
+      setAiProvider(prev => ({
+        ...prev,
+        testing: { ...prev.testing, [provider]: false }
+      }))
+    }
+  }
+
   useEffect(() => {
     fetchSettings()
+    fetchAIProviderStatus()
   }, [])
 
   return (
@@ -433,6 +566,287 @@ export default function ChatFeaturesPage() {
                 {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 保存設置
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* AI 提供商管理 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="h-5 w-5" />
+                AI 提供商管理
+              </CardTitle>
+              <CardDescription>切換 AI 提供商並管理 API Key</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* 當前提供商 */}
+              <div className="space-y-2">
+                <Label>當前使用的 AI 提供商</Label>
+                <div className="flex items-center gap-3">
+                  <Select value={aiProvider.current} onValueChange={switchAIProvider}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="gemini">Google Gemini</SelectItem>
+                      <SelectItem value="grok">xAI Grok</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {aiProvider.providers.find((p: any) => p.name === aiProvider.current)?.is_valid ? (
+                    <Badge variant="default" className="gap-1">
+                      <CheckCircle className="h-3 w-3" />
+                      已驗證
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive" className="gap-1">
+                      <XCircle className="h-3 w-3" />
+                      未驗證
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* API Key 配置 */}
+              <div className="space-y-4">
+                <h3 className="font-semibold">API Key 配置</h3>
+                
+                {/* OpenAI */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="openai-key">OpenAI API Key</Label>
+                    {aiProvider.providers.find((p: any) => p.name === "openai")?.is_valid && (
+                      <Badge variant="outline" className="gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        有效
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      id="openai-key"
+                      type="password"
+                      placeholder={aiProvider.apiKeys.openai !== "未配置" ? aiProvider.apiKeys.openai : "輸入 OpenAI API Key"}
+                      onChange={(e) => {
+                        const key = e.target.value
+                        if (key) {
+                          setAiProvider(prev => ({
+                            ...prev,
+                            apiKeys: { ...prev.apiKeys, openai: key }
+                          }))
+                        }
+                      }}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const key = (document.getElementById("openai-key") as HTMLInputElement)?.value
+                        if (key) {
+                          updateAPIKey("openai", key)
+                        }
+                      }}
+                      disabled={loading}
+                    >
+                      保存
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const key = (document.getElementById("openai-key") as HTMLInputElement)?.value
+                        if (key) {
+                          testAPIKey("openai", key)
+                        } else {
+                          toast({ title: "請先輸入 API Key", variant: "destructive" })
+                        }
+                      }}
+                      disabled={loading || aiProvider.testing.openai}
+                    >
+                      {aiProvider.testing.openai ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "測試"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Gemini */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="gemini-key">Google Gemini API Key</Label>
+                    {aiProvider.providers.find((p: any) => p.name === "gemini")?.is_valid && (
+                      <Badge variant="outline" className="gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        有效
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      id="gemini-key"
+                      type="password"
+                      placeholder={aiProvider.apiKeys.gemini !== "未配置" ? aiProvider.apiKeys.gemini : "輸入 Gemini API Key"}
+                      onChange={(e) => {
+                        const key = e.target.value
+                        if (key) {
+                          setAiProvider(prev => ({
+                            ...prev,
+                            apiKeys: { ...prev.apiKeys, gemini: key }
+                          }))
+                        }
+                      }}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const key = (document.getElementById("gemini-key") as HTMLInputElement)?.value
+                        if (key) {
+                          updateAPIKey("gemini", key)
+                        }
+                      }}
+                      disabled={loading}
+                    >
+                      保存
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const key = (document.getElementById("gemini-key") as HTMLInputElement)?.value
+                        if (key) {
+                          testAPIKey("gemini", key)
+                        } else {
+                          toast({ title: "請先輸入 API Key", variant: "destructive" })
+                        }
+                      }}
+                      disabled={loading || aiProvider.testing.gemini}
+                    >
+                      {aiProvider.testing.gemini ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "測試"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Grok */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="grok-key">xAI Grok API Key</Label>
+                    {aiProvider.providers.find((p: any) => p.name === "grok")?.is_valid && (
+                      <Badge variant="outline" className="gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        有效
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      id="grok-key"
+                      type="password"
+                      placeholder={aiProvider.apiKeys.grok !== "未配置" ? aiProvider.apiKeys.grok : "輸入 Grok API Key"}
+                      onChange={(e) => {
+                        const key = e.target.value
+                        if (key) {
+                          setAiProvider(prev => ({
+                            ...prev,
+                            apiKeys: { ...prev.apiKeys, grok: key }
+                          }))
+                        }
+                      }}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const key = (document.getElementById("grok-key") as HTMLInputElement)?.value
+                        if (key) {
+                          updateAPIKey("grok", key)
+                        }
+                      }}
+                      disabled={loading}
+                    >
+                      保存
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const key = (document.getElementById("grok-key") as HTMLInputElement)?.value
+                        if (key) {
+                          testAPIKey("grok", key)
+                        } else {
+                          toast({ title: "請先輸入 API Key", variant: "destructive" })
+                        }
+                      }}
+                      disabled={loading || aiProvider.testing.grok}
+                    >
+                      {aiProvider.testing.grok ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "測試"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* 自動故障切換 */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>自動故障切換</Label>
+                    <p className="text-sm text-muted-foreground">當當前 AI 提供商失敗時，自動切換到備用提供商</p>
+                  </div>
+                  <Switch
+                    checked={aiProvider.autoFailover}
+                    onCheckedChange={(checked) => {
+                      setAiProvider(prev => ({ ...prev, autoFailover: checked }))
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* 使用統計 */}
+              {aiProvider.providers.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <Label>使用統計</Label>
+                    <div className="grid grid-cols-3 gap-4">
+                      {aiProvider.providers.map((provider: any) => (
+                        <Card key={provider.name} className="p-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium capitalize">{provider.name}</span>
+                              {provider.is_current && (
+                                <Badge variant="default" className="text-xs">當前</Badge>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              請求: {provider.usage_stats?.total_requests || 0}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              成功: {provider.usage_stats?.successful_requests || 0}
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

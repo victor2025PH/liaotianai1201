@@ -51,20 +51,54 @@ class ServerActionRequest(BaseModel):
 
 
 def get_master_config_path() -> Path:
-    """獲取主節點配置文件路徑"""
-    project_root = Path(__file__).parent.parent.parent.parent.parent
-    return project_root / "data" / "master_config.json"
+    """獲取主節點配置文件路徑（支持多種路徑查找）"""
+    # 方法1: 從 API 文件位置解析（admin-backend/app/api/group_ai/servers.py -> 項目根目錄）
+    api_file_path = Path(__file__).resolve()
+    project_root_from_api = api_file_path.parent.parent.parent.parent.parent
+    config_path_from_api = project_root_from_api / "data" / "master_config.json"
+    
+    # 方法2: 從當前工作目錄解析
+    current_work_dir = Path.cwd()
+    config_path_from_cwd = current_work_dir / "data" / "master_config.json"
+    
+    # 方法3: 從 admin-backend 目錄解析
+    admin_backend_dir = api_file_path.parent.parent.parent.parent
+    config_path_from_admin = admin_backend_dir.parent / "data" / "master_config.json"
+    
+    # 方法4: 固定路徑（服務器部署路徑）
+    fixed_paths = [
+        Path("/home/ubuntu/telegram-ai-system/data/master_config.json"),
+        Path("/opt/luckyred/data/master_config.json"),
+    ]
+    
+    # 優先使用存在的配置文件
+    all_paths = [config_path_from_api, config_path_from_cwd, config_path_from_admin] + fixed_paths
+    for config_path in all_paths:
+        if config_path.exists():
+            logger.info(f"找到服務器配置文件: {config_path}")
+            return config_path
+    
+    # 如果都不存在，返回最可能的路徑（用於創建）
+    logger.warning(f"服務器配置文件不存在，嘗試的路徑: {[str(p) for p in all_paths]}")
+    return config_path_from_api  # 返回默認路徑
 
 
 def load_server_configs() -> Dict:
     """加載服務器配置"""
     config_path = get_master_config_path()
     if not config_path.exists():
+        logger.warning(f"服務器配置文件不存在: {config_path}，返回空配置")
         return {}
     
-    with open(config_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-        return data.get('servers', {})
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            servers = data.get('servers', {})
+            logger.info(f"成功加載 {len(servers)} 個服務器配置")
+            return servers
+    except Exception as e:
+        logger.error(f"加載服務器配置文件失敗: {e}", exc_info=True)
+        return {}
 
 
 @router.get("/", response_model=List[ServerStatus])

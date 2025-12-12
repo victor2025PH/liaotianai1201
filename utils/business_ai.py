@@ -18,7 +18,15 @@ from utils.prompt_manager import (
 from utils.ai_context_manager import add_to_history, get_history
 
 logger = logging.getLogger("business_ai")
-client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
+
+def get_openai_client():
+    """獲取 OpenAI 客戶端，每次都重新讀取 API Key"""
+    import os
+    from dotenv import load_dotenv
+    # 重新加載 .env 文件以獲取最新的 API Key
+    load_dotenv(override=True)
+    api_key = os.getenv("OPENAI_API_KEY") or config.OPENAI_API_KEY
+    return AsyncOpenAI(api_key=api_key)
 
 VISION_FALLBACK_REPLY = {
     "chat_screenshot": {
@@ -54,6 +62,7 @@ async def ai_extract_name_from_reply(user_text):
     """
     prompt = get_name_extraction_prompt(user_text)
     try:
+        client = get_openai_client()
         resp = await client.chat.completions.create(
             model="gpt-3.5-turbo",  # 使用更快速、便宜的模型进行简单判断
             messages=[{"role": "system", "content": prompt}],
@@ -99,6 +108,7 @@ async def ai_business_reply(user_id, user_profile, context_info=None, history_su
                 messages.append({"role": h["role"], "content": h["content"]})
 
     logger.info(f"[AI] OpenAI messages构建: {messages}")
+    client = get_openai_client()
     resp = await client.chat.completions.create(
         model=config.OPENAI_MODEL,
         messages=messages,
@@ -185,49 +195,31 @@ async def analyze_image_message(user_id, image_path, user_profile, context_info=
                 return None
 
         async def call_model(model_name: str):
-            resp = await client.responses.create(
+            client = get_openai_client()
+            resp = await client.chat.completions.create(
                 model=model_name,
-                max_output_tokens=200,
-                input=[
-                    {
-                        "role": "system",
-                        "content": [
-                            {"type": "input_text", "text": json_instruction}
-                        ],
-                    },
+                messages=[
+                    {"role": "system", "content": json_instruction},
                     {
                         "role": "user",
                         "content": [
-                            {"type": "input_text", "text": prompt},
-                            {"type": "input_text", "text": "Please respond with JSON only."},
+                            {"type": "text", "text": prompt},
+                            {"type": "text", "text": "Please respond with JSON only."},
                             {
-                                "type": "input_image",
-                                "image_url": data_uri,
+                                "type": "image_url",
+                                "image_url": {"url": data_uri},
                             },
                         ],
                     },
                 ],
+                max_tokens=200,
             )
-            collected: list[str] = []
-            outputs = getattr(resp, "output", None) or []
-            for item in outputs:
-                content_list = getattr(item, "content", None)
-                if content_list is None and isinstance(item, dict):
-                    content_list = item.get("content", [])
-                if not content_list:
-                    continue
-                for piece in content_list:
-                    piece_type = getattr(piece, "type", None)
-                    if piece_type is None and isinstance(piece, dict):
-                        piece_type = piece.get("type")
-                    if piece_type != "output_text":
-                        continue
-                    piece_text = getattr(piece, "text", None)
-                    if piece_text is None and isinstance(piece, dict):
-                        piece_text = piece.get("text")
-                    if piece_text:
-                        collected.append(piece_text)
-            return "".join(collected).strip()
+            # OpenAI Chat Completions API 響應格式
+            if resp.choices and len(resp.choices) > 0:
+                message = resp.choices[0].message
+                if hasattr(message, 'content') and message.content:
+                    return message.content.strip()
+            return ""
 
         model_candidates = [config.OPENAI_VISION_MODEL, "gpt-4o-mini"]
 

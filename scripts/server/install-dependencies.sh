@@ -33,16 +33,39 @@ cd "$PROJECT_ROOT/admin-backend"
 # Check if virtual environment exists
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
-    python3 -m venv venv
+    python3 -m venv venv || {
+        echo "❌ Failed to create virtual environment"
+        echo "   Please ensure python3 is installed: sudo apt install python3 python3-venv"
+        exit 1
+    }
+    echo "✅ Virtual environment created"
+else
+    echo "✅ Virtual environment already exists"
 fi
 
 # Activate virtual environment
-source venv/bin/activate
+if [ -f "venv/bin/activate" ]; then
+    source venv/bin/activate
+    echo "✅ Virtual environment activated"
+else
+    echo "❌ Virtual environment activation script not found"
+    echo "   Recreating virtual environment..."
+    rm -rf venv
+    python3 -m venv venv
+    source venv/bin/activate
+fi
 
 # Install Python packages
 echo "Installing Python packages..."
 pip install --upgrade pip
 pip install -r requirements.txt
+
+# Install additional dependencies for group_ai_service
+echo "Installing group_ai_service dependencies..."
+cd "$PROJECT_ROOT"
+if [ -f "requirements.txt" ]; then
+    pip install -r requirements.txt
+fi
 
 # Install Gunicorn if not present
 if ! command -v gunicorn &> /dev/null; then

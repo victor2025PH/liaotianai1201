@@ -290,8 +290,10 @@ async def test_api_key(
             try:
                 import openai
                 client = openai.OpenAI(api_key=request.api_key)
-                # 简单的测试：列出模型
-                client.models.list(limit=1)
+                # 简单的测试：列出模型（不使用 limit 参数，因为某些版本不支持）
+                models = client.models.list()
+                # 尝试获取第一个模型来验证
+                list(models)[0] if models else None
                 is_valid = True
                 message = "OpenAI API Key 有效"
             except Exception as e:
@@ -303,9 +305,14 @@ async def test_api_key(
                 import google.generativeai as genai
                 genai.configure(api_key=request.api_key)
                 # 简单的测试：列出模型
-                list(genai.list_models())
+                models = genai.list_models()
+                # 尝试获取第一个模型来验证
+                list(models)[0] if models else None
                 is_valid = True
                 message = "Gemini API Key 有效"
+            except ImportError as e:
+                is_valid = False
+                message = f"Gemini API Key 无效: 缺少依赖包 'google-generativeai'，请运行: pip install google-generativeai"
             except Exception as e:
                 is_valid = False
                 message = f"Gemini API Key 无效: {str(e)}"
@@ -313,7 +320,7 @@ async def test_api_key(
         elif request.provider == "grok":
             try:
                 import requests
-                # Grok API 测试（需要根据实际API调整）
+                # Grok API 测试（使用 xAI 的 API）
                 response = requests.get(
                     "https://api.x.ai/v1/models",
                     headers={"Authorization": f"Bearer {request.api_key}"},
@@ -324,7 +331,10 @@ async def test_api_key(
                     message = "Grok API Key 有效"
                 else:
                     is_valid = False
-                    message = f"Grok API Key 无效: {response.status_code}"
+                    message = f"Grok API Key 无效: HTTP {response.status_code}"
+            except ImportError as e:
+                is_valid = False
+                message = f"Grok API Key 无效: 缺少依赖包 'requests'，请运行: pip install requests"
             except Exception as e:
                 is_valid = False
                 message = f"Grok API Key 无效: {str(e)}"

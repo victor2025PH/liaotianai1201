@@ -226,8 +226,8 @@ async def switch_ai_provider(
 
 @router.post("/update-key", status_code=status.HTTP_200_OK)
 async def update_api_key(
-    provider: str,
-    api_key: str,
+    provider: str = Query(..., description="AI提供商: openai/gemini/grok"),
+    api_key: str = Query(..., description="API Key"),
     current_user: Optional[User] = Depends(get_current_active_user),
     db: Session = Depends(get_db_session)
 ):

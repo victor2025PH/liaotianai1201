@@ -541,24 +541,68 @@ async def start_all_accounts_chat(
                 detail="ServiceManager 未初始化"
             )
         
-        # 獲取所有在線賬號
+        # 獲取所有在線賬號（從數據庫和 Worker 節點）
         db_accounts = db.query(GroupAIAccount).filter(
             GroupAIAccount.active == True
         ).all()
         
-        if not db_accounts:
+        # 從 Worker 節點獲取在線賬號列表
+        workers = _get_all_workers()
+        online_account_ids_from_workers = set()
+        for node_id, worker_data in workers.items():
+            if worker_data.get("status") == "online":
+                accounts = worker_data.get("accounts", [])
+                for acc in accounts:
+                    if isinstance(acc, dict):
+                        account_id = acc.get("account_id") or acc.get("id")
+                        if account_id:
+                            online_account_ids_from_workers.add(account_id)
+        
+        # 如果數據庫中有賬號但 Worker 節點中沒有，仍然嘗試啟動
+        # 如果 Worker 節點中有賬號但數據庫中沒有，也包含進來
+        all_account_ids = set()
+        for acc in db_accounts:
+            all_account_ids.add(acc.account_id)
+        all_account_ids.update(online_account_ids_from_workers)
+        
+        if not all_account_ids:
+            # 提供更詳細的錯誤信息
+            total_accounts = db.query(GroupAIAccount).count()
+            active_accounts = db.query(GroupAIAccount).filter(GroupAIAccount.active == True).count()
+            online_workers = sum(1 for w in workers.values() if w.get("status") == "online")
+            
             return {
                 "success": False,
-                "message": "沒有找到在線賬號",
+                "message": f"沒有找到在線賬號。數據庫中總共有 {total_accounts} 個賬號，其中 {active_accounts} 個標記為活躍，{online_workers} 個 Worker 節點在線。請確保：1) 賬號已標記為活躍(active=True)，2) Worker 節點正在運行並已同步賬號。",
                 "accounts_started": 0,
-                "accounts_total": 0
+                "accounts_total": 0,
+                "diagnostics": {
+                    "total_accounts_in_db": total_accounts,
+                    "active_accounts_in_db": active_accounts,
+                    "online_workers": online_workers,
+                    "online_accounts_from_workers": len(online_account_ids_from_workers)
+                }
             }
+        
+        # 使用所有找到的賬號 ID，優先使用數據庫中的賬號信息
+        accounts_to_start = []
+        for account_id in all_account_ids:
+            db_account = next((acc for acc in db_accounts if acc.account_id == account_id), None)
+            if db_account:
+                accounts_to_start.append(db_account)
+            else:
+                # 如果數據庫中沒有，創建一個臨時對象（僅用於發送命令）
+                from types import SimpleNamespace
+                temp_account = SimpleNamespace()
+                temp_account.account_id = account_id
+                temp_account.server_id = None  # 不知道服務器ID，發送到所有節點
+                accounts_to_start.append(temp_account)
         
         started_count = 0
         failed_accounts = []
         
         # 先啟動所有賬號
-        for db_account in db_accounts:
+        for db_account in accounts_to_start:
             account_id = db_account.account_id
             try:
                 # 檢查賬號是否已在內存中
@@ -601,9 +645,9 @@ async def start_all_accounts_chat(
         
         return {
             "success": True,
-            "message": f"已啟動 {started_count}/{len(db_accounts)} 個賬號的聊天功能",
+            "message": f"已啟動 {started_count}/{len(accounts_to_start)} 個賬號的聊天功能",
             "accounts_started": started_count,
-            "accounts_total": len(db_accounts),
+            "accounts_total": len(accounts_to_start),
             "failed_accounts": failed_accounts,
             "group_id": group_id
         }

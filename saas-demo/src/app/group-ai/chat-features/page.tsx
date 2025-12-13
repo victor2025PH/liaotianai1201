@@ -739,7 +739,7 @@ export default function ChatFeaturesPage() {
               {/* 當前提供商 */}
               <div className="space-y-2">
                 <Label>當前使用的 AI 提供商</Label>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <Select value={aiProvider.current} onValueChange={switchAIProvider}>
                     <SelectTrigger className="w-[200px]">
                       <SelectValue />
@@ -762,6 +762,42 @@ export default function ChatFeaturesPage() {
                     </Badge>
                   )}
                 </div>
+                {/* 显示当前激活的 Key 信息 */}
+                {(() => {
+                  const currentProviderData = aiProvider.providers.find((p: any) => p.name === aiProvider.current)
+                  const currentKeyId = aiProvider.selectedKeys[aiProvider.current as keyof typeof aiProvider.selectedKeys]
+                  const currentKeyList = aiProvider.keyList[aiProvider.current as keyof typeof aiProvider.keyList]
+                  const activeKey = currentKeyList?.find((k: any) => k.id === currentKeyId || k.is_active)
+                  
+                  if (activeKey) {
+                    return (
+                      <div className="mt-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-primary">當前使用的 Key:</span>
+                          <Badge variant="default" className="gap-1 bg-primary text-primary-foreground">
+                            <span className="w-2 h-2 bg-primary-foreground rounded-full animate-pulse"></span>
+                            {activeKey.key_name}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            ({activeKey.api_key_preview})
+                          </span>
+                          {activeKey.is_valid ? (
+                            <Badge variant="outline" className="gap-1 text-green-600 border-green-600">
+                              <CheckCircle className="h-3 w-3" />
+                              有效
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="gap-1 text-red-600 border-red-600">
+                              <XCircle className="h-3 w-3" />
+                              无效
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
               </div>
 
               <Separator />
@@ -781,9 +817,21 @@ export default function ChatFeaturesPage() {
                 </div>
                 
                 {/* OpenAI */}
-                <div className="space-y-3 p-4 border rounded-lg">
+                <div className={`space-y-3 p-4 border-2 rounded-lg transition-all ${
+                  aiProvider.current === "openai" 
+                    ? "bg-primary/5 border-primary shadow-md" 
+                    : "border-border"
+                }`}>
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="openai-key">OpenAI API Key</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="openai-key">OpenAI API Key</Label>
+                      {aiProvider.current === "openai" && (
+                        <Badge variant="default" className="gap-1 bg-primary text-primary-foreground">
+                          <span className="w-2 h-2 bg-primary-foreground rounded-full animate-pulse"></span>
+                          當前使用
+                        </Badge>
+                      )}
+                    </div>
                     {aiProvider.providers.find((p: any) => p.name === "openai")?.is_valid && (
                       <Badge variant="outline" className="gap-1">
                         <CheckCircle className="h-3 w-3" />
@@ -1058,9 +1106,21 @@ export default function ChatFeaturesPage() {
                 </div>
 
                 {/* Grok */}
-                <div className="space-y-3 p-4 border rounded-lg">
+                <div className={`space-y-3 p-4 border-2 rounded-lg transition-all ${
+                  aiProvider.current === "grok" 
+                    ? "bg-primary/5 border-primary shadow-md" 
+                    : "border-border"
+                }`}>
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="grok-key">xAI Grok API Key</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="grok-key">xAI Grok API Key</Label>
+                      {aiProvider.current === "grok" && (
+                        <Badge variant="default" className="gap-1 bg-primary text-primary-foreground">
+                          <span className="w-2 h-2 bg-primary-foreground rounded-full animate-pulse"></span>
+                          當前使用
+                        </Badge>
+                      )}
+                    </div>
                     {aiProvider.providers.find((p: any) => p.name === "grok")?.is_valid && (
                       <Badge variant="outline" className="gap-1">
                         <CheckCircle className="h-3 w-3" />

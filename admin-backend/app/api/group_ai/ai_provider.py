@@ -78,69 +78,126 @@ class AIProviderUsageStats(BaseModel):
 
 def _load_ai_provider_config(db: Session) -> Dict[str, Any]:
     """从数据库加载 AI Provider 配置"""
-    # 加载全局设置
-    settings = db.query(AIProviderSettings).filter(AIProviderSettings.id == "singleton").first()
-    if not settings:
-        # 创建默认设置
-        settings = AIProviderSettings(
-            id="singleton",
-            current_provider="openai",
-            auto_failover_enabled=True,
-            failover_providers=["gemini", "grok"]
-        )
-        db.add(settings)
-        db.commit()
-        db.refresh(settings)
-    
-    # 加载各提供商的配置（支持多个 Key，但返回当前激活的 Key）
-    providers = {}
-    for provider_name in ["openai", "gemini", "grok"]:
-        # 获取当前激活的 Key
-        provider_config = db.query(AIProviderConfig).filter(
-            AIProviderConfig.provider_name == provider_name,
-            AIProviderConfig.is_active == True
-        ).first()
+    try:
+        # 加载全局设置
+        settings = db.query(AIProviderSettings).filter(AIProviderSettings.id == "singleton").first()
+        if not settings:
+            # 创建默认设置
+            try:
+                settings = AIProviderSettings(
+                    id="singleton",
+                    current_provider="openai",
+                    auto_failover_enabled=True,
+                    failover_providers=["gemini", "grok"]
+                )
+                db.add(settings)
+                db.commit()
+                db.refresh(settings)
+            except Exception as e:
+                logger.error(f"创建 AIProviderSettings 失败: {e}", exc_info=True)
+                db.rollback()
+                # 如果创建失败，使用默认值
+                settings = type('obj', (object,), {
+                    'id': 'singleton',
+                    'current_provider': 'openai',
+                    'auto_failover_enabled': True,
+                    'failover_providers': ['gemini', 'grok']
+                })()
         
-        if not provider_config:
-            # 如果没有激活的 Key，尝试获取任意一个
-            provider_config = db.query(AIProviderConfig).filter(
-                AIProviderConfig.provider_name == provider_name
-            ).first()
+        # 加载各提供商的配置（支持多个 Key，但返回当前激活的 Key）
+        providers = {}
+        for provider_name in ["openai", "gemini", "grok"]:
+            try:
+                # 获取当前激活的 Key
+                provider_config = db.query(AIProviderConfig).filter(
+                    AIProviderConfig.provider_name == provider_name,
+                    AIProviderConfig.is_active == True
+                ).first()
+                
+                if not provider_config:
+                    # 如果没有激活的 Key，尝试获取任意一个
+                    provider_config = db.query(AIProviderConfig).filter(
+                        AIProviderConfig.provider_name == provider_name
+                    ).first()
+                
+                if not provider_config:
+                    # 创建默认配置
+                    try:
+                        provider_config = AIProviderConfig(
+                            provider_name=provider_name,
+                            key_name="default",
+                            api_key=None,
+                            is_valid=False,
+                            last_tested=None,
+                            is_active=True,
+                            usage_stats={}
+                        )
+                        db.add(provider_config)
+                        db.commit()
+                        db.refresh(provider_config)
+                    except Exception as e:
+                        logger.error(f"创建 AIProviderConfig for {provider_name} 失败: {e}", exc_info=True)
+                        db.rollback()
+                        # 如果创建失败，使用默认值
+                        provider_config = type('obj', (object,), {
+                            'api_key': None,
+                            'is_valid': False,
+                            'last_tested': None,
+                            'usage_stats': {},
+                            'id': None,
+                            'key_name': 'default'
+                        })()
+                
+                providers[provider_name] = {
+                    "api_key": provider_config.api_key if hasattr(provider_config, 'api_key') else None,
+                    "is_valid": provider_config.is_valid if hasattr(provider_config, 'is_valid') else False,
+                    "last_tested": provider_config.last_tested.isoformat() if hasattr(provider_config, 'last_tested') and provider_config.last_tested else None,
+                    "usage_stats": (provider_config.usage_stats or {}) if hasattr(provider_config, 'usage_stats') else {},
+                    "key_id": provider_config.id if hasattr(provider_config, 'id') else None,
+                    "key_name": provider_config.key_name if hasattr(provider_config, 'key_name') else "default"
+                }
+            except Exception as e:
+                logger.error(f"加载 {provider_name} 配置失败: {e}", exc_info=True)
+                # 使用默认值
+                providers[provider_name] = {
+                    "api_key": None,
+                    "is_valid": False,
+                    "last_tested": None,
+                    "usage_stats": {},
+                    "key_id": None,
+                    "key_name": "default"
+                }
         
-        if not provider_config:
-            # 创建默认配置
-            provider_config = AIProviderConfig(
-                provider_name=provider_name,
-                key_name="default",
-                api_key=None,
-                is_valid=False,
-                last_tested=None,
-                is_active=True,
-                usage_stats={}
-            )
-            db.add(provider_config)
-            db.commit()
-            db.refresh(provider_config)
-        
-        providers[provider_name] = {
-            "api_key": provider_config.api_key,
-            "is_valid": provider_config.is_valid,
-            "last_tested": provider_config.last_tested.isoformat() if provider_config.last_tested else None,
-            "usage_stats": provider_config.usage_stats or {},
-            "key_id": provider_config.id,
-            "key_name": provider_config.key_name
+        return {
+            "current_provider": settings.current_provider if hasattr(settings, 'current_provider') else "openai",
+            "providers": providers,
+            "auto_failover_enabled": settings.auto_failover_enabled if hasattr(settings, 'auto_failover_enabled') else True,
+            "failover_providers": (settings.failover_providers or []) if hasattr(settings, 'failover_providers') else [],
+            "usage_stats": {
+                provider_name: providers[provider_name].get("usage_stats", {})
+                for provider_name in ["openai", "gemini", "grok"]
+            }
         }
-    
-    return {
-        "current_provider": settings.current_provider,
-        "providers": providers,
-        "auto_failover_enabled": settings.auto_failover_enabled,
-        "failover_providers": settings.failover_providers or [],
-        "usage_stats": {
-            provider_name: providers[provider_name].get("usage_stats", {})
-            for provider_name in ["openai", "gemini", "grok"]
+    except Exception as e:
+        logger.error(f"加载 AI Provider 配置失败: {e}", exc_info=True)
+        # 返回默认配置，避免 500 错误
+        return {
+            "current_provider": "openai",
+            "providers": {
+                provider_name: {
+                    "api_key": None,
+                    "is_valid": False,
+                    "last_tested": None,
+                    "usage_stats": {},
+                    "key_id": None,
+                    "key_name": "default"
+                }
+                for provider_name in ["openai", "gemini", "grok"]
+            },
+            "auto_failover_enabled": True,
+            "failover_providers": [],
+            "usage_stats": {}
         }
-    }
 
 
 def _save_ai_provider_config(db: Session, config: Dict[str, Any]):
@@ -412,7 +469,11 @@ async def test_api_key(
                 message = "OpenAI API Key 有效"
             except Exception as e:
                 is_valid = False
-                message = f"OpenAI API Key 无效: {str(e)}"
+                error_msg = str(e)
+                if "Invalid API key" in error_msg or "401" in error_msg:
+                    message = "OpenAI API Key 无效: API Key 不正确"
+                else:
+                    message = f"OpenAI API Key 测试失败: {error_msg[:100]}"
         
         elif request.provider == "gemini":
             try:
@@ -429,7 +490,11 @@ async def test_api_key(
                 message = f"Gemini API Key 无效: 缺少依赖包 'google-generativeai'，请运行: pip install google-generativeai"
             except Exception as e:
                 is_valid = False
-                message = f"Gemini API Key 无效: {str(e)}"
+                error_msg = str(e)
+                if "API key not valid" in error_msg or "401" in error_msg:
+                    message = "Gemini API Key 无效: API Key 不正确"
+                else:
+                    message = f"Gemini API Key 测试失败: {error_msg[:100]}"
         
         elif request.provider == "grok":
             try:

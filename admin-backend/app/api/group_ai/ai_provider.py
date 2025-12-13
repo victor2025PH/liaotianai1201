@@ -941,3 +941,113 @@ async def activate_api_key(
         }
     }
 
+
+@router.post("/keys/{key_id}/handle-error", status_code=status.HTTP_200_OK)
+async def handle_key_error(
+    key_id: str,
+    error_message: str = Query(..., description="错误信息"),
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """处理 Key 错误并自动切换到下一个可用的 Key"""
+    try:
+        # 获取出错的 Key
+        error_key = db.query(AIProviderConfig).filter(AIProviderConfig.id == key_id).first()
+        if not error_key:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="API Key 不存在"
+            )
+        
+        provider_name = error_key.provider_name
+        
+        # 标记当前 Key 为无效
+        error_key.is_valid = False
+        error_key.is_active = False
+        db.commit()
+        
+        logger.warning(f"{provider_name} Key {error_key.key_name} (ID: {key_id}) 出错: {error_message}")
+        
+        # 查找下一个可用的 Key
+        next_key = db.query(AIProviderConfig).filter(
+            AIProviderConfig.provider_name == provider_name,
+            AIProviderConfig.id != key_id,
+            AIProviderConfig.is_valid == True
+        ).order_by(AIProviderConfig.created_at.desc()).first()
+        
+        if next_key:
+            # 取消激活同一提供商的其他 Key
+            db.query(AIProviderConfig).filter(
+                AIProviderConfig.provider_name == provider_name,
+                AIProviderConfig.id != next_key.id,
+                AIProviderConfig.is_active == True
+            ).update({"is_active": False})
+            
+            # 激活下一个 Key
+            next_key.is_active = True
+            
+            # 更新全局设置
+            settings = db.query(AIProviderSettings).filter(AIProviderSettings.id == "singleton").first()
+            if settings:
+                if not settings.active_keys or not isinstance(settings.active_keys, dict):
+                    settings.active_keys = {}
+                active_keys_dict = dict(settings.active_keys) if settings.active_keys else {}
+                active_keys_dict[provider_name] = next_key.id
+                settings.active_keys = active_keys_dict
+                settings.updated_at = datetime.now()
+            
+            db.commit()
+            db.refresh(next_key)
+            
+            logger.info(f"已自动切换到 {provider_name} 的下一个 Key: {next_key.key_name} (ID: {next_key.id})")
+            
+            # 如果这是当前提供商，发送更新命令到工作节点
+            config = _load_ai_provider_config(db)
+            if config["current_provider"] == provider_name:
+                command = {
+                    "action": "update_ai_api_key",
+                    "params": {
+                        "provider": provider_name,
+                        "api_key": next_key.api_key
+                    },
+                    "timestamp": datetime.now().isoformat()
+                }
+                workers = _get_all_workers()
+                for node_id in workers:
+                    _add_command(node_id, command)
+            
+            return {
+                "success": True,
+                "message": f"已自动切换到下一个 Key: {next_key.key_name}",
+                "switched_to": {
+                    "id": next_key.id,
+                    "key_name": next_key.key_name,
+                    "provider": provider_name
+                },
+                "error_key": {
+                    "id": key_id,
+                    "key_name": error_key.key_name,
+                    "error": error_message
+                }
+            }
+        else:
+            # 没有可用的 Key，返回错误
+            logger.error(f"{provider_name} 没有可用的备用 Key")
+            return {
+                "success": False,
+                "message": f"{provider_name} 没有可用的备用 Key，请添加新的 Key",
+                "error_key": {
+                    "id": key_id,
+                    "key_name": error_key.key_name,
+                    "error": error_message
+                }
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"处理 Key 错误失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"处理 Key 错误失败: {str(e)}"
+        )
+

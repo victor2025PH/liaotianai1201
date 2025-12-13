@@ -525,21 +525,35 @@ async def test_api_key(
             )
         
         # 从数据库加载配置并更新
-        config = _load_ai_provider_config(db)
-        provider_config = config["providers"].get(request.provider, {})
-        
-        # 如果测试成功，更新配置
-        if is_valid:
-            provider_config["api_key"] = request.api_key
-            provider_config["is_valid"] = True
-            provider_config["last_tested"] = datetime.now().isoformat()
-        else:
-            # 即使测试失败，也更新 last_tested 时间
-            provider_config["is_valid"] = False
-            provider_config["last_tested"] = None
-        
-        # 保存到数据库
-        _save_ai_provider_config(db, config)
+        try:
+            config = _load_ai_provider_config(db)
+            # 确保 config 有正确的结构
+            if "providers" not in config:
+                config["providers"] = {}
+            if request.provider not in config["providers"]:
+                config["providers"][request.provider] = {}
+            
+            provider_config = config["providers"].get(request.provider, {})
+            
+            # 如果测试成功，更新配置
+            if is_valid:
+                provider_config["api_key"] = request.api_key
+                provider_config["is_valid"] = True
+                provider_config["last_tested"] = datetime.now().isoformat()
+            else:
+                # 即使测试失败，也更新 last_tested 时间
+                provider_config["is_valid"] = False
+                provider_config["last_tested"] = None
+            
+            # 保存到数据库
+            try:
+                _save_ai_provider_config(db, config)
+            except Exception as save_error:
+                logger.error(f"保存配置失败: {save_error}", exc_info=True)
+                # 即使保存失败，也返回测试结果
+        except Exception as config_error:
+            logger.error(f"加载或保存配置失败: {config_error}", exc_info=True)
+            # 即使配置操作失败，也返回测试结果（不抛出异常）
         
         return TestAPIKeyResponse(
             success=is_valid,

@@ -707,13 +707,17 @@ async def add_api_key(
             db.refresh(new_key)
             
             # 更新全局设置中的激活 Key
-            settings = db.query(AIProviderSettings).filter(AIProviderSettings.id == "singleton").first()
-            if settings:
-                if not hasattr(settings, 'active_keys') or settings.active_keys is None:
-                    settings.active_keys = {}
-                settings.active_keys[provider] = new_key.id
-                db.commit()
-                logger.info(f"已自动激活 {provider} 的第一个 Key: {key_name}")
+            try:
+                settings = db.query(AIProviderSettings).filter(AIProviderSettings.id == "singleton").first()
+                if settings:
+                    if not settings.active_keys:
+                        settings.active_keys = {}
+                    settings.active_keys[provider] = new_key.id
+                    db.commit()
+                    logger.info(f"已自动激活 {provider} 的第一个 Key: {key_name}")
+            except Exception as settings_error:
+                logger.warning(f"更新 active_keys 失败: {settings_error}，但 Key 已添加成功", exc_info=True)
+                # 即使更新 active_keys 失败，也不影响 Key 的添加
         
         return {
             "success": True,

@@ -67,6 +67,8 @@ export default function ChatFeaturesPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("settings")
+  const [failedAccountsDialogOpen, setFailedAccountsDialogOpen] = useState(false)
+  const [failedAccountsList, setFailedAccountsList] = useState<Array<{account_id: string, error: string}>>([])
   
   // 設置狀態
   const [settings, setSettings] = useState({
@@ -1558,6 +1560,41 @@ export default function ChatFeaturesPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* 失败账号详情对话框 */}
+      <AlertDialog open={failedAccountsDialogOpen} onOpenChange={setFailedAccountsDialogOpen}>
+        <AlertDialogContent className="max-w-2xl max-h-[80vh]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              部分賬號啟動失敗
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              以下 {failedAccountsList.length} 個賬號啟動失敗，請查看詳細錯誤信息：
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ScrollArea className="max-h-[50vh] pr-4">
+            <div className="space-y-3">
+              {failedAccountsList.map((item, index) => (
+                <div key={index} className="p-3 border rounded-lg bg-destructive/5">
+                  <div className="flex items-start gap-2">
+                    <XCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm break-all">{item.account_id}</p>
+                      <p className="text-sm text-muted-foreground mt-1 break-all">{item.error}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setFailedAccountsDialogOpen(false)}>
+              關閉
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

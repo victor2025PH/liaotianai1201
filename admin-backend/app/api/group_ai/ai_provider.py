@@ -789,13 +789,16 @@ async def add_api_key(
         return {
             "success": True,
             "message": f"已添加 {provider} 的 Key: {key_name}",
+            "test_result": test_message,
+            "is_valid": is_valid,
             "key": {
             "id": new_key.id,
             "provider": new_key.provider_name,
             "key_name": new_key.key_name,
             "api_key_preview": _get_api_key_preview(new_key.api_key),
             "is_valid": new_key.is_valid,
-            "is_active": new_key.is_active
+            "is_active": new_key.is_active,
+            "last_tested": new_key.last_tested.isoformat() if new_key.last_tested else None
         }
     }
     except HTTPException:

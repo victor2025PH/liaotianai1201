@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Optional
 import uuid
-from sqlalchemy import Column, String, Integer, Boolean, Float, JSON, DateTime, BigInteger, Text
+from sqlalchemy import Column, String, Integer, Boolean, Float, JSON, DateTime, BigInteger, Text, UniqueConstraint
 from sqlalchemy.sql import func
 
 # 使用统一的 Base（从 app.db 导入）
@@ -254,8 +254,9 @@ class AIProviderConfig(Base):
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
     
-    # 唯一约束：同一提供商的同一名称只能有一个
+    # 唯一约束：同一提供商的同一名称只能有一个（允许同一提供商有多个不同名称的 Key）
     __table_args__ = (
+        UniqueConstraint('provider_name', 'key_name', name='_provider_key_name_uc'),
         {'sqlite_autoincrement': True},
     )
 

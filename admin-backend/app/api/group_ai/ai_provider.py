@@ -116,7 +116,9 @@ def _load_ai_provider_config(db: Session) -> Dict[str, Any]:
                 # 获取当前激活的 Key
                 active_key = None
                 if hasattr(settings, 'active_keys') and settings.active_keys:
-                    active_key_id = settings.active_keys.get(provider_name)
+                    # active_keys 是 JSON 字段，可能是 dict 或 None
+                    active_keys_dict = settings.active_keys if isinstance(settings.active_keys, dict) else {}
+                    active_key_id = active_keys_dict.get(provider_name) if active_keys_dict else None
                     if active_key_id:
                         active_key = db.query(AIProviderConfig).filter(
                             AIProviderConfig.id == active_key_id
@@ -711,9 +713,13 @@ async def add_api_key(
             try:
                 settings = db.query(AIProviderSettings).filter(AIProviderSettings.id == "singleton").first()
                 if settings:
-                    if not settings.active_keys:
+                    # 确保 active_keys 是字典类型
+                    if not settings.active_keys or not isinstance(settings.active_keys, dict):
                         settings.active_keys = {}
-                    settings.active_keys[provider] = new_key.id
+                    # 更新激活的 Key ID
+                    active_keys_dict = dict(settings.active_keys) if settings.active_keys else {}
+                    active_keys_dict[provider] = new_key.id
+                    settings.active_keys = active_keys_dict
                     db.commit()
                     logger.info(f"已自动激活 {provider} 的第一个 Key: {key_name}")
             except Exception as settings_error:

@@ -113,7 +113,7 @@ def _load_ai_provider_config(db: Session) -> Dict[str, Any]:
                     AIProviderConfig.provider_name == provider_name
                 ).order_by(AIProviderConfig.created_at.desc()).all()
                 
-                # 获取当前激活的 Key
+                # 获取当前激活的 Key（优先使用 active_keys 中的设置）
                 active_key = None
                 if hasattr(settings, 'active_keys') and settings.active_keys:
                     # active_keys 是 JSON 字段，可能是 dict 或 None
@@ -131,9 +131,25 @@ def _load_ai_provider_config(db: Session) -> Dict[str, Any]:
                         AIProviderConfig.is_active == True
                     ).first()
                 
-                # 如果还没有，使用第一个 Key
+                # 如果还没有，使用第一个有效的 Key
                 if not active_key and all_keys:
-                    active_key = all_keys[0]
+                    # 优先选择有效的 Key
+                    valid_key = next((k for k in all_keys if k.is_valid), None)
+                    active_key = valid_key if valid_key else all_keys[0]
+                
+                # 确保只有一个 Key 是激活的（修复多个 Key 同时激活的问题）
+                if active_key:
+                    # 取消激活同一提供商的其他 Key
+                    db.query(AIProviderConfig).filter(
+                        AIProviderConfig.provider_name == provider_name,
+                        AIProviderConfig.id != active_key.id,
+                        AIProviderConfig.is_active == True
+                    ).update({"is_active": False})
+                    # 确保当前 Key 是激活的
+                    if not active_key.is_active:
+                        active_key.is_active = True
+                    db.commit()
+                    db.refresh(active_key)
                 
                 # 构建 key 列表
                 keys_list = []
@@ -878,6 +894,19 @@ async def activate_api_key(
     
     # 激活当前 Key
     key.is_active = True
+    
+    # 更新全局设置中的 active_keys
+    settings = db.query(AIProviderSettings).filter(AIProviderSettings.id == "singleton").first()
+    if settings:
+        # 确保 active_keys 是字典类型
+        if not settings.active_keys or not isinstance(settings.active_keys, dict):
+            settings.active_keys = {}
+        # 更新激活的 Key ID
+        active_keys_dict = dict(settings.active_keys) if settings.active_keys else {}
+        active_keys_dict[key.provider_name] = key_id
+        settings.active_keys = active_keys_dict
+        settings.updated_at = datetime.now()
+    
     db.commit()
     db.refresh(key)
     

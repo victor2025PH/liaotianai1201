@@ -798,29 +798,52 @@ export default function ChatFeaturesPage() {
                       <Label className="text-sm text-muted-foreground">已保存的 Key</Label>
                       <div className="space-y-2">
                         {aiProvider.keyList.openai.map((key: any) => (
-                          <div key={key.id} className="flex items-center gap-2 p-2 bg-muted rounded">
+                          <div 
+                            key={key.id} 
+                            className={`flex items-center gap-2 p-2 rounded border-2 transition-all ${
+                              key.is_active 
+                                ? "bg-primary/10 border-primary shadow-md" 
+                                : "bg-muted border-transparent"
+                            }`}
+                          >
                             <Select
-                              value={aiProvider.selectedKeys.openai}
+                              value={aiProvider.selectedKeys.openai || ""}
                               onValueChange={(value) => {
-                                if (value === key.id) {
-                                  activateAPIKey(key.id)
-                                }
+                                activateAPIKey(value)
                               }}
                             >
-                              <SelectTrigger className="flex-1">
+                              <SelectTrigger className={`flex-1 ${key.is_active ? "font-semibold" : ""}`}>
                                 <SelectValue>
-                                  {key.key_name} {key.is_active && "(当前使用)"}
+                                  <span className="flex items-center gap-2">
+                                    {key.is_active && (
+                                      <span className="inline-flex items-center gap-1 text-primary font-bold">
+                                        <span className="w-2 h-2 bg-primary rounded-full animate-pulse"></span>
+                                        当前使用
+                                      </span>
+                                    )}
+                                    <span className={key.is_active ? "text-primary" : ""}>
+                                      {key.key_name}
+                                    </span>
+                                  </span>
                                 </SelectValue>
                               </SelectTrigger>
                               <SelectContent>
                                 {aiProvider.keyList.openai.map((k: any) => (
                                   <SelectItem key={k.id} value={k.id}>
-                                    {k.key_name} {k.is_active && "(当前使用)"}
+                                    <span className="flex items-center gap-2">
+                                      {k.is_active && (
+                                        <span className="text-primary font-bold">● 当前使用</span>
+                                      )}
+                                      {k.key_name}
+                                    </span>
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                            <Badge variant={key.is_valid ? "default" : "secondary"}>
+                            <Badge 
+                              variant={key.is_valid ? (key.is_active ? "default" : "outline") : "destructive"}
+                              className={key.is_active ? "ring-2 ring-primary" : ""}
+                            >
                               {key.is_valid ? "有效" : "无效"}
                             </Badge>
                             <Button
@@ -914,29 +937,52 @@ export default function ChatFeaturesPage() {
                       <Label className="text-sm text-muted-foreground">已保存的 Key</Label>
                       <div className="space-y-2">
                         {aiProvider.keyList.gemini.map((key: any) => (
-                          <div key={key.id} className="flex items-center gap-2 p-2 bg-muted rounded">
+                          <div 
+                            key={key.id} 
+                            className={`flex items-center gap-2 p-2 rounded border-2 transition-all ${
+                              key.is_active 
+                                ? "bg-primary/10 border-primary shadow-md" 
+                                : "bg-muted border-transparent"
+                            }`}
+                          >
                             <Select
-                              value={aiProvider.selectedKeys.gemini}
+                              value={aiProvider.selectedKeys.gemini || ""}
                               onValueChange={(value) => {
-                                if (value === key.id) {
-                                  activateAPIKey(key.id)
-                                }
+                                activateAPIKey(value)
                               }}
                             >
-                              <SelectTrigger className="flex-1">
+                              <SelectTrigger className={`flex-1 ${key.is_active ? "font-semibold" : ""}`}>
                                 <SelectValue>
-                                  {key.key_name} {key.is_active && "(当前使用)"}
+                                  <span className="flex items-center gap-2">
+                                    {key.is_active && (
+                                      <span className="inline-flex items-center gap-1 text-primary font-bold">
+                                        <span className="w-2 h-2 bg-primary rounded-full animate-pulse"></span>
+                                        当前使用
+                                      </span>
+                                    )}
+                                    <span className={key.is_active ? "text-primary" : ""}>
+                                      {key.key_name}
+                                    </span>
+                                  </span>
                                 </SelectValue>
                               </SelectTrigger>
                               <SelectContent>
                                 {aiProvider.keyList.gemini.map((k: any) => (
                                   <SelectItem key={k.id} value={k.id}>
-                                    {k.key_name} {k.is_active && "(当前使用)"}
+                                    <span className="flex items-center gap-2">
+                                      {k.is_active && (
+                                        <span className="text-primary font-bold">● 当前使用</span>
+                                      )}
+                                      {k.key_name}
+                                    </span>
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                            <Badge variant={key.is_valid ? "default" : "secondary"}>
+                            <Badge 
+                              variant={key.is_valid ? (key.is_active ? "default" : "outline") : "destructive"}
+                              className={key.is_active ? "ring-2 ring-primary" : ""}
+                            >
                               {key.is_valid ? "有效" : "无效"}
                             </Badge>
                             <Button
@@ -1029,29 +1075,52 @@ export default function ChatFeaturesPage() {
                       <Label className="text-sm text-muted-foreground">已保存的 Key</Label>
                       <div className="space-y-2">
                         {aiProvider.keyList.grok.map((key: any) => (
-                          <div key={key.id} className="flex items-center gap-2 p-2 bg-muted rounded">
+                          <div 
+                            key={key.id} 
+                            className={`flex items-center gap-2 p-2 rounded border-2 transition-all ${
+                              key.is_active 
+                                ? "bg-primary/10 border-primary shadow-md" 
+                                : "bg-muted border-transparent"
+                            }`}
+                          >
                             <Select
-                              value={aiProvider.selectedKeys.grok}
+                              value={aiProvider.selectedKeys.grok || ""}
                               onValueChange={(value) => {
-                                if (value === key.id) {
-                                  activateAPIKey(key.id)
-                                }
+                                activateAPIKey(value)
                               }}
                             >
-                              <SelectTrigger className="flex-1">
+                              <SelectTrigger className={`flex-1 ${key.is_active ? "font-semibold" : ""}`}>
                                 <SelectValue>
-                                  {key.key_name} {key.is_active && "(当前使用)"}
+                                  <span className="flex items-center gap-2">
+                                    {key.is_active && (
+                                      <span className="inline-flex items-center gap-1 text-primary font-bold">
+                                        <span className="w-2 h-2 bg-primary rounded-full animate-pulse"></span>
+                                        当前使用
+                                      </span>
+                                    )}
+                                    <span className={key.is_active ? "text-primary" : ""}>
+                                      {key.key_name}
+                                    </span>
+                                  </span>
                                 </SelectValue>
                               </SelectTrigger>
                               <SelectContent>
                                 {aiProvider.keyList.grok.map((k: any) => (
                                   <SelectItem key={k.id} value={k.id}>
-                                    {k.key_name} {k.is_active && "(当前使用)"}
+                                    <span className="flex items-center gap-2">
+                                      {k.is_active && (
+                                        <span className="text-primary font-bold">● 当前使用</span>
+                                      )}
+                                      {k.key_name}
+                                    </span>
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                            <Badge variant={key.is_valid ? "default" : "secondary"}>
+                            <Badge 
+                              variant={key.is_valid ? (key.is_active ? "default" : "outline") : "destructive"}
+                              className={key.is_active ? "ring-2 ring-primary" : ""}
+                            >
                               {key.is_valid ? "有效" : "无效"}
                             </Badge>
                             <Button

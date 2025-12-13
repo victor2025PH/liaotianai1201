@@ -16,17 +16,18 @@ jobs:
 
       - name: Deploy to Server
         uses: appleboy/ssh-action@v1.2.0
+        continue-on-error: false
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          timeout: 180s
+          timeout: 300s
           command_timeout: 55m
           script_stop: true
           debug: true
           use_insecure_cipher: false
-          cipher: aes128-ctr,aes192-ctr,aes256-ctr,aes128-gcm@openssh.com,aes256-gcm@openssh.com
+          cipher: aes128-ctr,aes192-ctr,aes256-ctr,aes128-gcm@openssh.com,aes256-gcm@openssh.com,chacha20-poly1305@openssh.com
           key_path: ""
           fingerprint: ""
           proxy_host: ""
@@ -36,6 +37,8 @@ jobs:
           proxy_key: ""
           proxy_timeout: 30s
           envs: GITHUB_REPO=${{ github.repository }},SERVER_HOST=${{ secrets.SERVER_HOST }}
+          sync: false
+          request_pty: false
           script: |
             # 先拉取最新代码，然后执行部署脚本
             PROJECT_DIR="/home/ubuntu/telegram-ai-system"
@@ -69,15 +72,30 @@ jobs:
             echo "最新提交: $(git log -1 --oneline 2>/dev/null || echo 'unknown')"
             echo ""
             
-            # 拉取最新代码
+            # 拉取最新代码（带重试）
             echo "拉取最新代码..."
-            if ! timeout 5m git fetch origin main; then
-              echo "⚠️  Git fetch 失败，尝试重新设置远程仓库..."
-              git remote set-url origin "https://github.com/$GITHUB_REPO.git" || true
-              timeout 5m git fetch origin main || {
-                echo "❌ Git fetch 失败"
-                exit 1
-              }
+            MAX_FETCH_RETRIES=3
+            FETCH_RETRY_COUNT=0
+            FETCH_SUCCESS=false
+            
+            while [ $FETCH_RETRY_COUNT -lt $MAX_FETCH_RETRIES ]; do
+              if timeout 5m git fetch origin main; then
+                FETCH_SUCCESS=true
+                break
+              else
+                FETCH_RETRY_COUNT=$((FETCH_RETRY_COUNT + 1))
+                if [ $FETCH_RETRY_COUNT -lt $MAX_FETCH_RETRIES ]; then
+                  echo "⚠️  Git fetch 失败，重试 $FETCH_RETRY_COUNT/$MAX_FETCH_RETRIES..."
+                  sleep 5
+                  # 尝试重新设置远程仓库
+                  git remote set-url origin "https://github.com/$GITHUB_REPO.git" || true
+                fi
+              fi
+            done
+            
+            if [ "$FETCH_SUCCESS" != "true" ]; then
+              echo "❌ Git fetch 失败（已重试 $MAX_FETCH_RETRIES 次）"
+              exit 1
             fi
             
             if ! timeout 1m git reset --hard origin/main; then

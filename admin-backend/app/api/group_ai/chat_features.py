@@ -625,13 +625,24 @@ async def start_all_accounts_chat(
                 }
                 
                 # 如果賬號已分配到服務器，發送到對應節點
-                if db_account.server_id:
-                    _add_command(db_account.server_id, chat_command)
+                server_id = getattr(db_account, 'server_id', None)
+                if server_id:
+                    _add_command(server_id, chat_command)
+                    logger.info(f"發送啟動聊天命令到節點 {server_id} (賬號: {account_id})")
                 else:
-                    # 發送到所有節點（兼容舊邏輯）
-                    workers = _get_all_workers()
-                    for nid in workers:
-                        _add_command(nid, chat_command)
+                    # 發送到所有在線節點
+                    online_workers = {nid: data for nid, data in workers.items() if data.get("status") == "online"}
+                    if online_workers:
+                        for nid in online_workers:
+                            _add_command(nid, chat_command)
+                        logger.info(f"發送啟動聊天命令到所有在線節點 (共 {len(online_workers)} 個) (賬號: {account_id})")
+                    else:
+                        logger.warning(f"沒有在線的 Worker 節點，無法發送啟動聊天命令 (賬號: {account_id})")
+                        failed_accounts.append({
+                            "account_id": account_id,
+                            "error": "沒有在線的 Worker 節點"
+                        })
+                        continue
                 
                 started_count += 1
                 logger.info(f"已啟動賬號 {account_id} 的聊天功能")

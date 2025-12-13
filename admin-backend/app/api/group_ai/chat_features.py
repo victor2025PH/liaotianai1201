@@ -667,8 +667,18 @@ async def start_all_accounts_chat(
                 
                 # 發送啟動聊天命令
                 if server_id:
-                    _add_command(server_id, chat_command)
-                    logger.info(f"發送啟動聊天命令到節點 {server_id} (賬號: {account_id})")
+                    # 檢查目標節點是否在線
+                    target_worker = workers.get(server_id)
+                    if target_worker and target_worker.get("status") == "online":
+                        _add_command(server_id, chat_command)
+                        logger.info(f"發送啟動聊天命令到節點 {server_id} (賬號: {account_id})")
+                    else:
+                        logger.warning(f"目標節點 {server_id} 不在線，無法發送啟動聊天命令 (賬號: {account_id})")
+                        failed_accounts.append({
+                            "account_id": account_id,
+                            "error": f"目標節點 {server_id} 不在線（請檢查 Worker 節點是否運行並能連接到服務器 https://aikz.usdt2026.cc）"
+                        })
+                        continue
                 else:
                     # 發送到所有在線節點
                     online_workers = {nid: data for nid, data in workers.items() if data.get("status") == "online"}
@@ -680,7 +690,7 @@ async def start_all_accounts_chat(
                         logger.warning(f"沒有在線的 Worker 節點，無法發送啟動聊天命令 (賬號: {account_id})")
                         failed_accounts.append({
                             "account_id": account_id,
-                            "error": "沒有在線的 Worker 節點"
+                            "error": "沒有在線的 Worker 節點（請檢查 Worker 節點是否運行並能連接到服務器 https://aikz.usdt2026.cc）"
                         })
                         continue
                 

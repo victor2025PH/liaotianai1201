@@ -352,29 +352,34 @@ async def switch_ai_provider(
     # 保存到数据库
     _save_ai_provider_config(db, config)
     
-    # 发送命令到所有工作节点
-    command = {
-        "action": "switch_ai_provider",
-        "params": {
-            "provider": request.provider,
-            "api_key": provider_config["api_key"],
-            "auto_failover_enabled": request.auto_failover_enabled,
-            "failover_providers": request.failover_providers
-        },
-        "timestamp": datetime.now().isoformat()
-    }
-    
-    workers = _get_all_workers()
-    for node_id in workers:
-        _add_command(node_id, command)
-    
-    logger.info(f"AI 提供商已切换为: {request.provider}")
+    # 发送命令到所有工作节点（只有在有 API Key 的情况下才发送）
+    has_api_key = bool(provider_config.get("api_key"))
+    if has_api_key:
+        command = {
+            "action": "switch_ai_provider",
+            "params": {
+                "provider": request.provider,
+                "api_key": provider_config["api_key"],
+                "auto_failover_enabled": request.auto_failover_enabled,
+                "failover_providers": request.failover_providers
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        workers = _get_all_workers()
+        for node_id in workers:
+            _add_command(node_id, command)
+        
+        logger.info(f"AI 提供商已切换为: {request.provider}，并已通知工作节点")
+    else:
+        logger.info(f"AI 提供商已切换为: {request.provider}，但未配置 API Key，未通知工作节点")
     
     return {
         "success": True,
-        "message": f"已切换到 {request.provider}",
+        "message": f"已切换到 {request.provider}" + ("" if has_api_key else "（注意：该提供商未配置 API Key）"),
         "provider": request.provider,
-        "api_key_preview": _get_api_key_preview(provider_config.get("api_key"))
+        "api_key_preview": _get_api_key_preview(provider_config.get("api_key")),
+        "api_key_configured": has_api_key
     }
 
 

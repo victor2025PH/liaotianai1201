@@ -339,12 +339,10 @@ async def switch_ai_provider(
         provider_config["is_valid"] = False  # 需要重新测试
         provider_config["last_tested"] = None
     
-    # 如果该提供商没有 API Key，返回错误
+    # 如果该提供商没有 API Key，给出警告但不阻止切换（允许先切换配置，稍后添加 Key）
     if not provider_config.get("api_key"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"提供商 {request.provider} 的 API Key 未配置"
-        )
+        logger.warning(f"切换到的提供商 {request.provider} 没有配置 API Key，但允许切换配置")
+        # 不抛出错误，允许切换（用户可以在切换后添加 API Key）
     
     # 切换提供商
     config["current_provider"] = request.provider

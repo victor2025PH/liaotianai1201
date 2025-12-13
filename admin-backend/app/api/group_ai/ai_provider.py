@@ -686,12 +686,72 @@ async def add_api_key(
                 detail=f"Key 名称 '{key_name}' 已存在，请使用不同的名称或先删除旧 Key"
             )
         
-        # 创建新 Key（默认不激活）
+        # 自动测试 API Key 的有效性
+        is_valid = False
+        last_tested = datetime.now()
+        test_message = ""
+        
+        try:
+            if provider == "openai":
+                try:
+                    import openai
+                    client = openai.OpenAI(api_key=api_key.strip())
+                    models = client.models.list()
+                    list(models)[0] if models else None
+                    is_valid = True
+                    test_message = "OpenAI API Key 有效"
+                except Exception as e:
+                    error_msg = str(e)
+                    if "Invalid API key" in error_msg or "401" in error_msg:
+                        test_message = "OpenAI API Key 无效: API Key 不正确"
+                    else:
+                        test_message = f"OpenAI API Key 测试失败: {error_msg[:100]}"
+            
+            elif provider == "gemini":
+                try:
+                    import google.generativeai as genai
+                    genai.configure(api_key=api_key.strip())
+                    # 测试：列出模型
+                    list(genai.list_models())
+                    is_valid = True
+                    test_message = "Gemini API Key 有效"
+                except Exception as e:
+                    error_msg = str(e)
+                    if "API_KEY_INVALID" in error_msg or "401" in error_msg or "403" in error_msg:
+                        test_message = "Gemini API Key 无效: API Key 不正确"
+                    else:
+                        test_message = f"Gemini API Key 测试失败: {error_msg[:100]}"
+            
+            elif provider == "grok":
+                try:
+                    import requests
+                    headers = {
+                        "Authorization": f"Bearer {api_key.strip()}",
+                        "Content-Type": "application/json"
+                    }
+                    response = requests.get(
+                        "https://api.x.ai/v1/models",
+                        headers=headers,
+                        timeout=10
+                    )
+                    if response.status_code == 200:
+                        is_valid = True
+                        test_message = "Grok API Key 有效"
+                    else:
+                        test_message = f"Grok API Key 无效: HTTP {response.status_code}"
+                except Exception as e:
+                    test_message = f"Grok API Key 测试失败: {str(e)[:100]}"
+        except Exception as e:
+            logger.warning(f"测试 {provider} API Key 时出错: {e}", exc_info=True)
+            test_message = f"测试失败: {str(e)[:100]}"
+        
+        # 创建新 Key（自动测试有效性）
         new_key = AIProviderConfig(
             provider_name=provider,
             key_name=key_name,
             api_key=api_key.strip(),
-            is_valid=False,
+            is_valid=is_valid,
+            last_tested=last_tested if is_valid else None,  # 只有有效时才记录测试时间
             is_active=False,  # 新添加的 Key 默认不激活
             usage_stats={}
         )
@@ -699,7 +759,7 @@ async def add_api_key(
         db.commit()
         db.refresh(new_key)
         
-        logger.info(f"已添加 {provider} 的新 Key: {key_name} (ID: {new_key.id})")
+        logger.info(f"已添加 {provider} 的新 Key: {key_name} (ID: {new_key.id}), 有效性: {is_valid}, 测试结果: {test_message}")
         
         # 如果是第一个 Key，自动激活
         config = _load_ai_provider_config(db)

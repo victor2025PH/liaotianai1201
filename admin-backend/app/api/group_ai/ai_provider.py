@@ -727,6 +727,16 @@ async def add_api_key(
             "is_active": new_key.is_active
         }
     }
+    except HTTPException:
+        # 重新抛出 HTTPException
+        raise
+    except Exception as e:
+        logger.error(f"添加 API Key 失败: {e}", exc_info=True)
+        db.rollback()  # 回滚事务
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"添加 API Key 失败: {str(e)[:200]}"
+        )
 
 
 @router.delete("/keys/{key_id}", status_code=status.HTTP_200_OK)

@@ -665,8 +665,7 @@ async def start_all_accounts_chat(
                     "timestamp": datetime.now().isoformat()
                 }
                 
-                # 如果賬號已分配到服務器，發送到對應節點
-                server_id = getattr(db_account, 'server_id', None)
+                # 發送啟動聊天命令
                 if server_id:
                     _add_command(server_id, chat_command)
                     logger.info(f"發送啟動聊天命令到節點 {server_id} (賬號: {account_id})")

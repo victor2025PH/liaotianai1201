@@ -562,11 +562,17 @@ async def test_api_key(
             tested_at=datetime.now().isoformat()
         )
     
+    except HTTPException:
+        # 重新抛出 HTTPException（如不支持的提供商）
+        raise
     except Exception as e:
-        logger.error(f"测试 API Key 失败: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"测试失败: {str(e)}"
+        logger.error(f"测试 API Key 失败: {e}", exc_info=True)
+        # 返回一个基本的错误响应，而不是抛出 500
+        return TestAPIKeyResponse(
+            success=False,
+            message=f"测试失败: {str(e)[:200]}",  # 限制错误消息长度
+            provider=request.provider if hasattr(request, 'provider') else "unknown",
+            tested_at=datetime.now().isoformat()
         )
 
 

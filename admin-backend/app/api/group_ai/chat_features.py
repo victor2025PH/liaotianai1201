@@ -605,17 +605,58 @@ async def start_all_accounts_chat(
         for db_account in accounts_to_start:
             account_id = db_account.account_id
             try:
-                # 檢查賬號是否已在內存中
-                if account_id not in service_manager.account_manager.accounts:
-                    # 如果不在內存中，嘗試啟動賬號
-                    logger.info(f"賬號 {account_id} 不在內存中，嘗試啟動...")
-                    success = await service_manager.start_account(account_id)
-                    if not success:
-                        failed_accounts.append({
-                            "account_id": account_id,
-                            "error": "啟動賬號失敗"
-                        })
-                        continue
+                server_id = getattr(db_account, 'server_id', None)
+                
+                # 如果賬號已分配到遠程服務器，不需要在本地啟動，直接發送命令
+                if server_id:
+                    logger.info(f"賬號 {account_id} 已分配到節點 {server_id}，跳過本地啟動，直接發送命令")
+                else:
+                    # 檢查賬號是否已在內存中
+                    if account_id not in service_manager.account_manager.accounts:
+                        # 如果不在內存中，嘗試啟動賬號
+                        logger.info(f"賬號 {account_id} 不在內存中，嘗試啟動...")
+                        try:
+                            success = await service_manager.start_account(account_id)
+                            if not success:
+                                # 獲取詳細的錯誤信息
+                                error_details = []
+                                account = service_manager.account_manager.accounts.get(account_id)
+                                
+                                if not account:
+                                    error_details.append("賬號未在 AccountManager 中")
+                                else:
+                                    # 檢查 session 文件是否存在
+                                    from pathlib import Path
+                                    session_path = Path(account.config.session_file)
+                                    if not session_path.exists():
+                                        error_details.append(f"Session 文件不存在: {account.config.session_file}")
+                                    
+                                    # 檢查賬號狀態
+                                    from group_ai_service.models.account import AccountStatusEnum
+                                    if account.status == AccountStatusEnum.ERROR:
+                                        error_details.append("Telegram 連接失敗（請檢查 session 文件是否有效）")
+                                    
+                                    if account.error_count > 0:
+                                        error_details.append(f"已嘗試 {account.error_count} 次啟動")
+                                
+                                error_msg = "啟動賬號失敗"
+                                if error_details:
+                                    error_msg += f": {', '.join(error_details)}"
+                                else:
+                                    error_msg += "（未知原因，請檢查日誌）"
+                                
+                                failed_accounts.append({
+                                    "account_id": account_id,
+                                    "error": error_msg
+                                })
+                                continue
+                        except Exception as e:
+                            logger.error(f"啟動賬號 {account_id} 時發生異常: {e}", exc_info=True)
+                            failed_accounts.append({
+                                "account_id": account_id,
+                                "error": f"啟動賬號時發生異常: {str(e)}"
+                            })
+                            continue
                 
                 # 啟動聊天功能
                 chat_command = {

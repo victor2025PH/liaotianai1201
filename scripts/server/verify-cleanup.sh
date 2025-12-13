@@ -12,17 +12,45 @@ echo ""
 
 ALL_CLEAN=true
 
-# 1. 检查可疑文件
+# 1. 检查可疑文件（强制刷新缓存后检查）
 echo "[1/5] 检查可疑文件..."
+# 强制同步文件系统并刷新缓存
+sync
+ls /data/ >/dev/null 2>&1 || true
+sleep 0.5
+
 SUSPICIOUS_FILES=("/data/MUTA71VL" "/data/CX81yM9aE" "/data/UY")
 FILES_FOUND=0
 
 for file in "${SUSPICIOUS_FILES[@]}"; do
+    # 使用多种方法检查文件是否存在
+    FILE_EXISTS=false
+    
+    # 方法 1: 标准文件检查
     if [ -f "$file" ]; then
+        FILE_EXISTS=true
+    fi
+    
+    # 方法 2: 使用 stat 检查
+    if stat "$file" >/dev/null 2>&1; then
+        FILE_EXISTS=true
+    fi
+    
+    # 方法 3: 使用 test 命令
+    if test -f "$file"; then
+        FILE_EXISTS=true
+    fi
+    
+    if [ "$FILE_EXISTS" = true ]; then
         FILES_FOUND=$((FILES_FOUND+1))
         ALL_CLEAN=false
         echo "  ❌ 发现可疑文件: $file"
-        ls -lh "$file" | awk '{print "    大小: " $5 ", 权限: " $1 ", 修改时间: " $6 " " $7 " " $8}'
+        if ls -lh "$file" >/dev/null 2>&1; then
+            ls -lh "$file" | awk '{print "    大小: " $5 ", 权限: " $1 ", 修改时间: " $6 " " $7 " " $8}'
+            echo "    详细检查: sudo ls -li $file"
+        else
+            echo "    警告: 文件存在但无法读取详细信息"
+        fi
     fi
 done
 

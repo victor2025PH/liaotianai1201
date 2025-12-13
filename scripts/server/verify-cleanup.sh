@@ -3,7 +3,8 @@
 # 验证清理结果脚本
 # ============================================================
 
-set -e
+# 不要使用 set -e，因为我们需要检查文件是否存在（可能返回错误）
+# set -e
 
 echo "=========================================="
 echo "✅ 验证清理结果"
@@ -16,18 +17,22 @@ ALL_CLEAN=true
 echo "[1/5] 检查可疑文件..."
 # 强制同步文件系统并刷新缓存
 sync
+sync
+# 强制重新读取目录（清除缓存）
 ls /data/ >/dev/null 2>&1 || true
-sleep 0.5
+sleep 1
 
 SUSPICIOUS_FILES=("/data/MUTA71VL" "/data/CX81yM9aE" "/data/UY")
+SUSPICIOUS_PATTERNS=("MUTA71VL" "CX81yM9aE" "UY")
 FILES_FOUND=0
 
+# 方法 1: 直接检查文件路径
 for file in "${SUSPICIOUS_FILES[@]}"; do
     # 使用多种方法检查文件是否存在
     FILE_EXISTS=false
     
     # 方法 1: 标准文件检查
-    if [ -f "$file" ]; then
+    if [ -f "$file" ] 2>/dev/null; then
         FILE_EXISTS=true
     fi
     
@@ -37,7 +42,12 @@ for file in "${SUSPICIOUS_FILES[@]}"; do
     fi
     
     # 方法 3: 使用 test 命令
-    if test -f "$file"; then
+    if test -f "$file" 2>/dev/null; then
+        FILE_EXISTS=true
+    fi
+    
+    # 方法 4: 使用 ls 检查
+    if ls "$file" >/dev/null 2>&1; then
         FILE_EXISTS=true
     fi
     
@@ -54,8 +64,68 @@ for file in "${SUSPICIOUS_FILES[@]}"; do
     fi
 done
 
+# 方法 2: 扫描 /data 目录查找可疑文件名
+if [ -d "/data" ]; then
+    for pattern in "${SUSPICIOUS_PATTERNS[@]}"; do
+        FOUND_FILES=$(find /data -maxdepth 1 -type f -name "*${pattern}*" 2>/dev/null || true)
+        if [ -n "$FOUND_FILES" ]; then
+            echo "$FOUND_FILES" | while read found_file; do
+                # 检查是否已经在之前的检查中发现
+                ALREADY_FOUND=false
+                for checked_file in "${SUSPICIOUS_FILES[@]}"; do
+                    if [ "$found_file" = "$checked_file" ]; then
+                        ALREADY_FOUND=true
+                        break
+                    fi
+                done
+                
+                if [ "$ALREADY_FOUND" = false ]; then
+                    FILES_FOUND=$((FILES_FOUND+1))
+                    ALL_CLEAN=false
+                    echo "  ❌ 发现可疑文件（通过目录扫描）: $found_file"
+                    if ls -lh "$found_file" >/dev/null 2>&1; then
+                        ls -lh "$found_file" | awk '{print "    大小: " $5 ", 权限: " $1 ", 修改时间: " $6 " " $7 " " $8}'
+                    fi
+                fi
+            done
+        fi
+    done
+fi
+
+# 方法 3: 直接列出 /data 目录并 grep
+if [ -d "/data" ]; then
+    DATA_FILES=$(ls -1 /data/ 2>/dev/null || true)
+    for pattern in "${SUSPICIOUS_PATTERNS[@]}"; do
+        MATCHED=$(echo "$DATA_FILES" | grep -E "^${pattern}$|${pattern}" || true)
+        if [ -n "$MATCHED" ]; then
+            echo "$MATCHED" | while read matched_name; do
+                matched_file="/data/$matched_name"
+                # 检查是否已经在之前的检查中发现
+                ALREADY_FOUND=false
+                for checked_file in "${SUSPICIOUS_FILES[@]}"; do
+                    if [ "$matched_file" = "$checked_file" ]; then
+                        ALREADY_FOUND=true
+                        break
+                    fi
+                done
+                
+                if [ "$ALREADY_FOUND" = false ] && [ -f "$matched_file" ]; then
+                    FILES_FOUND=$((FILES_FOUND+1))
+                    ALL_CLEAN=false
+                    echo "  ❌ 发现可疑文件（通过目录列表）: $matched_file"
+                    if ls -lh "$matched_file" >/dev/null 2>&1; then
+                        ls -lh "$matched_file" | awk '{print "    大小: " $5 ", 权限: " $1 ", 修改时间: " $6 " " $7 " " $8}'
+                    fi
+                fi
+            done
+        fi
+    done
+fi
+
 if [ "$FILES_FOUND" -eq 0 ]; then
     echo "  ✅ 未发现可疑文件"
+else
+    echo "  ⚠️  共发现 $FILES_FOUND 个可疑文件"
 fi
 echo ""
 

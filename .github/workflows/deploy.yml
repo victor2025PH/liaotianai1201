@@ -39,19 +39,84 @@ jobs:
           script: |
             # 先拉取最新代码，然后执行部署脚本
             PROJECT_DIR="/home/ubuntu/telegram-ai-system"
-            if [ -d "$PROJECT_DIR" ]; then
-              cd "$PROJECT_DIR"
-              timeout 5m git fetch origin main || true
-              timeout 1m git reset --hard origin/main || true
+            GITHUB_REPO="${GITHUB_REPO:-victor2025PH/liaotianai1201}"
+            
+            echo "=========================================="
+            echo "开始部署 - $(date)"
+            echo "=========================================="
+            echo "项目目录: $PROJECT_DIR"
+            echo "GitHub 仓库: $GITHUB_REPO"
+            echo ""
+            
+            # 检查项目目录是否存在
+            if [ ! -d "$PROJECT_DIR" ]; then
+              echo "⚠️  项目目录不存在，正在克隆..."
+              cd /home/ubuntu || exit 1
+              git clone "https://github.com/$GITHUB_REPO.git" telegram-ai-system || {
+                echo "❌ Git clone 失败"
+                exit 1
+              }
             fi
             
-            # 执行部署脚本
-            # 设置环境变量强制前端重新构建（确保新功能被部署）
-            export FORCE_FRONTEND_BUILD=true
-            if [ -f "$PROJECT_DIR/scripts/server/deploy.sh" ]; then
-              chmod +x "$PROJECT_DIR/scripts/server/deploy.sh"
-              bash "$PROJECT_DIR/scripts/server/deploy.sh"
-            else
-              echo "❌ Deploy script not found at $PROJECT_DIR/scripts/server/deploy.sh"
+            # 进入项目目录
+            cd "$PROJECT_DIR" || {
+              echo "❌ 无法进入项目目录: $PROJECT_DIR"
+              exit 1
+            }
+            
+            echo "当前目录: $(pwd)"
+            echo "当前分支: $(git branch --show-current 2>/dev/null || echo 'unknown')"
+            echo "最新提交: $(git log -1 --oneline 2>/dev/null || echo 'unknown')"
+            echo ""
+            
+            # 拉取最新代码
+            echo "拉取最新代码..."
+            if ! timeout 5m git fetch origin main; then
+              echo "⚠️  Git fetch 失败，尝试重新设置远程仓库..."
+              git remote set-url origin "https://github.com/$GITHUB_REPO.git" || true
+              timeout 5m git fetch origin main || {
+                echo "❌ Git fetch 失败"
+                exit 1
+              }
+            fi
+            
+            if ! timeout 1m git reset --hard origin/main; then
+              echo "❌ Git reset 失败"
               exit 1
             fi
+            
+            echo "✅ 代码已更新到最新版本"
+            echo "最新提交: $(git log -1 --oneline)"
+            echo ""
+            
+            # 检查部署脚本是否存在
+            DEPLOY_SCRIPT="$PROJECT_DIR/scripts/server/deploy.sh"
+            echo "检查部署脚本: $DEPLOY_SCRIPT"
+            
+            if [ ! -f "$DEPLOY_SCRIPT" ]; then
+              echo "❌ 部署脚本不存在: $DEPLOY_SCRIPT"
+              echo ""
+              echo "诊断信息:"
+              echo "  项目目录内容:"
+              ls -la "$PROJECT_DIR" | head -20 || echo "  无法列出目录内容"
+              echo ""
+              echo "  scripts 目录:"
+              ls -la "$PROJECT_DIR/scripts" 2>/dev/null || echo "  scripts 目录不存在"
+              echo ""
+              echo "  scripts/server 目录:"
+              ls -la "$PROJECT_DIR/scripts/server" 2>/dev/null || echo "  scripts/server 目录不存在"
+              echo ""
+              exit 1
+            fi
+            
+            echo "✅ 部署脚本存在"
+            echo ""
+            
+            # 执行部署脚本
+            echo "=========================================="
+            echo "执行部署脚本"
+            echo "=========================================="
+            # 设置环境变量强制前端重新构建（确保新功能被部署）
+            export FORCE_FRONTEND_BUILD=true
+            chmod +x "$DEPLOY_SCRIPT"
+            bash "$DEPLOY_SCRIPT"

@@ -304,15 +304,33 @@ export default function ChatFeaturesPage() {
       const res = await fetchWithAuth(`${API_BASE}/group-ai/ai-provider/providers`)
       if (res.ok) {
         const data = await res.json()
+        
+        // 从后端返回的数据中提取 key 列表
+        const providersData = data.providers || {}
+        const keyList = {
+          openai: providersData.openai?.keys || [],
+          gemini: providersData.gemini?.keys || [],
+          grok: providersData.grok?.keys || [],
+        }
+        
+        // 提取当前激活的 key ID
+        const selectedKeys = {
+          openai: providersData.openai?.active_key_id || null,
+          gemini: providersData.gemini?.active_key_id || null,
+          grok: providersData.grok?.active_key_id || null,
+        }
+        
         setAiProvider(prev => ({
           ...prev,
           current: data.current_provider || "openai",
-          providers: data.providers || [],
+          providers: Object.values(providersData), // 转换为数组格式，用于兼容旧代码
           apiKeys: {
-            openai: data.providers?.find((p: any) => p.name === "openai")?.api_key_preview || "",
-            gemini: data.providers?.find((p: any) => p.name === "gemini")?.api_key_preview || "",
-            grok: data.providers?.find((p: any) => p.name === "grok")?.api_key_preview || "",
+            openai: providersData.openai?.api_key_preview || "",
+            gemini: providersData.gemini?.api_key_preview || "",
+            grok: providersData.grok?.api_key_preview || "",
           },
+          keyList: keyList, // 更新 key 列表
+          selectedKeys: selectedKeys, // 更新选中的 key
           testing: {
             openai: false,
             gemini: false,
@@ -320,9 +338,6 @@ export default function ChatFeaturesPage() {
           },
           autoFailover: Boolean(data.auto_failover_enabled),
           failoverProviders: data.failover_providers || [],
-          // 保留 keyList 和 selectedKeys（如果已存在）
-          keyList: prev.keyList || { openai: [], gemini: [], grok: [] },
-          selectedKeys: prev.selectedKeys || { openai: "", gemini: "", grok: "" },
         }))
       }
     } catch (error) {

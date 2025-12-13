@@ -104,68 +104,75 @@ def _load_ai_provider_config(db: Session) -> Dict[str, Any]:
                     'failover_providers': ['gemini', 'grok']
                 })()
         
-        # 加载各提供商的配置（支持多个 Key，但返回当前激活的 Key）
+        # 加载各提供商的配置（支持多个 Key）
         providers = {}
         for provider_name in ["openai", "gemini", "grok"]:
             try:
-                # 获取当前激活的 Key
-                provider_config = db.query(AIProviderConfig).filter(
-                    AIProviderConfig.provider_name == provider_name,
-                    AIProviderConfig.is_active == True
-                ).first()
+                # 获取该提供商的所有 Key
+                all_keys = db.query(AIProviderConfig).filter(
+                    AIProviderConfig.provider_name == provider_name
+                ).order_by(AIProviderConfig.created_at.desc()).all()
                 
-                if not provider_config:
-                    # 如果没有激活的 Key，尝试获取任意一个
-                    provider_config = db.query(AIProviderConfig).filter(
-                        AIProviderConfig.provider_name == provider_name
+                # 获取当前激活的 Key
+                active_key = None
+                if hasattr(settings, 'active_keys') and settings.active_keys:
+                    active_key_id = settings.active_keys.get(provider_name)
+                    if active_key_id:
+                        active_key = db.query(AIProviderConfig).filter(
+                            AIProviderConfig.id == active_key_id
+                        ).first()
+                
+                # 如果没有指定激活的 Key，使用 is_active=True 的 Key
+                if not active_key:
+                    active_key = db.query(AIProviderConfig).filter(
+                        AIProviderConfig.provider_name == provider_name,
+                        AIProviderConfig.is_active == True
                     ).first()
                 
-                if not provider_config:
-                    # 创建默认配置
-                    try:
-                        provider_config = AIProviderConfig(
-                            provider_name=provider_name,
-                            key_name="default",
-                            api_key=None,
-                            is_valid=False,
-                            last_tested=None,
-                            is_active=True,
-                            usage_stats={}
-                        )
-                        db.add(provider_config)
-                        db.commit()
-                        db.refresh(provider_config)
-                    except Exception as e:
-                        logger.error(f"创建 AIProviderConfig for {provider_name} 失败: {e}", exc_info=True)
-                        db.rollback()
-                        # 如果创建失败，使用默认值
-                        provider_config = type('obj', (object,), {
-                            'api_key': None,
-                            'is_valid': False,
-                            'last_tested': None,
-                            'usage_stats': {},
-                            'id': None,
-                            'key_name': 'default'
-                        })()
+                # 如果还没有，使用第一个 Key
+                if not active_key and all_keys:
+                    active_key = all_keys[0]
                 
+                # 构建 key 列表
+                keys_list = []
+                for key in all_keys:
+                    keys_list.append({
+                        "id": key.id,
+                        "key_name": key.key_name,
+                        "api_key_preview": _get_api_key_preview(key.api_key),
+                        "is_valid": key.is_valid,
+                        "is_active": key.id == (active_key.id if active_key else None),
+                        "last_tested": key.last_tested.isoformat() if key.last_tested else None,
+                        "created_at": key.created_at.isoformat(),
+                        "updated_at": key.updated_at.isoformat(),
+                        "usage_stats": key.usage_stats or {}
+                    })
+                
+                # 构建提供商信息
                 providers[provider_name] = {
-                    "api_key": provider_config.api_key if hasattr(provider_config, 'api_key') else None,
-                    "is_valid": provider_config.is_valid if hasattr(provider_config, 'is_valid') else False,
-                    "last_tested": provider_config.last_tested.isoformat() if hasattr(provider_config, 'last_tested') and provider_config.last_tested else None,
-                    "usage_stats": (provider_config.usage_stats or {}) if hasattr(provider_config, 'usage_stats') else {},
-                    "key_id": provider_config.id if hasattr(provider_config, 'id') else None,
-                    "key_name": provider_config.key_name if hasattr(provider_config, 'key_name') else "default"
+                    "name": provider_name,
+                    "api_key": active_key.api_key if active_key else None,
+                    "api_key_preview": _get_api_key_preview(active_key.api_key if active_key else None),
+                    "is_valid": active_key.is_valid if active_key else False,
+                    "last_tested": active_key.last_tested.isoformat() if active_key and active_key.last_tested else None,
+                    "usage_stats": (active_key.usage_stats or {}) if active_key else {},
+                    "active_key_id": active_key.id if active_key else None,
+                    "key_name": active_key.key_name if active_key else "default",
+                    "keys": keys_list  # 所有 key 列表
                 }
             except Exception as e:
                 logger.error(f"加载 {provider_name} 配置失败: {e}", exc_info=True)
                 # 使用默认值
                 providers[provider_name] = {
+                    "name": provider_name,
                     "api_key": None,
+                    "api_key_preview": None,
                     "is_valid": False,
                     "last_tested": None,
                     "usage_stats": {},
-                    "key_id": None,
-                    "key_name": "default"
+                    "active_key_id": None,
+                    "key_name": "default",
+                    "keys": []
                 }
         
         return {
@@ -185,12 +192,15 @@ def _load_ai_provider_config(db: Session) -> Dict[str, Any]:
             "current_provider": "openai",
             "providers": {
                 provider_name: {
+                    "name": provider_name,
                     "api_key": None,
+                    "api_key_preview": None,
                     "is_valid": False,
                     "last_tested": None,
                     "usage_stats": {},
-                    "key_id": None,
-                    "key_name": "default"
+                    "active_key_id": None,
+                    "key_name": "default",
+                    "keys": []
                 }
                 for provider_name in ["openai", "gemini", "grok"]
             },

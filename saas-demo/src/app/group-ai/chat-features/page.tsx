@@ -20,6 +20,16 @@ import {
   CheckCircle, XCircle, AlertCircle, Brain
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 import { getApiBaseUrl } from "@/lib/api/config"
 
@@ -209,20 +219,34 @@ export default function ChatFeaturesPage() {
       if (res.ok) {
         const data = await res.json()
         if (data.success) {
-          toast({ 
-            title: "啟動成功", 
-            description: `已啟動 ${data.accounts_started}/${data.accounts_total} 個賬號的聊天功能` 
-          })
           if (data.failed_accounts && data.failed_accounts.length > 0) {
-            console.warn("部分賬號啟動失敗:", data.failed_accounts)
+            // 有部分失敗，顯示詳細信息
+            setFailedAccountsList(data.failed_accounts)
+            setFailedAccountsDialogOpen(true)
             toast({ 
-              title: "部分失敗", 
-              description: `${data.failed_accounts.length} 個賬號啟動失敗，請查看控制台`, 
-              variant: "destructive" 
+              title: "部分成功", 
+              description: `已啟動 ${data.accounts_started}/${data.accounts_total} 個賬號，${data.failed_accounts.length} 個失敗。點擊查看詳情。`,
+              variant: "default"
+            })
+          } else {
+            // 全部成功
+            toast({ 
+              title: "啟動成功", 
+              description: `已啟動 ${data.accounts_started}/${data.accounts_total} 個賬號的聊天功能` 
             })
           }
         } else {
-          toast({ title: "啟動失敗", description: data.message || "啟動失敗", variant: "destructive" })
+          // 完全失敗或沒有找到賬號
+          if (data.diagnostics) {
+            const diag = data.diagnostics
+            toast({ 
+              title: "啟動失敗", 
+              description: `${data.message || "啟動失敗"}\n數據庫賬號: ${diag.active_accounts_in_db || 0}, 在線節點: ${diag.online_workers || 0}`, 
+              variant: "destructive" 
+            })
+          } else {
+            toast({ title: "啟動失敗", description: data.message || "啟動失敗", variant: "destructive" })
+          }
         }
       } else {
         const errorData = await res.json().catch(() => ({}))

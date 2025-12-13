@@ -268,5 +268,6 @@ class AIProviderSettings(Base):
     current_provider = Column(String(50), default="openai", nullable=False)  # 当前使用的提供商
     auto_failover_enabled = Column(Boolean, default=True, nullable=False)
     failover_providers = Column(JSON, default=list)  # 备用提供商列表
+    active_keys = Column(JSON, default=dict)  # 每个提供商当前激活的Key ID { "openai": "key_id_1", "gemini": "key_id_2" }
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)

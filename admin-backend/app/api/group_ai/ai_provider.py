@@ -658,49 +658,67 @@ async def add_api_key(
     db: Session = Depends(get_db_session)
 ):
     """添加新的 API Key"""
-    if provider not in ["openai", "gemini", "grok"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"不支持的提供商: {provider}"
+    try:
+        if provider not in ["openai", "gemini", "grok"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"不支持的提供商: {provider}"
+            )
+        
+        if not api_key or len(api_key.strip()) < 10:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="API Key 格式无效"
+            )
+        
+        # 检查是否已存在同名 Key
+        existing = db.query(AIProviderConfig).filter(
+            AIProviderConfig.provider_name == provider,
+            AIProviderConfig.key_name == key_name
+        ).first()
+        
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Key 名称 '{key_name}' 已存在，请使用不同的名称或先删除旧 Key"
+            )
+        
+        # 创建新 Key（默认不激活）
+        new_key = AIProviderConfig(
+            provider_name=provider,
+            key_name=key_name,
+            api_key=api_key.strip(),
+            is_valid=False,
+            is_active=False,  # 新添加的 Key 默认不激活
+            usage_stats={}
         )
-    
-    if not api_key or len(api_key.strip()) < 10:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="API Key 格式无效"
-        )
-    
-    # 检查是否已存在同名 Key
-    existing = db.query(AIProviderConfig).filter(
-        AIProviderConfig.provider_name == provider,
-        AIProviderConfig.key_name == key_name
-    ).first()
-    
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Key 名称 '{key_name}' 已存在，请使用不同的名称或先删除旧 Key"
-        )
-    
-    # 创建新 Key（默认不激活）
-    new_key = AIProviderConfig(
-        provider_name=provider,
-        key_name=key_name,
-        api_key=api_key.strip(),
-        is_valid=False,
-        is_active=False,  # 新添加的 Key 默认不激活
-        usage_stats={}
-    )
-    db.add(new_key)
-    db.commit()
-    db.refresh(new_key)
-    
-    logger.info(f"已添加 {provider} 的新 Key: {key_name}")
-    
-    return {
-        "success": True,
-        "message": f"已添加 {provider} 的 Key: {key_name}",
-        "key": {
+        db.add(new_key)
+        db.commit()
+        db.refresh(new_key)
+        
+        logger.info(f"已添加 {provider} 的新 Key: {key_name} (ID: {new_key.id})")
+        
+        # 如果是第一个 Key，自动激活
+        config = _load_ai_provider_config(db)
+        if not config["providers"][provider].get("api_key"):
+            # 激活这个新 Key
+            new_key.is_active = True
+            db.commit()
+            db.refresh(new_key)
+            
+            # 更新全局设置中的激活 Key
+            settings = db.query(AIProviderSettings).filter(AIProviderSettings.id == "singleton").first()
+            if settings:
+                if not hasattr(settings, 'active_keys') or settings.active_keys is None:
+                    settings.active_keys = {}
+                settings.active_keys[provider] = new_key.id
+                db.commit()
+                logger.info(f"已自动激活 {provider} 的第一个 Key: {key_name}")
+        
+        return {
+            "success": True,
+            "message": f"已添加 {provider} 的 Key: {key_name}",
+            "key": {
             "id": new_key.id,
             "provider": new_key.provider_name,
             "key_name": new_key.key_name,

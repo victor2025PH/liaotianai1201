@@ -21,10 +21,38 @@ echo ""
 # 2. 系统资源使用情况
 echo "[2/10] 系统资源使用情况..."
 echo "  CPU 使用率:"
-CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
-echo "    当前: ${CPU_USAGE}%"
+CPU_IDLE=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | head -1)
+if [ -n "$CPU_IDLE" ] && [ "$CPU_IDLE" != "0" ] && [ "$CPU_IDLE" != "" ]; then
+    CPU_USAGE=$(echo "$CPU_IDLE" | awk '{printf "%.1f", 100 - $1}')
+    echo "    当前: ${CPU_USAGE}%"
+else
+    # 备用方法
+    CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{for(i=1;i<=NF;i++) if($i ~ /%/) {gsub(/%/,"",$i); if($i+0 > 0 && $i+0 < 100) print 100-$i; exit}}' | head -1)
+    if [ -n "$CPU_USAGE" ]; then
+        echo "    当前: ${CPU_USAGE}%"
+    else
+        echo "    当前: 无法获取（使用 top 命令查看）"
+    fi
+fi
 echo "  内存使用:"
-free -h | grep -E "Mem|Swap" | awk '{print "    " $1 ": " $3 " / " $2 " (" $3/$2*100 "%)"}'
+free -h | grep -E "Mem|Swap" | while read line; do
+    MEM_NAME=$(echo "$line" | awk '{print $1}')
+    MEM_TOTAL=$(echo "$line" | awk '{print $2}')
+    MEM_USED=$(echo "$line" | awk '{print $3}')
+    if [ "$MEM_TOTAL" != "0B" ] && [ -n "$MEM_TOTAL" ]; then
+        # 提取数字部分
+        TOTAL_NUM=$(echo "$MEM_TOTAL" | sed 's/[^0-9.]//g')
+        USED_NUM=$(echo "$MEM_USED" | sed 's/[^0-9.]//g')
+        if [ -n "$TOTAL_NUM" ] && [ "$TOTAL_NUM" != "0" ] && [ -n "$USED_NUM" ]; then
+            PERCENT=$(echo "scale=2; $USED_NUM * 100 / $TOTAL_NUM" | bc 2>/dev/null || echo "0")
+            echo "    $MEM_NAME: $MEM_USED / $MEM_TOTAL (${PERCENT}%)"
+        else
+            echo "    $MEM_NAME: $MEM_USED / $MEM_TOTAL"
+        fi
+    else
+        echo "    $MEM_NAME: $MEM_USED / $MEM_TOTAL"
+    fi
+done
 echo "  磁盘使用:"
 df -h / | tail -1 | awk '{print "    根分区: " $3 " / " $2 " (" $5 " 已使用)"}'
 echo "  系统负载:"

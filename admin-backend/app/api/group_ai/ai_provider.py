@@ -303,26 +303,17 @@ async def get_all_providers(
     current_user: Optional[User] = Depends(get_current_active_user),
     db: Session = Depends(get_db_session)
 ):
-    """获取所有提供商状态"""
+    """获取所有提供商状态（包含所有 Key 列表）"""
     config = _load_ai_provider_config(db)
-    providers = []
-    for provider_name in ["openai", "gemini", "grok"]:
-        provider_config = config["providers"].get(provider_name, {})
-        providers.append({
-            "name": provider_name,
-            "api_key_configured": provider_config.get("api_key") is not None,
-            "api_key_preview": _get_api_key_preview(provider_config.get("api_key")),
-            "is_valid": provider_config.get("is_valid", False),
-            "last_tested": provider_config.get("last_tested"),
-            "is_current": config["current_provider"] == provider_name,
-            "usage_stats": config.get("usage_stats", {}).get(provider_name, {})
-        })
     
+    # 返回完整的提供商信息，包括所有 key 列表
     return {
         "success": True,
-        "providers": providers,
         "current_provider": config["current_provider"],
-        "auto_failover_enabled": config.get("auto_failover_enabled", True)
+        "providers": config["providers"],  # 已经包含 keys 列表
+        "auto_failover_enabled": config.get("auto_failover_enabled", True),
+        "failover_providers": config.get("failover_providers", []),
+        "usage_stats": config.get("usage_stats", {})
     }
 
 

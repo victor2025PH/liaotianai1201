@@ -304,7 +304,8 @@ export default function ChatFeaturesPage() {
       const res = await fetchWithAuth(`${API_BASE}/group-ai/ai-provider/providers`)
       if (res.ok) {
         const data = await res.json()
-        setAiProvider({
+        setAiProvider(prev => ({
+          ...prev,
           current: data.current_provider || "openai",
           providers: data.providers || [],
           apiKeys: {
@@ -317,9 +318,12 @@ export default function ChatFeaturesPage() {
             gemini: false,
             grok: false,
           },
-          autoFailover: Boolean(data.auto_failover_enabled), // 确保是布尔值
+          autoFailover: Boolean(data.auto_failover_enabled),
           failoverProviders: data.failover_providers || [],
-        })
+          // 保留 keyList 和 selectedKeys（如果已存在）
+          keyList: prev.keyList || { openai: [], gemini: [], grok: [] },
+          selectedKeys: prev.selectedKeys || { openai: "", gemini: "", grok: "" },
+        }))
       }
     } catch (error) {
       console.warn("獲取 AI 提供商狀態失敗:", error)

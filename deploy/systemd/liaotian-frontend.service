@@ -6,11 +6,12 @@ After=network.target
 Type=simple
 User=ubuntu
 Group=ubuntu
-WorkingDirectory=/home/ubuntu/telegram-ai-system/saas-demo/.next/standalone
+WorkingDirectory=/home/ubuntu/telegram-ai-system/saas-demo
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=NODE_OPTIONS=--max-old-space-size=1024
-ExecStart=/home/ubuntu/.nvm/versions/node/v20.19.6/bin/node server.js
+# 使用相对路径，从 WorkingDirectory 启动 standalone 服务器
+ExecStart=/usr/bin/node .next/standalone/server.js
 Restart=always
 RestartSec=5
 LimitNOFILE=65535

@@ -968,9 +968,21 @@ export default function ChatFeaturesPage() {
                 </div>
 
                 {/* Gemini */}
-                <div className="space-y-3 p-4 border rounded-lg">
+                <div className={`space-y-3 p-4 border-2 rounded-lg transition-all ${
+                  aiProvider.current === "gemini" 
+                    ? "bg-primary/5 border-primary shadow-md" 
+                    : "border-border"
+                }`}>
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="gemini-key">Google Gemini API Key</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="gemini-key">Google Gemini API Key</Label>
+                      {aiProvider.current === "gemini" && (
+                        <Badge variant="default" className="gap-1 bg-primary text-primary-foreground">
+                          <span className="w-2 h-2 bg-primary-foreground rounded-full animate-pulse"></span>
+                          當前使用
+                        </Badge>
+                      )}
+                    </div>
                     {aiProvider.providers.find((p: any) => p.name === "gemini")?.is_valid && (
                       <Badge variant="outline" className="gap-1">
                         <CheckCircle className="h-3 w-3" />

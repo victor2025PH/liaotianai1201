@@ -1576,6 +1576,43 @@ export default function ChatFeaturesPage() {
         </TabsContent>
       </Tabs>
 
+      {/* 成功賬號對話框 */}
+      <AlertDialog open={successfulAccountsDialogOpen} onOpenChange={setSuccessfulAccountsDialogOpen}>
+        <AlertDialogContent className="max-w-2xl max-h-[80vh]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              成功啟動的賬號
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              以下 {successfulAccountsList.length} 個賬號已成功啟動：
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ScrollArea className="max-h-[50vh] pr-4">
+            <div className="space-y-3">
+              {successfulAccountsList.map((item, index) => (
+                <div key={index} className="p-3 border rounded-lg bg-green-50 dark:bg-green-950">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm break-all">{item.account_id}</p>
+                      {item.phone && <p className="text-xs text-muted-foreground mt-1">電話: {item.phone}</p>}
+                      {item.username && <p className="text-xs text-muted-foreground">用戶名: @{item.username}</p>}
+                      {item.server_id && <p className="text-xs text-muted-foreground">節點: {item.server_id}</p>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setSuccessfulAccountsDialogOpen(false)}>
+              關閉
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* 失败账号详情对话框 */}
       <AlertDialog open={failedAccountsDialogOpen} onOpenChange={setFailedAccountsDialogOpen}>
         <AlertDialogContent className="max-w-2xl max-h-[80vh]">

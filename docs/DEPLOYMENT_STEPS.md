@@ -24,7 +24,7 @@ ssh ubuntu@你的服務器IP
 # 執行位置：服務器
 cd /home/ubuntu
 # 或者使用項目目錄
-cd /opt/luckyred  # 根據你的實際項目路徑
+cd /home/ubuntu/telegram-ai-system
 
 # 步驟 3: 克隆倉庫（如果是新部署）
 # 執行位置：服務器

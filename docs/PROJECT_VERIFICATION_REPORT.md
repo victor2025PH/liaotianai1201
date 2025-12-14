@@ -201,9 +201,9 @@ def build_dynamic_prompt(user_profile, context_info,
 ### 3.2 服務器配置
 
 **配置項**:
-- ✅ 項目根目錄: `/opt/luckyred`
+- ✅ 項目根目錄: `/home/ubuntu/telegram-ai-system`
 - ✅ Systemd 服務: `luckyred-api`
-- ✅ 虛擬環境: `/opt/luckyred/api/.venv`
+- ✅ 虛擬環境: `/home/ubuntu/telegram-ai-system/admin-backend/.venv`
 - ✅ Nginx 配置
 
 **狀態**: ✅ 配置清晰明確

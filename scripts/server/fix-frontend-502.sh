@@ -24,7 +24,7 @@ fi
 # Step 2: 检查前端服务
 echo ""
 echo "[2/5] 检查前端服务..."
-PROJECT_DIR="/opt/luckyred"
+PROJECT_DIR="/home/ubuntu/telegram-ai-system"
 FRONTEND_DIR="$PROJECT_DIR/saas-demo"
 
 if [ ! -d "$FRONTEND_DIR" ]; then

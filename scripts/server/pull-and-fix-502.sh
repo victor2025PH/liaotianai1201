@@ -12,8 +12,7 @@ echo ""
 
 # 检测项目目录
 PROJECT_DIR=""
-if [ -d "/opt/luckyred" ]; then
-  PROJECT_DIR="/opt/luckyred"
+PROJECT_DIR="/home/ubuntu/telegram-ai-system"
 elif [ -d "/home/ubuntu/telegram-ai-system" ]; then
   PROJECT_DIR="/home/ubuntu/telegram-ai-system"
 elif [ -d "$(pwd)/.git" ]; then

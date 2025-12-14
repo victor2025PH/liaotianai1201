@@ -10,7 +10,7 @@ echo "🚨 快速修复 502 Bad Gateway"
 echo "=========================================="
 echo ""
 
-PROJECT_DIR="/opt/luckyred"
+PROJECT_DIR="/home/ubuntu/telegram-ai-system"
 BACKEND_DIR="$PROJECT_DIR/api"
 BACKEND_SERVICE="luckyred-api"
 

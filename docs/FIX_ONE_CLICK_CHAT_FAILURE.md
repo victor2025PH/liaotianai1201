@@ -195,7 +195,7 @@ scripts\local\diagnose-and-fix-worker.bat
 
 2. **检查数据库**：
    ```bash
-   sqlite3 /opt/luckyred/api/database.db "SELECT account_id, server_id, user_id, active FROM group_ai_accounts LIMIT 10;"
+   sqlite3 /home/ubuntu/telegram-ai-system/admin-backend/data/app.db "SELECT account_id, server_id, user_id, active FROM group_ai_accounts LIMIT 10;"
    ```
 
 3. **联系支持**：提供上述日志和错误信息

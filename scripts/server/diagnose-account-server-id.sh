@@ -11,13 +11,11 @@ echo "=========================================="
 echo ""
 
 # 项目根目录
-PROJECT_DIR="/opt/luckyred"
-if [ ! -d "$PROJECT_DIR" ]; then
-    PROJECT_DIR="/home/ubuntu/telegram-ai-system"
-fi
+PROJECT_DIR="/home/ubuntu/telegram-ai-system"
 
 if [ ! -d "$PROJECT_DIR" ]; then
-    echo "❌ 错误: 找不到项目目录。请手动指定 PROJECT_DIR 变量。"
+    echo "❌ 错误: 找不到项目目录: $PROJECT_DIR"
+    echo "请确保项目已部署到 $PROJECT_DIR"
     exit 1
 fi
 

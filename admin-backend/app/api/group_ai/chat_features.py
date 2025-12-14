@@ -613,9 +613,66 @@ async def start_all_accounts_chat(
                 else:
                     # 檢查賬號是否已在內存中
                     if account_id not in service_manager.account_manager.accounts:
-                        # 如果不在內存中，嘗試啟動賬號
-                        logger.info(f"賬號 {account_id} 不在內存中，嘗試啟動...")
+                        # 如果不在內存中，先嘗試從數據庫加載到 AccountManager
+                        logger.info(f"賬號 {account_id} 不在內存中，嘗試從數據庫加載...")
                         try:
+                            # 檢查數據庫中是否存在
+                            db_account_for_load = db.query(GroupAIAccount).filter(
+                                GroupAIAccount.account_id == account_id
+                            ).first()
+                            
+                            if not db_account_for_load:
+                                error_details = [f"賬號 {account_id} 在數據庫中不存在"]
+                                failed_accounts.append({
+                                    "account_id": account_id,
+                                    "error": f"啟動賬號失敗: {', '.join(error_details)}"
+                                })
+                                continue
+                            
+                            # 從數據庫加載賬號到 AccountManager
+                            from group_ai_service.models.account import AccountConfig
+                            from pathlib import Path
+                            
+                            # 解析 session 文件路徑
+                            session_file = db_account_for_load.session_file
+                            session_path = Path(session_file)
+                            
+                            # 如果是相對路徑，嘗試從項目根目錄解析
+                            if not session_path.is_absolute():
+                                from group_ai_service.config import get_group_ai_config
+                                config_obj = get_group_ai_config()
+                                api_file_path = Path(__file__).resolve()
+                                project_root = api_file_path.parent.parent.parent.parent.parent
+                                sessions_dir = project_root / config_obj.session_files_directory
+                                session_path = sessions_dir / Path(session_file).name
+                                if session_path.exists():
+                                    session_file = str(session_path)
+                                elif Path(session_file).exists():
+                                    session_file = str(Path(session_file).resolve())
+                            
+                            # 創建配置
+                            account_config = AccountConfig(
+                                account_id=db_account_for_load.account_id,
+                                session_file=session_file,
+                                script_id=db_account_for_load.script_id or "default",
+                                group_ids=db_account_for_load.group_ids or [],
+                                active=db_account_for_load.active if db_account_for_load.active is not None else True,
+                                reply_rate=db_account_for_load.reply_rate or 0.3,
+                                redpacket_enabled=db_account_for_load.redpacket_enabled if db_account_for_load.redpacket_enabled is not None else True,
+                                redpacket_probability=db_account_for_load.redpacket_probability or 0.5,
+                                max_replies_per_hour=db_account_for_load.max_replies_per_hour or 50,
+                                min_reply_interval=db_account_for_load.min_reply_interval or 3
+                            )
+                            
+                            # 添加到 AccountManager
+                            account = await service_manager.account_manager.add_account(
+                                account_id=db_account_for_load.account_id,
+                                session_file=session_file,
+                                config=account_config
+                            )
+                            logger.info(f"成功從數據庫加載賬號 {account_id} 到 AccountManager")
+                            
+                            # 現在嘗試啟動賬號
                             success = await service_manager.start_account(account_id)
                             if not success:
                                 # 獲取詳細的錯誤信息

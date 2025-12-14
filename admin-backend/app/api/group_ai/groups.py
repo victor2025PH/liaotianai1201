@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from group_ai_service.service_manager import ServiceManager
 from app.api.group_ai.accounts import get_service_manager
 from app.db import get_db
+from app.api.deps import get_current_active_user
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 

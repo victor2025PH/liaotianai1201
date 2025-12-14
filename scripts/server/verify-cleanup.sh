@@ -22,8 +22,8 @@ sync
 ls /data/ >/dev/null 2>&1 || true
 sleep 1
 
-SUSPICIOUS_FILES=("/data/MUTA71VL" "/data/CX81yM9aE" "/data/UY")
-SUSPICIOUS_PATTERNS=("MUTA71VL" "CX81yM9aE" "UY")
+SUSPICIOUS_FILES=("/data/MUTA71VL" "/data/CX81yM9aE" "/data/UY" "/data/4pVffo7" "/data/T1ID" "/data/ZaAxbGP")
+SUSPICIOUS_PATTERNS=("MUTA71VL" "CX81yM9aE" "UY" "4pVffo7" "T1ID" "ZaAxbGP")
 FILES_FOUND=0
 
 # 方法 1: 直接检查文件路径
@@ -131,11 +131,11 @@ echo ""
 
 # 2. 检查可疑进程
 echo "[2/5] 检查可疑进程..."
-PROCESSES_FOUND=$(ps aux | grep -E "MUTA71VL|CX81yM9aE|80.64.16.241|unk.sh" | grep -v grep | wc -l || echo "0")
+PROCESSES_FOUND=$(ps aux | grep -E "MUTA71VL|CX81yM9aE|4pVffo7|T1ID|ZaAxbGP|80.64.16.241|unk.sh" | grep -v grep | wc -l || echo "0")
 if [ "$PROCESSES_FOUND" -gt 0 ]; then
     ALL_CLEAN=false
     echo "  ❌ 发现可疑进程:"
-    ps aux | grep -E "MUTA71VL|CX81yM9aE|80.64.16.241|unk.sh" | grep -v grep | awk '{printf "    PID:%-8s CPU:%-6s MEM:%-6s %s\n", $2, $3"%", $4"%", $11}'
+    ps aux | grep -E "MUTA71VL|CX81yM9aE|4pVffo7|T1ID|ZaAxbGP|80.64.16.241|unk.sh" | grep -v grep | awk '{printf "    PID:%-8s CPU:%-6s MEM:%-6s %s\n", $2, $3"%", $4"%", $11}'
 else
     echo "  ✅ 未发现可疑进程"
 fi

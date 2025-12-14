@@ -2,7 +2,7 @@
 群組管理API
 實現賬號自動創建群組和啟動群聊功能
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from typing import List, Optional
 import logging

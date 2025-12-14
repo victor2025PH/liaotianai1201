@@ -27,24 +27,38 @@ echo ""
 # 2. 停止可能冲突的进程
 echo "[2/6] 停止可能冲突的进程..."
 echo "----------------------------------------"
-# 停止后端服务
-systemctl stop "$BACKEND_SERVICE" 2>/dev/null || true
+# 停止后端服务（使用 sudo，如果失败则继续）
+sudo systemctl stop "$BACKEND_SERVICE" 2>/dev/null || true
 sleep 2
 
-# 杀死占用端口的进程
-PORT_PIDS=$(lsof -ti:$BACKEND_PORT 2>/dev/null || true)
+# 杀死占用端口的进程（使用 sudo）
+PORT_PIDS=$(sudo lsof -ti:$BACKEND_PORT 2>/dev/null || true)
 if [ -n "$PORT_PIDS" ]; then
     echo "发现占用端口 $BACKEND_PORT 的进程: $PORT_PIDS"
-    kill -9 $PORT_PIDS 2>/dev/null || true
-    sleep 1
+    for PID in $PORT_PIDS; do
+        echo "  终止进程 $PID"
+        sudo kill -9 $PID 2>/dev/null || true
+    done
+    sleep 2
     echo "已终止占用端口的进程"
+    
+    # 再次检查端口是否已释放
+    REMAINING_PIDS=$(sudo lsof -ti:$BACKEND_PORT 2>/dev/null || true)
+    if [ -n "$REMAINING_PIDS" ]; then
+        echo "⚠️  警告: 端口 $BACKEND_PORT 仍被占用: $REMAINING_PIDS"
+        echo "尝试强制终止..."
+        for PID in $REMAINING_PIDS; do
+            sudo kill -9 $PID 2>/dev/null || true
+        done
+        sleep 1
+    fi
 else
     echo "端口 $BACKEND_PORT 未被占用"
 fi
 
 # 杀死所有 uvicorn/gunicorn 进程
-pkill -9 -f "uvicorn.*main:app" 2>/dev/null || true
-pkill -9 -f "gunicorn.*main:app" 2>/dev/null || true
+sudo pkill -9 -f "uvicorn.*main:app" 2>/dev/null || true
+sudo pkill -9 -f "gunicorn.*main:app" 2>/dev/null || true
 sleep 1
 echo "已清理后端进程"
 echo ""
@@ -81,17 +95,17 @@ echo ""
 # 5. 重启后端服务
 echo "[5/6] 重启后端服务..."
 echo "----------------------------------------"
-systemctl daemon-reload
-systemctl start "$BACKEND_SERVICE"
+sudo systemctl daemon-reload
+sudo systemctl start "$BACKEND_SERVICE"
 sleep 5
 
-if systemctl is-active --quiet "$BACKEND_SERVICE"; then
+if sudo systemctl is-active --quiet "$BACKEND_SERVICE"; then
     echo "✅ 后端服务启动成功"
-    systemctl status "$BACKEND_SERVICE" --no-pager -l | head -10
+    sudo systemctl status "$BACKEND_SERVICE" --no-pager -l | head -10
 else
     echo "❌ 后端服务启动失败"
     echo "查看错误信息:"
-    systemctl status "$BACKEND_SERVICE" --no-pager -l | head -20
+    sudo systemctl status "$BACKEND_SERVICE" --no-pager -l | head -20
     echo ""
     echo "查看详细日志:"
     journalctl -u "$BACKEND_SERVICE" -n 50 --no-pager | tail -30
@@ -121,13 +135,33 @@ else
 fi
 
 # 检查 Nginx
-if systemctl is-active --quiet nginx; then
+if sudo systemctl is-active --quiet nginx; then
     echo "✅ Nginx 正在运行"
-    systemctl reload nginx 2>/dev/null || systemctl restart nginx
-    echo "✅ Nginx 已重新加载配置"
+    # 先检查 Nginx 配置
+    if sudo nginx -t 2>&1 | grep -q "successful"; then
+        sudo systemctl reload nginx 2>/dev/null || sudo systemctl restart nginx
+        echo "✅ Nginx 已重新加载配置"
+    else
+        echo "⚠️  Nginx 配置有错误，尝试修复 SSL 证书权限..."
+        # 修复 SSL 证书权限
+        if [ -d "/etc/letsencrypt/live/aikz.usdt2026.cc" ]; then
+            sudo chmod 755 /etc/letsencrypt/live 2>/dev/null || true
+            sudo chmod 755 /etc/letsencrypt/archive 2>/dev/null || true
+            sudo chmod 644 /etc/letsencrypt/live/aikz.usdt2026.cc/*.pem 2>/dev/null || true
+            echo "已尝试修复 SSL 证书权限"
+        fi
+        # 再次测试配置
+        if sudo nginx -t 2>&1 | grep -q "successful"; then
+            sudo systemctl reload nginx 2>/dev/null || sudo systemctl restart nginx
+            echo "✅ Nginx 配置已修复并重新加载"
+        else
+            echo "❌ Nginx 配置仍有错误，请手动检查: sudo nginx -t"
+            sudo nginx -t 2>&1 | tail -5
+        fi
+    fi
 else
     echo "⚠️  Nginx 未运行，尝试启动..."
-    systemctl start nginx
+    sudo systemctl start nginx
 fi
 echo ""
 

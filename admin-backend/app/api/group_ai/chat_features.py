@@ -704,11 +704,25 @@ async def start_all_accounts_chat(
                     "error": str(e)
                 })
         
+        # 收集成功啟動的賬號列表
+        successful_accounts = []
+        for db_account in accounts_to_start:
+            account_id = db_account.account_id
+            # 如果不在失敗列表中，則視為成功
+            if not any(fa.get("account_id") == account_id for fa in failed_accounts):
+                successful_accounts.append({
+                    "account_id": account_id,
+                    "phone": getattr(db_account, 'phone_number', None) or account_id,
+                    "username": getattr(db_account, 'username', None) or "",
+                    "server_id": getattr(db_account, 'server_id', None)
+                })
+        
         return {
             "success": True,
             "message": f"已啟動 {started_count}/{len(accounts_to_start)} 個賬號的聊天功能",
             "accounts_started": started_count,
             "accounts_total": len(accounts_to_start),
+            "successful_accounts": successful_accounts,
             "failed_accounts": failed_accounts,
             "group_id": group_id
         }

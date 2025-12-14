@@ -69,6 +69,8 @@ export default function ChatFeaturesPage() {
   const [activeTab, setActiveTab] = useState("settings")
   const [failedAccountsDialogOpen, setFailedAccountsDialogOpen] = useState(false)
   const [failedAccountsList, setFailedAccountsList] = useState<Array<{account_id: string, error: string}>>([])
+  const [successfulAccountsDialogOpen, setSuccessfulAccountsDialogOpen] = useState(false)
+  const [successfulAccountsList, setSuccessfulAccountsList] = useState<Array<{account_id: string, phone?: string, username?: string, server_id?: string}>>([])
   
   // 設置狀態
   const [settings, setSettings] = useState({
@@ -221,17 +223,30 @@ export default function ChatFeaturesPage() {
       if (res.ok) {
         const data = await res.json()
         if (data.success) {
+          // 設置成功和失敗的賬號列表
+          if (data.successful_accounts && data.successful_accounts.length > 0) {
+            setSuccessfulAccountsList(data.successful_accounts)
+          }
+          if (data.failed_accounts && data.failed_accounts.length > 0) {
+            setFailedAccountsList(data.failed_accounts)
+          }
+          
           if (data.failed_accounts && data.failed_accounts.length > 0) {
             // 有部分失敗，顯示詳細信息
-            setFailedAccountsList(data.failed_accounts)
             setFailedAccountsDialogOpen(true)
+            if (data.successful_accounts && data.successful_accounts.length > 0) {
+              setSuccessfulAccountsDialogOpen(true)
+            }
             toast({ 
               title: "部分成功", 
-              description: `已啟動 ${data.accounts_started}/${data.accounts_total} 個賬號，${data.failed_accounts.length} 個失敗。點擊查看詳情。`,
+              description: `已啟動 ${data.accounts_started}/${data.accounts_total} 個賬號，${data.failed_accounts.length} 個失敗，${data.successful_accounts?.length || 0} 個成功。點擊查看詳情。`,
               variant: "default"
             })
           } else {
             // 全部成功
+            if (data.successful_accounts && data.successful_accounts.length > 0) {
+              setSuccessfulAccountsDialogOpen(true)
+            }
             toast({ 
               title: "啟動成功", 
               description: `已啟動 ${data.accounts_started}/${data.accounts_total} 個賬號的聊天功能` 

@@ -358,6 +358,99 @@ async def start_group_chat(
         )
 
 
+@router.get("/{group_id}/invite-link")
+async def get_group_invite_link(
+    group_id: int,
+    account_id: Optional[str] = Query(None, description="用于获取邀请链接的账号ID"),
+    current_user: Optional[User] = Depends(get_current_active_user),
+    service_manager: ServiceManager = Depends(get_service_manager),
+    db: Session = Depends(get_db)
+):
+    """
+    获取群组邀请链接或用户名
+    如果本地没有登录Telegram，返回网页链接
+    """
+    try:
+        from app.models.group_ai import GroupAIAccount
+        
+        # 如果没有提供account_id，尝试从数据库中找到第一个有该群组的账号
+        if not account_id:
+            db_account = db.query(GroupAIAccount).filter(
+                GroupAIAccount.group_ids.contains([group_id])
+            ).first()
+            if db_account:
+                account_id = db_account.account_id
+        
+        if not account_id:
+            raise HTTPException(
+                status_code=404,
+                detail="未找到拥有该群组的账号，请提供account_id参数"
+            )
+        
+        # 检查账号是否在AccountManager中
+        account = service_manager.account_manager.accounts.get(account_id)
+        
+        if not account or not account.client or not account.client.is_connected:
+            # 账号不在线，返回网页链接（如果知道群组用户名）
+            # 或者提示需要登录
+            return {
+                "success": False,
+                "message": "账号未在线，无法获取邀请链接",
+                "web_link": None,
+                "requires_auth": True,
+                "suggestion": "请先启动账号，或使用群组用户名直接访问"
+            }
+        
+        try:
+            # 获取群组信息
+            chat = await account.client.get_entity(group_id)
+            
+            # 尝试获取邀请链接
+            invite_link = None
+            username = None
+            
+            if hasattr(chat, 'username') and chat.username:
+                username = chat.username
+                invite_link = f"https://t.me/{username}"
+            else:
+                # 尝试导出邀请链接
+                try:
+                    from telethon.tl.functions.messages import ExportChatInviteRequest
+                    exported = await account.client(ExportChatInviteRequest(chat))
+                    if hasattr(exported, 'link'):
+                        invite_link = exported.link
+                except Exception as e:
+                    logger.warning(f"无法导出邀请链接: {e}")
+            
+            return {
+                "success": True,
+                "group_id": group_id,
+                "group_title": chat.title if hasattr(chat, 'title') else None,
+                "username": username,
+                "invite_link": invite_link,
+                "web_link": invite_link or (f"https://t.me/c/{str(group_id)[4:]}/{group_id}" if str(group_id).startswith('-100') else None),
+                "telegram_link": f"tg://resolve?domain={username}" if username else None,
+                "requires_auth": False
+            }
+        except Exception as e:
+            logger.error(f"获取群组信息失败: {e}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"获取群组信息失败: {str(e)}",
+                "web_link": None,
+                "requires_auth": True
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取群组邀请链接失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"获取邀请链接失败: {str(e)}"
+        )
+
+
 @router.post("/send-test-message", response_model=SendTestMessageResponse)
 async def send_test_message(
     request: SendTestMessageRequest,

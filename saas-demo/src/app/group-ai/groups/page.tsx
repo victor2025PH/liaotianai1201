@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { 
   Users, MessageSquare, RefreshCw, Search, 
-  Activity, Clock, UserPlus, Settings
+  Activity, Clock, UserPlus, Settings, ExternalLink, Link2
 } from "lucide-react"
 
 import { getApiBaseUrl } from "@/lib/api/config";
@@ -26,6 +26,9 @@ interface GroupInfo {
   status: "active" | "idle" | "paused"
   auto_chat: boolean
   redpacket: boolean
+  group_id?: number  // Telegram 群組 ID
+  username?: string  // 群組用戶名
+  invite_link?: string  // 邀請鏈接
 }
 
 export default function GroupsPage() {
@@ -283,13 +286,107 @@ export default function GroupsPage() {
                     </div>
                   </div>
 
-                  <div className="flex gap-2 mt-3 pt-3 border-t">
-                    <Badge variant={group.auto_chat ? "default" : "outline"} className="text-xs">
-                      {group.auto_chat ? "✓ 自动聊天" : "✗ 自动聊天"}
-                    </Badge>
-                    <Badge variant={group.redpacket ? "default" : "outline"} className="text-xs">
-                      {group.redpacket ? "✓ 红包遊戲" : "✗ 红包遊戲"}
-                    </Badge>
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t">
+                    <div className="flex gap-2">
+                      <Badge variant={group.auto_chat ? "default" : "outline"} className="text-xs">
+                        {group.auto_chat ? "✓ 自动聊天" : "✗ 自动聊天"}
+                      </Badge>
+                      <Badge variant={group.redpacket ? "default" : "outline"} className="text-xs">
+                        {group.redpacket ? "✓ 红包遊戲" : "✗ 红包遊戲"}
+                      </Badge>
+                    </div>
+                    {/* 群組鏈接 */}
+                    {(group.username || group.invite_link || group.group_id) && (
+                      <div className="flex gap-2">
+                        {group.username && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              // 嘗試打開 Telegram 客戶端
+                              const telegramUrl = `tg://resolve?domain=${group.username.replace('@', '')}`
+                              const webUrl = `https://t.me/${group.username.replace('@', '')}`
+                              
+                              // 嘗試打開客戶端，如果失敗則打開網頁
+                              window.open(telegramUrl, '_blank')
+                              setTimeout(() => {
+                                // 如果客戶端沒有打開，則打開網頁
+                                window.open(webUrl, '_blank')
+                              }, 500)
+                            }}
+                          >
+                            <Link2 className="h-3 w-3 mr-1" />
+                            打開群組
+                          </Button>
+                        )}
+                        {group.invite_link && !group.username && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              // 嘗試打開 Telegram 客戶端
+                              const telegramUrl = group.invite_link!.replace('https://t.me/', 'tg://join?invite=')
+                              const webUrl = group.invite_link
+                              
+                              window.open(telegramUrl, '_blank')
+                              setTimeout(() => {
+                                window.open(webUrl, '_blank')
+                              }, 500)
+                            }}
+                          >
+                            <ExternalLink className="h-3 w-3 mr-1" />
+                            加入群組
+                          </Button>
+                        )}
+                        {group.group_id && !group.username && !group.invite_link && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={async () => {
+                              try {
+                                const { fetchWithAuth } = await import("@/lib/api/client")
+                                const res = await fetchWithAuth(`${API_BASE}/group-ai/groups/${group.group_id}/invite-link`)
+                                if (res.ok) {
+                                  const data = await res.json()
+                                  if (data.success && data.invite_link) {
+                                    // 嘗試打開 Telegram 客戶端
+                                    if (data.telegram_link) {
+                                      window.open(data.telegram_link, '_blank')
+                                    }
+                                    // 打開網頁鏈接
+                                    setTimeout(() => {
+                                      if (data.web_link) {
+                                        window.open(data.web_link, '_blank')
+                                      }
+                                    }, 500)
+                                  } else if (data.requires_auth) {
+                                    toast({
+                                      title: "需要授權",
+                                      description: data.message || "請先啟動賬號以獲取邀請鏈接",
+                                      variant: "destructive"
+                                    })
+                                  }
+                                } else {
+                                  throw new Error("獲取邀請鏈接失敗")
+                                }
+                              } catch (error) {
+                                toast({
+                                  title: "錯誤",
+                                  description: "無法獲取群組邀請鏈接",
+                                  variant: "destructive"
+                                })
+                              }
+                            }}
+                          >
+                            <Link2 className="h-3 w-3 mr-1" />
+                            獲取鏈接
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

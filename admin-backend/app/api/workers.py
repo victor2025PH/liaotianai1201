@@ -653,6 +653,14 @@ async def generate_deploy_package(
             "if not exist sessions mkdir sessions",
             "",
             "echo.",
+            "echo [1/3] 修复 Session 文件（如果需要）...",
+            "python fix_session.py sessions 2>nul || echo   跳过修复（Session 文件可能已正常）",
+            "",
+            "echo [2/3] 创建 Excel 配置模板（如果不存在）...",
+            "python create_excel_template.py 2>nul || echo   跳过创建（Excel 文件已存在）",
+            "",
+            "echo [3/3] 启动 Worker 节点...",
+            "echo.",
             f"echo Starting Worker: {node_id}",
             f"echo Server: {config.server_url}",
             "echo.",
@@ -692,7 +700,19 @@ mkdir -p sessions
 # Install dependencies
 pip3 install requests httpx openpyxl telethon -q
 
+# Fix session files if needed
+echo ""
+echo "[1/3] 修复 Session 文件（如果需要）..."
+python3 fix_session.py sessions 2>/dev/null || echo "  跳过修复（Session 文件可能已正常）"
+
+# Create Excel template if needed
+echo ""
+echo "[2/3] 创建 Excel 配置模板（如果不存在）..."
+python3 create_excel_template.py 2>/dev/null || echo "  跳过创建（Excel 文件已存在）"
+
 # Run Worker
+echo ""
+echo "[3/3] 启动 Worker 节点..."
 echo ""
 echo "Starting Worker: {node_id}"
 echo "Server: {config.server_url}"
@@ -700,7 +720,207 @@ echo ""
 python3 worker_client.py
 '''
 
-        # 生成 Python Worker 客戶端 (完整版 - 支持 Telegram user_id 讀取)
+        # 生成 Session 文件修复脚本
+        fix_session_script = '''#!/usr/bin/env python3
+"""
+修复 Worker 节点 Session 文件
+解决 "no such column: server_address" 和 "no such column: version" 错误
+"""
+
+import sqlite3
+import os
+from pathlib import Path
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def fix_session_file(session_path: str) -> bool:
+    """
+    修复 Session 文件，添加缺失的列
+    
+    Args:
+        session_path: Session 文件路径
+        
+    Returns:
+        是否修复成功
+    """
+    try:
+        if not os.path.exists(session_path):
+            logger.error(f"Session 文件不存在: {session_path}")
+            return False
+        
+        # 备份原文件
+        backup_path = f"{session_path}.backup"
+        if not os.path.exists(backup_path):
+            import shutil
+            shutil.copy2(session_path, backup_path)
+            logger.info(f"已备份: {backup_path}")
+        
+        # 连接数据库
+        conn = sqlite3.connect(session_path)
+        cursor = conn.cursor()
+        
+        # 检查 sessions 表结构
+        cursor.execute("PRAGMA table_info(sessions)")
+        columns = {row[1]: row[2] for row in cursor.fetchall()}
+        
+        # 添加缺失的列
+        if 'server_address' not in columns:
+            try:
+                cursor.execute("ALTER TABLE sessions ADD COLUMN server_address TEXT")
+                logger.info(f"已添加 server_address 列到 {session_path}")
+            except sqlite3.OperationalError as e:
+                logger.warning(f"添加 server_address 列失败（可能已存在）: {e}")
+        
+        if 'port' not in columns:
+            try:
+                cursor.execute("ALTER TABLE sessions ADD COLUMN port INTEGER")
+                logger.info(f"已添加 port 列到 {session_path}")
+            except sqlite3.OperationalError as e:
+                logger.warning(f"添加 port 列失败（可能已存在）: {e}")
+        
+        # 检查 version 表
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='version'")
+        if not cursor.fetchone():
+            try:
+                cursor.execute("CREATE TABLE IF NOT EXISTS version (version INTEGER)")
+                cursor.execute("INSERT INTO version (version) VALUES (1)")
+                logger.info(f"已创建 version 表到 {session_path}")
+            except sqlite3.OperationalError as e:
+                logger.warning(f"创建 version 表失败: {e}")
+        else:
+            # 检查 version 表是否有数据
+            cursor.execute("SELECT COUNT(*) FROM version")
+            count = cursor.fetchone()[0]
+            if count == 0:
+                cursor.execute("INSERT INTO version (version) VALUES (1)")
+                logger.info(f"已添加 version 数据到 {session_path}")
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"✅ Session 文件修复成功: {session_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"修复 Session 文件失败 {session_path}: {e}", exc_info=True)
+        return False
+
+
+def fix_all_sessions(sessions_dir: str):
+    """
+    修复目录中的所有 Session 文件
+    
+    Args:
+        sessions_dir: Session 文件目录
+    """
+    sessions_path = Path(sessions_dir)
+    if not sessions_path.exists():
+        logger.error(f"Session 目录不存在: {sessions_dir}")
+        return
+    
+    session_files = list(sessions_path.glob("*.session"))
+    logger.info(f"找到 {len(session_files)} 个 Session 文件")
+    
+    fixed_count = 0
+    for session_file in session_files:
+        if fix_session_file(str(session_file)):
+            fixed_count += 1
+    
+    logger.info(f"修复完成: {fixed_count}/{len(session_files)} 个文件")
+
+
+if __name__ == "__main__":
+    import sys
+    
+    if len(sys.argv) > 1:
+        sessions_dir = sys.argv[1]
+    else:
+        # 默认使用当前目录下的 sessions 文件夹
+        sessions_dir = "./sessions"
+    
+    fix_all_sessions(sessions_dir)
+'''
+
+        # 生成 Excel 模板文件内容（Base64 编码的 Excel 文件）
+        # 由于无法直接生成 Excel 二进制，我们生成一个 Python 脚本来创建 Excel 模板
+        create_excel_template = '''#!/usr/bin/env python3
+"""
+创建 Excel 配置模板文件
+"""
+
+import sys
+from pathlib import Path
+
+try:
+    import openpyxl
+    from openpyxl.styles import Font
+    
+    sessions_dir = Path("./sessions")
+    sessions_dir.mkdir(exist_ok=True)
+    
+    # 检查是否已存在 Excel 文件
+    excel_files = list(sessions_dir.glob("*.xlsx"))
+    if excel_files:
+        print(f"Excel 配置文件已存在: {excel_files[0].name}")
+        print("如需重新创建，请先删除现有文件")
+        sys.exit(0)
+    
+    # 创建新的 Excel 文件
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Accounts"
+    
+    # 设置表头（加粗）
+    headers = [
+        'api_id', 'api_hash', 'phone', 'username', 'name', 'user_id',
+        'friends', 'groups', 'group', 'remark', 'node', 'enabled', 'last_update'
+    ]
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = Font(bold=True)
+    
+    # 设置列宽
+    col_widths = [12, 35, 18, 15, 15, 15, 10, 10, 12, 20, 15, 10, 18]
+    for i, width in enumerate(col_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
+    
+    # 保存文件（使用节点ID作为文件名）
+    node_id = os.getenv("LIAOTIAN_NODE_ID", "worker_default")
+    excel_file = sessions_dir / f"{node_id}.xlsx"
+    wb.save(excel_file)
+    wb.close()
+    
+    print(f"✅ Excel 模板已创建: {excel_file.name}")
+    print("")
+    print("请编辑此文件，添加您的账号信息：")
+    print("  - api_id: Telegram API ID（从 my.telegram.org 获取）")
+    print("  - api_hash: Telegram API Hash（从 my.telegram.org 获取）")
+    print("  - phone: 电话号码（必须与 session 文件名匹配）")
+    print("  - enabled: 1=启用，0=禁用")
+    print("")
+    print("示例：")
+    print("  api_id: 30390800")
+    print("  api_hash: 471481f784e6d78893e53b88ee43e62b")
+    print("  phone: 639277358115")
+    print("  enabled: 1")
+    
+except ImportError:
+    print("⚠️  openpyxl 未安装，无法创建 Excel 模板")
+    print("请运行: pip install openpyxl")
+    print("")
+    print("或者手动创建 Excel 文件，包含以下列：")
+    print("  api_id, api_hash, phone, username, name, user_id, friends, groups, group, remark, node, enabled, last_update")
+    sys.exit(1)
+except Exception as e:
+    print(f"❌ 创建 Excel 模板失败: {e}")
+    sys.exit(1)
+'''
+
+        # 生成 Python Worker 客戶端 (完整版 - 支持 Telegram user_id 讀取，已修复 Session 读取)
         worker_client = '''#!/usr/bin/env python3
 """
 Worker Node Client - Full Version
@@ -1391,15 +1611,47 @@ def read_session_basic(session_path):
         log(f"[SESSION] {session_path.name} tables: {tables}")
         
         # Method 1: Read from 'sessions' table (Telethon v1.24+)
+        # 兼容不同版本的数据库架构
         if 'sessions' in tables:
             try:
-                cursor.execute("SELECT dc_id, server_address, port, auth_key FROM sessions LIMIT 1")
-                row = cursor.fetchone()
-                if row:
-                    info["dc_id"] = row[0]
-                    # auth_key contains encrypted user data
+                # 先检查表结构，只查询存在的列
+                cursor.execute("PRAGMA table_info(sessions)")
+                session_columns = [row[1] for row in cursor.fetchall()]
+                
+                # 构建查询（只查询存在的列）
+                select_cols = []
+                if 'dc_id' in session_columns:
+                    select_cols.append('dc_id')
+                if 'server_address' in session_columns:
+                    select_cols.append('server_address')
+                if 'port' in session_columns:
+                    select_cols.append('port')
+                if 'auth_key' in session_columns:
+                    select_cols.append('auth_key')
+                
+                if select_cols:
+                    query = f"SELECT {', '.join(select_cols)} FROM sessions LIMIT 1"
+                    cursor.execute(query)
+                    row = cursor.fetchone()
+                    if row:
+                        # 根据列顺序获取值
+                        for i, col in enumerate(select_cols):
+                            if col == 'dc_id':
+                                info["dc_id"] = row[i]
+                            # auth_key contains encrypted user data
             except Exception as e:
                 log(f"[SESSION] sessions table error: {e}")
+                # 如果读取失败，尝试修复 Session 文件
+                try:
+                    # 添加缺失的列
+                    if 'server_address' not in session_columns:
+                        cursor.execute("ALTER TABLE sessions ADD COLUMN server_address TEXT")
+                    if 'port' not in session_columns:
+                        cursor.execute("ALTER TABLE sessions ADD COLUMN port INTEGER")
+                    conn.commit()
+                    log(f"[SESSION] 已修复 sessions 表结构")
+                except:
+                    pass
         
         # Method 2: Read from 'entities' table - this has user info
         if 'entities' in tables:
@@ -1430,13 +1682,34 @@ def read_session_basic(session_path):
             except Exception as e:
                 log(f"[SESSION] entities table error: {e}")
         
-        # Method 3: Read from 'sent_files' or 'update_state' for self info
+        # Method 3: Read from 'peers' table (older Telethon versions)
+        if 'peers' in tables and not info["user_id"]:
+            try:
+                cursor.execute("SELECT id FROM peers WHERE id > 0 LIMIT 1")
+                row = cursor.fetchone()
+                if row:
+                    info["user_id"] = int(row[0])
+                    log(f"[SESSION] Found user_id from peers: {info['user_id']}")
+            except Exception as e:
+                log(f"[SESSION] peers table error: {e}")
+        
+        # Method 4: Read from 'sent_files' or 'update_state' for self info
         if 'update_state' in tables and not info["user_id"]:
             try:
                 cursor.execute("SELECT * FROM update_state LIMIT 1")
                 row = cursor.fetchone()
                 if row:
                     log(f"[SESSION] update_state: {row}")
+            except:
+                pass
+        
+        # Method 5: 检查并修复 version 表（如果缺失）
+        if 'version' not in tables:
+            try:
+                cursor.execute("CREATE TABLE IF NOT EXISTS version (version INTEGER)")
+                cursor.execute("INSERT INTO version (version) VALUES (1)")
+                conn.commit()
+                log(f"[SESSION] 已创建 version 表")
             except:
                 pass
         
@@ -1953,11 +2226,13 @@ if __name__ == "__main__":
             "scripts": {
                 "windows": windows_script,
                 "linux": linux_script,
-                "worker_client": worker_client
+                "worker_client": worker_client,
+                "fix_session": fix_session_script,
+                "create_excel_template": create_excel_template
             },
             "instructions": {
-                "windows": "1. 下載所有文件到同一目錄\n2. 雙擊 start_worker.bat 運行",
-                "linux": "1. 下載所有文件到同一目錄\n2. 運行: chmod +x start_worker.sh && ./start_worker.sh"
+                "windows": "1. 下載所有文件到同一目錄\n2. 將 Telegram .session 文件放入 sessions 目錄\n3. 運行 create_excel_template.py 創建 Excel 配置模板\n4. 編輯 Excel 文件，添加 API ID/Hash 和電話號碼\n5. 如果 Session 文件讀取錯誤，運行: python fix_session.py sessions\n6. 雙擊 start_worker.bat 運行",
+                "linux": "1. 下載所有文件到同一目錄\n2. 將 Telegram .session 文件放入 sessions 目錄\n3. 運行 python3 create_excel_template.py 創建 Excel 配置模板\n4. 編輯 Excel 文件，添加 API ID/Hash 和電話號碼\n5. 如果 Session 文件讀取錯誤，運行: python3 fix_session.py sessions\n6. 運行: chmod +x start_worker.sh && ./start_worker.sh"
             }
         }
     except Exception as e:

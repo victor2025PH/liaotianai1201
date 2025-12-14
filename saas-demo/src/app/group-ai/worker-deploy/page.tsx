@@ -130,6 +130,8 @@ export default function WorkerDeployPage() {
         folder.file("start_worker.bat", scripts.windows)
         folder.file("start_worker.sh", scripts.linux)
         folder.file("worker_client.py", scripts.worker_client)
+        folder.file("fix_session.py", scripts.fix_session)
+        folder.file("create_excel_template.py", scripts.create_excel_template)
         
         // 創建 sessions 目錄（帶一個說明文件）
         const sessionsFolder = folder.folder("sessions")
@@ -138,10 +140,20 @@ export default function WorkerDeployPage() {
 `將 Telegram .session 文件放在此目錄
 
 例如：
-- +8613800138000.session
-- 123456789.session
+- 639277358115.session
+- 639454959591.session
 
 Session 文件可以通過 Telethon 登入生成
+
+重要提示：
+1. Session 文件名必須與 Excel 配置中的 phone 列匹配
+2. 如果 Session 文件讀取錯誤，運行: python fix_session.py sessions
+3. 創建 Excel 配置模板: python create_excel_template.py
+4. Excel 文件必須包含以下列：
+   - api_id: Telegram API ID（從 my.telegram.org 獲取）
+   - api_hash: Telegram API Hash（從 my.telegram.org 獲取）
+   - phone: 電話號碼（必須與 session 文件名匹配）
+   - enabled: 1=啟用，0=禁用
 `)
         }
         
@@ -158,11 +170,43 @@ Session 文件可以通過 Telethon 登入生成
 
 ### Windows
 1. 將 Telegram .session 文件放入 sessions 目錄
-2. 雙擊 start_worker.bat 運行
+2. 運行 create_excel_template.py 創建 Excel 配置模板
+3. 編輯 Excel 文件（${config.node_id}.xlsx），添加：
+   - api_id: Telegram API ID（從 my.telegram.org 獲取）
+   - api_hash: Telegram API Hash（從 my.telegram.org 獲取）
+   - phone: 電話號碼（必須與 session 文件名匹配）
+   - enabled: 1=啟用，0=禁用
+4. 如果 Session 文件讀取錯誤，運行: python fix_session.py sessions
+5. 雙擊 start_worker.bat 運行
 
 ### Linux/Mac
 1. 將 Telegram .session 文件放入 sessions 目錄
-2. 運行: chmod +x start_worker.sh && ./start_worker.sh
+2. 運行 python3 create_excel_template.py 創建 Excel 配置模板
+3. 編輯 Excel 文件（${config.node_id}.xlsx），添加 API ID/Hash 和電話號碼
+4. 如果 Session 文件讀取錯誤，運行: python3 fix_session.py sessions
+5. 運行: chmod +x start_worker.sh && ./start_worker.sh
+
+## Excel 配置說明
+
+每個 Worker 節點需要一個 Excel 配置文件（${config.node_id}.xlsx），包含以下列：
+
+必需列：
+- api_id: Telegram API ID（數字）
+- api_hash: Telegram API Hash（32位字符串）
+- phone: 電話號碼（用於匹配 session 文件）
+
+可選列（自動填充）：
+- username: 用戶名
+- name: 昵稱
+- user_id: Telegram 數字 ID
+- friends: 好友數量
+- groups: 群組數量
+
+管理列：
+- group: 分組名稱
+- remark: 備註
+- node: 指定節點
+- enabled: 是否啟用（1=啟用，0=禁用）
 
 ## 後台運行
 

@@ -606,11 +606,14 @@ async def start_all_accounts_chat(
             account_id = db_account.account_id
             try:
                 server_id = getattr(db_account, 'server_id', None)
+                logger.info(f"[DEBUG] 賬號 {account_id} 的 server_id: {server_id}")
                 
                 # 如果賬號已分配到遠程服務器，不需要在本地啟動，直接發送命令
                 if server_id:
                     logger.info(f"賬號 {account_id} 已分配到節點 {server_id}，跳過本地啟動，直接發送命令")
+                    # 跳過本地加載和啟動，直接發送命令到 Worker 節點
                 else:
+                    logger.warning(f"賬號 {account_id} 沒有 server_id，嘗試在本地啟動（Session 文件可能在 Worker 節點上）")
                     # 檢查賬號是否已在內存中
                     if account_id not in service_manager.account_manager.accounts:
                         # 如果不在內存中，先嘗試從數據庫加載到 AccountManager

@@ -142,8 +142,13 @@ else:
             break
     
     if first_location is None:
-        # 如果没有 location，在 server 块内添加
-        first_location = https_start + 1
+        # 如果没有 location，在 server 块内添加（在 server_name 之后）
+        for i in range(https_start, min(https_start + 10, https_end)):
+            if re.search(r'server_name', lines[i]):
+                first_location = i + 1
+                break
+        if first_location is None:
+            first_location = https_start + 1
     
     new_login = '''    # 登录页面 - 转发到后端（必须在根路径之前）
     location /login {
@@ -161,7 +166,7 @@ else:
     lines.insert(first_location, new_login)
     needs_write = True
 
-if needs_write:
+if 'needs_write' in locals() and needs_write:
     with open("$NGINX_CONFIG", "w", encoding="utf-8") as f:
         f.writelines(lines)
     print("✅ 配置已更新")

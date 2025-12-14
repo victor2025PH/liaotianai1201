@@ -1707,9 +1707,20 @@ def read_session_basic(session_path):
         if 'version' not in tables:
             try:
                 cursor.execute("CREATE TABLE IF NOT EXISTS version (version INTEGER)")
-                cursor.execute("INSERT INTO version (version) VALUES (1)")
+                cursor.execute("INSERT OR IGNORE INTO version (version) VALUES (1)")
                 conn.commit()
-                log(f"[SESSION] 已创建 version 表")
+                log(f"[SESSION] 已自动创建 version 表")
+            except Exception as e:
+                log(f"[SESSION] 创建 version 表失败: {e}")
+        else:
+            # 检查 version 表是否有数据
+            try:
+                cursor.execute("SELECT COUNT(*) FROM version")
+                count = cursor.fetchone()[0]
+                if count == 0:
+                    cursor.execute("INSERT OR IGNORE INTO version (version) VALUES (1)")
+                    conn.commit()
+                    log(f"[SESSION] 已自动填充 version 表数据")
             except:
                 pass
         

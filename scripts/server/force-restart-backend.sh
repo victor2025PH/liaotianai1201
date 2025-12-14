@@ -128,7 +128,18 @@ echo ""
 # 6. 验证端口监听
 echo "[6/6] 验证端口监听..."
 echo "----------------------------------------"
-sleep 2
+# 等待更长时间让服务完全启动
+echo "等待服务完全启动（最多 15 秒）..."
+for i in {1..15}; do
+    if ss -tlnp | grep -q ":$BACKEND_PORT "; then
+        echo "✅ 端口 $BACKEND_PORT 已开始监听（等待了 ${i} 秒）"
+        break
+    fi
+    sleep 1
+    echo -n "."
+done
+echo ""
+
 if ss -tlnp | grep -q ":$BACKEND_PORT "; then
     echo "✅ 端口 $BACKEND_PORT 正在监听"
     ss -tlnp | grep ":$BACKEND_PORT " | head -3

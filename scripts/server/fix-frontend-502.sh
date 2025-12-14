@@ -1,186 +1,177 @@
 #!/bin/bash
 # ============================================================
-# 修复前端 502 错误脚本
+# 修复前端服务 502 错误（端口 3000 未运行）
 # ============================================================
 
-set -e
+set +e  # 不在第一个错误时退出
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-echo "============================================================"
-echo "◆ 修复前端 502 错误"
-echo "============================================================"
+echo "=========================================="
+echo "🔧 修复前端服务 502 错误"
+echo "=========================================="
 echo ""
 
-# 检查是否为 root 用户
-if [ "$EUID" -ne 0 ]; then 
-    echo -e "${YELLOW}▲ 提示：某些命令需要 sudo 权限${NC}"
-    SUDO="sudo"
+# Step 1: 检查端口 3000
+echo "[1/5] 检查端口 3000..."
+PORT_3000_PID=$(sudo ss -tlnp 2>/dev/null | grep ":3000" | awk '{print $6}' | grep -oP 'pid=\K\d+' | head -n 1 || echo "")
+if [ -n "$PORT_3000_PID" ]; then
+  echo "  ✅ 端口 3000 正在监听 (PID: $PORT_3000_PID)"
+  echo "  进程信息:"
+  ps -fp "$PORT_3000_PID" 2>/dev/null | tail -1 || echo "  无法获取进程信息"
 else
-    SUDO=""
+  echo "  ❌ 端口 3000 未监听（前端服务未运行）"
 fi
 
-PROJECT_DIR="/home/ubuntu/telegram-ai-system"
+# Step 2: 检查前端服务
+echo ""
+echo "[2/5] 检查前端服务..."
+PROJECT_DIR="/opt/luckyred"
 FRONTEND_DIR="$PROJECT_DIR/saas-demo"
-SERVICE_NAME="liaotian-frontend"
 
-echo "[1] 停止前端服务..."
-echo "----------------------------------------"
-$SUDO systemctl stop "$SERVICE_NAME" 2>/dev/null || true
-echo -e "${GREEN}□ 服务已停止${NC}"
-echo ""
-
-echo "[2] 检查前端构建目录..."
-echo "----------------------------------------"
-cd "$FRONTEND_DIR" || {
-    echo -e "${RED}❌ 无法进入前端目录: $FRONTEND_DIR${NC}"
+if [ ! -d "$FRONTEND_DIR" ]; then
+  # 尝试其他可能的位置
+  if [ -d "/home/ubuntu/telegram-ai-system/saas-demo" ]; then
+    FRONTEND_DIR="/home/ubuntu/telegram-ai-system/saas-demo"
+  elif [ -d "$(pwd)/saas-demo" ]; then
+    FRONTEND_DIR="$(pwd)/saas-demo"
+  else
+    echo "  ❌ 前端目录不存在"
+    echo "  请检查前端项目位置"
     exit 1
-}
-
-if [ ! -d ".next/standalone" ]; then
-    echo -e "${RED}❌ .next/standalone 目录不存在，需要重新构建${NC}"
-    echo "  执行: cd $FRONTEND_DIR && npm run build"
-    exit 1
+  fi
 fi
 
-echo -e "${GREEN}□ .next/standalone 目录存在${NC}"
+echo "  前端目录: $FRONTEND_DIR"
+
+# Step 3: 检查 Nginx 配置
 echo ""
-
-echo "[3] 准备 standalone 目录..."
-echo "----------------------------------------"
-cd "$FRONTEND_DIR/.next/standalone" || {
-    echo -e "${RED}❌ 无法进入 standalone 目录${NC}"
-    exit 1
-}
-
-# 复制 public 目录
-if [ -d "$FRONTEND_DIR/public" ]; then
-    echo "复制 public 目录..."
-    cp -r "$FRONTEND_DIR/public" . || true
-    echo -e "${GREEN}□ public 目录已复制${NC}"
+echo "[3/5] 检查 Nginx 配置..."
+NGINX_CONFIG="/etc/nginx/sites-available/default"
+if grep -q "proxy_pass.*127.0.0.1:3000" "$NGINX_CONFIG"; then
+  echo "  ⚠️  Nginx 配置中 `/` 路径代理到端口 3000"
+  echo "  但前端服务未运行，导致 502 错误"
+  
+  # 显示相关配置
+  echo ""
+  echo "  相关配置:"
+  grep -B 5 -A 10 "proxy_pass.*127.0.0.1:3000" "$NGINX_CONFIG" | head -20
+else
+  echo "  ✅ Nginx 配置中未找到端口 3000 的代理"
 fi
 
-# 创建 .next 目录并复制 static
-mkdir -p .next
-if [ -d "$FRONTEND_DIR/.next/static" ]; then
-    echo "复制 .next/static 目录..."
-    cp -r "$FRONTEND_DIR/.next/static" .next/ || true
-    echo -e "${GREEN}□ .next/static 目录已复制${NC}"
-fi
-
-# 检查 server.js 是否存在
-if [ ! -f "server.js" ]; then
-    echo -e "${RED}❌ server.js 文件不存在${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}□ server.js 文件存在${NC}"
+# Step 4: 选择修复方案
 echo ""
+echo "[4/5] 选择修复方案..."
+echo ""
+echo "  方案 1: 启动前端服务（推荐，如果前端需要运行）"
+echo "  方案 2: 修改 Nginx 配置，将前端路径也代理到后端（如果前端是静态文件）"
+echo ""
+read -p "  请选择方案 (1/2，默认 1): " choice
+choice=${choice:-1}
 
-echo "[4] 检查服务配置..."
-echo "----------------------------------------"
-SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
-if [ ! -f "$SERVICE_FILE" ]; then
-    echo -e "${RED}❌ 服务文件不存在: $SERVICE_FILE${NC}"
+if [ "$choice" = "1" ]; then
+  # 方案 1: 启动前端服务
+  echo ""
+  echo "  启动前端服务..."
+  
+  cd "$FRONTEND_DIR" || exit 1
+  
+  # 检查 node_modules
+  if [ ! -d "node_modules" ]; then
+    echo "  安装依赖..."
+    npm install || {
+      echo "  ❌ 依赖安装失败"
+      exit 1
+    }
+  fi
+  
+  # 检查是否已有进程在运行
+  if [ -n "$PORT_3000_PID" ]; then
+    echo "  端口 3000 已被占用，先停止现有进程..."
+    sudo kill -9 "$PORT_3000_PID" 2>/dev/null || true
+    sleep 2
+  fi
+  
+  # 启动前端服务（后台运行）
+  echo "  启动 Next.js 开发服务器..."
+  nohup npm run dev > /tmp/frontend.log 2>&1 &
+  FRONTEND_PID=$!
+  
+  echo "  前端服务已启动 (PID: $FRONTEND_PID)"
+  echo "  日志文件: /tmp/frontend.log"
+  
+  # 等待服务启动
+  echo "  等待服务启动..."
+  sleep 10
+  
+  # 检查服务是否启动成功
+  if curl -s --max-time 5 http://localhost:3000 >/dev/null 2>&1; then
+    echo "  ✅ 前端服务启动成功"
+  else
+    echo "  ⚠️  前端服务可能还在启动中，请检查日志: tail -f /tmp/frontend.log"
+  fi
+  
+elif [ "$choice" = "2" ]; then
+  # 方案 2: 修改 Nginx 配置
+  echo ""
+  echo "  修改 Nginx 配置..."
+  
+  # 备份配置
+  sudo cp "$NGINX_CONFIG" "${NGINX_CONFIG}.backup.$(date +%Y%m%d_%H%M%S)"
+  echo "  配置已备份"
+  
+  # 修改配置：将端口 3000 改为 8000（或使用静态文件）
+  echo ""
+  echo "  请手动编辑 Nginx 配置:"
+  echo "  sudo nano $NGINX_CONFIG"
+  echo ""
+  echo "  将以下内容:"
+  echo "    proxy_pass http://127.0.0.1:3000;"
+  echo "  改为:"
+  echo "    proxy_pass http://127.0.0.1:8000;"
+  echo "  或者配置静态文件服务"
+  echo ""
+  read -p "  按 Enter 继续..."
+  
+  # 测试配置
+  if sudo nginx -t; then
+    echo "  ✅ Nginx 配置语法正确"
+    echo "  重新加载 Nginx..."
+    sudo systemctl reload nginx
+  else
+    echo "  ❌ Nginx 配置有错误，请检查"
     exit 1
+  fi
 fi
 
-# 检查 WorkingDirectory 是否正确
-WORKING_DIR=$(grep "^WorkingDirectory=" "$SERVICE_FILE" | cut -d'=' -f2)
-if [ "$WORKING_DIR" != "$FRONTEND_DIR/.next/standalone" ]; then
-    echo -e "${YELLOW}▲ WorkingDirectory 不匹配，当前: $WORKING_DIR${NC}"
-    echo "  应该为: $FRONTEND_DIR/.next/standalone"
-    echo "  正在修复..."
-    $SUDO sed -i "s|^WorkingDirectory=.*|WorkingDirectory=$FRONTEND_DIR/.next/standalone|g" "$SERVICE_FILE"
-    $SUDO systemctl daemon-reload
-    echo -e "${GREEN}□ 服务配置已更新${NC}"
-fi
-
-echo -e "${GREEN}□ 服务配置正确${NC}"
+# Step 5: 验证修复
 echo ""
-
-echo "[5] 测试手动启动（查看实时错误）..."
-echo "----------------------------------------"
-cd "$FRONTEND_DIR/.next/standalone" || exit 1
-
-echo "尝试手动启动 Node.js 服务器（5秒超时）..."
-timeout 5s node server.js 2>&1 || {
-    EXIT_CODE=$?
-    if [ $EXIT_CODE -eq 124 ]; then
-        echo -e "${GREEN}□ 服务器启动成功（5秒内未崩溃）${NC}"
-    else
-        echo -e "${RED}❌ 服务器启动失败，退出码: $EXIT_CODE${NC}"
-        echo "  查看上面的错误信息"
-        echo ""
-        echo "  如果看到 'location is not defined' 错误，说明代码修复未生效"
-        echo "  请检查："
-        echo "    1. 代码是否已更新: cd $FRONTEND_DIR && git log -1"
-        echo "    2. 是否重新构建: npm run build"
-        echo "    3. standalone 目录是否是最新的"
-    fi
-}
-echo ""
-
-echo "[6] 启动前端服务..."
-echo "----------------------------------------"
-$SUDO systemctl start "$SERVICE_NAME"
+echo "[5/5] 验证修复..."
 sleep 3
 
-STATUS=$($SUDO systemctl is-active "$SERVICE_NAME" 2>/dev/null | awk 'NR==1 {print $1}' || echo "inactive")
-if [ "$STATUS" = "active" ]; then
-    echo -e "${GREEN}□ 服务已启动${NC}"
+# 检查端口 3000
+if sudo ss -tlnp 2>/dev/null | grep -q ":3000"; then
+  echo "  ✅ 端口 3000 正在监听"
 else
-    echo -e "${RED}❌ 服务启动失败，状态: $STATUS${NC}"
-    echo "  查看日志: sudo journalctl -u $SERVICE_NAME -n 30 --no-pager"
-    exit 1
+  echo "  ⚠️  端口 3000 未监听（如果选择了方案 2，这是正常的）"
 fi
-echo ""
 
-echo "[7] 等待服务稳定（10秒）..."
-echo "----------------------------------------"
-sleep 10
-
-# 再次检查状态
-STATUS=$($SUDO systemctl is-active "$SERVICE_NAME" 2>/dev/null | awk 'NR==1 {print $1}' || echo "inactive")
-if [ "$STATUS" != "active" ]; then
-    echo -e "${RED}❌ 服务在启动后崩溃，状态: $STATUS${NC}"
-    echo "  查看日志: sudo journalctl -u $SERVICE_NAME -n 50 --no-pager"
-    exit 1
-fi
-echo ""
-
-echo "[8] 检查端口监听..."
-echo "----------------------------------------"
-PORT_3000=$(sudo ss -tlnp | grep ":3000" || echo "")
-if [ -n "$PORT_3000" ]; then
-    echo -e "${GREEN}□ 端口 3000 正在监听${NC}"
-    echo "  $PORT_3000"
+# 测试访问
+echo "  测试访问..."
+if curl -s --max-time 5 http://localhost:3000 >/dev/null 2>&1; then
+  echo "  ✅ http://localhost:3000 可访问"
+elif curl -s --max-time 5 http://localhost:8000 >/dev/null 2>&1; then
+  echo "  ✅ http://localhost:8000 可访问（后端服务正常）"
 else
-    echo -e "${RED}❌ 端口 3000 未监听${NC}"
-    echo "  服务可能仍在崩溃循环中"
-    echo "  查看日志: sudo journalctl -u $SERVICE_NAME -n 50 --no-pager"
-    exit 1
+  echo "  ⚠️  本地服务测试失败"
 fi
-echo ""
 
-echo "[9] 测试前端连接..."
-echo "----------------------------------------"
-if timeout 5s curl -s -f http://localhost:3000 >/dev/null 2>&1; then
-    echo -e "${GREEN}□ 前端连接成功${NC}"
-else
-    echo -e "${YELLOW}▲ 前端连接失败，但端口正在监听${NC}"
-    echo "  可能需要更多时间启动，或检查应用内部错误"
-fi
 echo ""
-
-echo "============================================================"
-echo -e "${GREEN}□ 修复完成${NC}"
-echo "============================================================"
+echo "=========================================="
+echo "✅ 修复完成"
+echo "=========================================="
 echo ""
-echo "如果问题仍然存在，请运行："
-echo "  sudo journalctl -u $SERVICE_NAME -n 100 --no-pager"
-echo "  查看详细错误日志"
-
+echo "如果仍有 502 错误，请检查："
+echo "  1. 前端服务日志: tail -f /tmp/frontend.log"
+echo "  2. Nginx 错误日志: sudo tail -50 /var/log/nginx/error.log"
+echo "  3. 前端服务状态: ps aux | grep node"
+echo ""

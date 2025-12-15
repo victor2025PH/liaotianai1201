@@ -306,7 +306,8 @@ export default function GroupsPage() {
                             onClick={() => {
                               // 嘗試打開 Telegram 客戶端
                               if (!group.username) return
-                              const username = group.username.replace('@', '')
+                              const username = (group.username || '').replace('@', '')
+                              if (!username) return
                               const telegramUrl = `tg://resolve?domain=${username}`
                               const webUrl = `https://t.me/${username}`
                               

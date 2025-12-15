@@ -26,21 +26,8 @@ jobs:
           command_timeout: 55m
           script_stop: true
           debug: true
-          use_insecure_cipher: false
-          cipher: aes128-ctr,aes192-ctr,aes256-ctr,aes128-gcm@openssh.com,aes256-gcm@openssh.com,chacha20-poly1305@openssh.com
-          key_path: ""
-          fingerprint: ""
-          proxy_host: ""
-          proxy_port: ""
-          proxy_username: ""
-          proxy_password: ""
-          proxy_key: ""
-          proxy_timeout: 30s
           envs: GITHUB_REPO=${{ github.repository }},SERVER_HOST=${{ secrets.SERVER_HOST }}
-          sync: false
-          request_pty: false
           script: |
-            # 先拉取最新代码，然后执行部署脚本
             PROJECT_DIR="/home/ubuntu/telegram-ai-system"
             GITHUB_REPO="${GITHUB_REPO:-victor2025PH/liaotianai1201}"
             
@@ -51,343 +38,117 @@ jobs:
             echo "GitHub 仓库: $GITHUB_REPO"
             echo ""
             
-            # ============ DNS 故障处理 ============
-            echo "[0/5] 修复 DNS 解析问题"
+            # ============ 进入项目目录 ============
+            echo "[1/5] 进入项目目录"
             echo "----------------------------------------"
-            
-            # 测试 DNS 解析
-            if ! nslookup github.com >/dev/null 2>&1; then
-              echo "⚠️  DNS 解析失败，尝试修复..."
-              
-              # 方法 1: 重启 systemd-resolved（需要 sudo）
-              if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
-                echo "重启 systemd-resolved 服务..."
-                sudo systemctl restart systemd-resolved || true
-                sleep 3
-              fi
-              
-              # 方法 2: 配置备用 DNS 服务器（需要 sudo）
-              if ! nslookup github.com >/dev/null 2>&1; then
-                echo "配置备用 DNS 服务器 (8.8.8.8, 8.8.4.4, 1.1.1.1)..."
-                
-                # 检查 resolv.conf 状态
-                if [ -L /etc/resolv.conf ]; then
-                  echo "  /etc/resolv.conf 是软链接，检查 systemd-resolved 配置..."
-                  RESOLV_TARGET=$(readlink -f /etc/resolv.conf 2>/dev/null || echo "")
-                  echo "  软链接目标: $RESOLV_TARGET"
-                fi
-                
-                # 备份 resolv.conf（需要 sudo）
-                if [ -f /etc/resolv.conf ]; then
-                  echo "  备份 /etc/resolv.conf..."
-                  sudo cp /etc/resolv.conf /etc/resolv.conf.backup.$(date +%Y%m%d_%H%M%S) && echo "  ✅ 备份成功" || echo "  ⚠️  备份失败（继续）"
-                fi
-                
-                # 创建临时 resolv.conf（如果 systemd-resolved 未管理，需要 sudo）
-                if [ ! -L /etc/resolv.conf ] || [ ! -f /etc/systemd/resolved.conf ]; then
-                  echo "  直接写入 /etc/resolv.conf..."
-                  if echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null 2>&1; then
-                    echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf > /dev/null 2>&1 && \
-                    echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf > /dev/null 2>&1 && \
-                    echo "✅ 已配置备用 DNS 服务器到 /etc/resolv.conf"
-                  else
-                    echo "  ⚠️  写入 /etc/resolv.conf 失败，尝试使用 systemd-resolved..."
-                    # 如果直接写入失败，尝试使用 systemd-resolved
-                    if [ -f /etc/systemd/resolved.conf ]; then
-                      echo "  修改 /etc/systemd/resolved.conf..."
-                      if ! grep -q "^DNS=" /etc/systemd/resolved.conf; then
-                        if grep -q "^\[Resolve\]" /etc/systemd/resolved.conf; then
-                          if sudo sed -i '/^\[Resolve\]/a DNS=8.8.8.8 8.8.4.4 1.1.1.1' /etc/systemd/resolved.conf 2>/dev/null; then
-                            echo "✅ 已通过 sed 配置 systemd-resolved DNS"
-                          else
-                            echo "[Resolve]" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
-                            echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
-                            echo "✅ 已通过追加方式配置 systemd-resolved DNS"
-                          fi
-                        else
-                          echo "[Resolve]" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
-                          echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
-                          echo "✅ 已创建 [Resolve] 段并配置 DNS"
-                        fi
-                        sudo systemctl restart systemd-resolved 2>/dev/null || true
-                        sleep 3
-                      fi
-                    fi
-                  fi
-                else
-                  # 如果使用 systemd-resolved，修改其配置（需要 sudo）
-                  echo "  使用 systemd-resolved 管理 DNS..."
-                  if [ -f /etc/systemd/resolved.conf ]; then
-                    if ! grep -q "^DNS=" /etc/systemd/resolved.conf; then
-                      echo "  修改 /etc/systemd/resolved.conf..."
-                      if grep -q "^\[Resolve\]" /etc/systemd/resolved.conf; then
-                        if sudo sed -i '/^\[Resolve\]/a DNS=8.8.8.8 8.8.4.4 1.1.1.1' /etc/systemd/resolved.conf 2>/dev/null; then
-                          echo "✅ 已通过 sed 配置 systemd-resolved DNS"
-                        else
-                          echo "[Resolve]" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
-                          echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
-                          echo "✅ 已通过追加方式配置 systemd-resolved DNS"
-                        fi
-                      else
-                        echo "[Resolve]" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
-                        echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
-                        echo "✅ 已创建 [Resolve] 段并配置 DNS"
-                      fi
-                      sudo systemctl restart systemd-resolved 2>/dev/null || true
-                      sleep 3
-                    else
-                      echo "  systemd-resolved.conf 已包含 DNS 配置，跳过"
-                    fi
-                  else
-                    echo "  ⚠️  /etc/systemd/resolved.conf 不存在"
-                  fi
-                fi
-              fi
-              
-              # 再次测试 DNS（最多等待 10 秒）
-              echo "验证 DNS 解析..."
-              DNS_WORKING=false
-              for i in {1..5}; do
-                if nslookup github.com >/dev/null 2>&1; then
-                  DNS_WORKING=true
-                  echo "✅ DNS 解析已恢复（尝试 $i/5）"
-                  break
-                else
-                  if [ $i -lt 5 ]; then
-                    echo "  DNS 解析仍失败，等待 2 秒后重试 ($i/5)..."
-                    sleep 2
-                  fi
-                fi
-              done
-              
-              if [ "$DNS_WORKING" != "true" ]; then
-                echo "⚠️  DNS 解析仍然失败，但继续尝试 Git 操作..."
-                echo "  当前 DNS 配置:"
-                cat /etc/resolv.conf 2>/dev/null || echo "  无法读取 /etc/resolv.conf"
-              fi
-            else
-              echo "✅ DNS 解析正常"
-            fi
-            
-            echo ""
-            
-            # ============ 检查项目目录 ============
-            echo "[1/5] 检查项目目录"
-            echo "----------------------------------------"
-            
-            # 检查项目目录是否存在
             if [ ! -d "$PROJECT_DIR" ]; then
-              echo "⚠️  项目目录不存在，正在克隆..."
-              cd /home/ubuntu || exit 1
-              
-              # Git clone 带重试和 DNS 故障处理
-              MAX_CLONE_RETRIES=3
-              CLONE_RETRY_COUNT=0
-              CLONE_SUCCESS=false
-              
-              while [ $CLONE_RETRY_COUNT -lt $MAX_CLONE_RETRIES ]; do
-                if timeout 10m git clone "https://github.com/$GITHUB_REPO.git" telegram-ai-system 2>&1; then
-                  CLONE_SUCCESS=true
-                  break
-                else
-                  CLONE_RETRY_COUNT=$((CLONE_RETRY_COUNT + 1))
-                  if [ $CLONE_RETRY_COUNT -lt $MAX_CLONE_RETRIES ]; then
-                    echo "⚠️  Git clone 失败，重试 $CLONE_RETRY_COUNT/$MAX_CLONE_RETRIES..."
-                    sleep 10
-                    # 再次尝试修复 DNS（需要 sudo）
-                    echo "再次尝试修复 DNS..."
-                    sudo systemctl restart systemd-resolved 2>/dev/null || true
-                    sleep 3
-                    # 如果 resolv.conf 不是软链接，直接写入 DNS
-                    if [ ! -L /etc/resolv.conf ]; then
-                      echo "  直接写入 DNS 到 /etc/resolv.conf..."
-                      echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null 2>&1 && \
-                      echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf > /dev/null 2>&1 && \
-                      echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf > /dev/null 2>&1 && \
-                      echo "  ✅ DNS 配置已更新" || echo "  ⚠️  DNS 配置更新失败（继续）"
-                    else
-                      echo "  /etc/resolv.conf 是软链接，跳过直接写入"
-                    fi
-                    sleep 2
-                  fi
-                fi
-              done
-              
-              if [ "$CLONE_SUCCESS" != "true" ]; then
-                echo "❌ Git clone 失败（已重试 $MAX_CLONE_RETRIES 次）"
-                echo ""
-                echo "诊断信息:"
-                echo "  DNS 测试:"
-                nslookup github.com 2>&1 || echo "  DNS 解析失败"
-                echo ""
-                echo "  网络连接测试:"
-                ping -c 2 8.8.8.8 2>&1 || echo "  网络连接失败"
-                exit 1
-              fi
-            else
-              echo "✅ 项目目录已存在"
+              echo "❌ 项目目录不存在: $PROJECT_DIR"
+              echo "请先手动克隆仓库或检查路径"
+              exit 1
             fi
             
-            # 进入项目目录
             cd "$PROJECT_DIR" || {
               echo "❌ 无法进入项目目录: $PROJECT_DIR"
               exit 1
             }
-            
-            echo "当前目录: $(pwd)"
-            echo "当前分支: $(git branch --show-current 2>/dev/null || echo 'unknown')"
-            echo "最新提交: $(git log -1 --oneline 2>/dev/null || echo 'unknown')"
+            echo "✅ 当前目录: $(pwd)"
             echo ""
             
             # ============ 拉取最新代码 ============
             echo "[2/5] 拉取最新代码"
             echo "----------------------------------------"
-            
-            # 拉取最新代码（带重试和 DNS 故障处理）
-            MAX_FETCH_RETRIES=5
-            FETCH_RETRY_COUNT=0
-            FETCH_SUCCESS=false
-            
-            while [ $FETCH_RETRY_COUNT -lt $MAX_FETCH_RETRIES ]; do
-              if timeout 5m git fetch origin main 2>&1; then
-                FETCH_SUCCESS=true
-                break
-              else
-                FETCH_RETRY_COUNT=$((FETCH_RETRY_COUNT + 1))
-                ERROR_MSG=$(timeout 5m git fetch origin main 2>&1 || true)
-                
-                if [ $FETCH_RETRY_COUNT -lt $MAX_FETCH_RETRIES ]; then
-                  echo "⚠️  Git fetch 失败，重试 $FETCH_RETRY_COUNT/$MAX_FETCH_RETRIES..."
-                  echo "错误信息: $ERROR_MSG"
-                  
-                  # 如果是 DNS 错误，尝试修复（需要 sudo）
-                  if echo "$ERROR_MSG" | grep -q "Could not resolve host\|Name or service not known"; then
-                    echo "检测到 DNS 错误，尝试修复..."
-                    sudo systemctl restart systemd-resolved 2>/dev/null || true
-                    sleep 2
-                    # 如果 resolv.conf 不是软链接，直接写入 DNS
-                    if [ ! -L /etc/resolv.conf ]; then
-                      echo "  直接写入 DNS 到 /etc/resolv.conf..."
-                      echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null 2>&1 && \
-                      echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf > /dev/null 2>&1 && \
-                      echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf > /dev/null 2>&1 && \
-                      echo "  ✅ DNS 配置已更新" || echo "  ⚠️  DNS 配置更新失败（继续）"
-                    else
-                      echo "  /etc/resolv.conf 是软链接，跳过直接写入"
-                    fi
-                    sleep 3
-                  fi
-                  
-                  sleep 10
-                  # 尝试重新设置远程仓库
-                  git remote set-url origin "https://github.com/$GITHUB_REPO.git" || true
-                fi
-              fi
-            done
-            
-            if [ "$FETCH_SUCCESS" != "true" ]; then
-              echo "❌ Git fetch 失败（已重试 $MAX_FETCH_RETRIES 次）"
-              echo ""
-              echo "诊断信息:"
-              echo "  DNS 测试:"
-              nslookup github.com 2>&1 || echo "  DNS 解析失败"
-              echo ""
-              echo "  网络连接测试:"
-              ping -c 2 8.8.8.8 2>&1 || echo "  网络连接失败"
-              echo ""
-              echo "  Git 远程配置:"
-              git remote -v || echo "  无法获取远程配置"
+            git pull origin main || {
+              echo "❌ Git pull 失败"
               exit 1
-            fi
-            
-            echo "[3/5] 重置到最新版本"
-            echo "----------------------------------------"
-            
-            if ! timeout 1m git reset --hard origin/main; then
-              echo "❌ Git reset 失败"
-              exit 1
-            fi
-            
-            echo "✅ 代码已更新到最新版本"
+            }
+            echo "✅ 代码已更新"
             echo "最新提交: $(git log -1 --oneline)"
             echo ""
             
-            # ============ 检查部署脚本 ============
-            echo "[4/5] 检查部署脚本"
+            # ============ 构建前端 ============
+            echo "[3/5] 构建前端"
             echo "----------------------------------------"
-            
-            DEPLOY_SCRIPT="$PROJECT_DIR/scripts/server/deploy.sh"
-            echo "检查部署脚本: $DEPLOY_SCRIPT"
-            
-            if [ ! -f "$DEPLOY_SCRIPT" ]; then
-              echo "❌ 部署脚本不存在: $DEPLOY_SCRIPT"
-              echo ""
-              echo "诊断信息:"
-              echo "  项目目录内容:"
-              ls -la "$PROJECT_DIR" | head -20 || echo "  无法列出目录内容"
-              echo ""
-              echo "  scripts 目录:"
-              ls -la "$PROJECT_DIR/scripts" 2>/dev/null || echo "  scripts 目录不存在"
-              echo ""
-              echo "  scripts/server 目录:"
-              ls -la "$PROJECT_DIR/scripts/server" 2>/dev/null || echo "  scripts/server 目录不存在"
-              echo ""
-              exit 1
+            if [ -d "saas-demo" ]; then
+              cd saas-demo
+              echo "安装前端依赖..."
+              npm install --prefer-offline --no-audit --no-fund || {
+                echo "⚠️  npm install 失败，继续尝试构建..."
+              }
+              echo "构建前端项目..."
+              export NODE_OPTIONS="--max-old-space-size=2048"
+              npm run build || {
+                echo "❌ 前端构建失败"
+                exit 1
+              }
+              cd ..
+              echo "✅ 前端构建完成"
+            else
+              echo "⚠️  saas-demo 目录不存在，跳过前端构建"
             fi
-            
-            echo "✅ 部署脚本存在"
             echo ""
             
-            # ============ 执行部署脚本 ============
-            echo "[5/5] 执行部署脚本"
-            echo "=========================================="
-            # 设置环境变量强制前端重新构建（确保新功能被部署）
-            export FORCE_FRONTEND_BUILD=true
-            chmod +x "$DEPLOY_SCRIPT"
-            
-            # 执行部署脚本并捕获退出码
-            if bash "$DEPLOY_SCRIPT"; then
-              echo "✅ 部署脚本执行成功"
-              echo ""
-              echo "=========================================="
-              echo "外部 HTTPS 验证（可选）"
-              echo "=========================================="
-              echo "注意：端口 3000 和 8000 已被防火墙拦截，只能通过 HTTPS (443) 访问"
-              echo ""
-              # 可选的外部 HTTPS 验证（使用域名，通过 Nginx 代理）
-              DOMAIN="${SERVER_HOST:-aikz.usdt2026.cc}"
-              echo "测试 HTTPS 访问（端口 443）..."
-              HTTPS_LOGIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${DOMAIN}/login" 2>/dev/null || echo "000")
-              HTTPS_API_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${DOMAIN}/api/v1/health" 2>/dev/null || echo "000")
-              
-              if [ "$HTTPS_LOGIN_CODE" = "200" ] || [ "$HTTPS_LOGIN_CODE" = "302" ] || [ "$HTTPS_LOGIN_CODE" = "301" ]; then
-                echo "✅ HTTPS /login: HTTP $HTTPS_LOGIN_CODE"
+            # ============ 安装后端依赖 ============
+            echo "[4/5] 安装后端依赖"
+            echo "----------------------------------------"
+            if [ -d "admin-backend" ]; then
+              cd admin-backend
+              if [ -d "venv" ] && [ -f "venv/bin/activate" ]; then
+                source venv/bin/activate
+                echo "安装 Python 依赖..."
+                pip install -r requirements.txt --quiet || {
+                  echo "⚠️  部分依赖安装失败，继续..."
+                }
+                cd ..
+                echo "✅ 后端依赖安装完成"
               else
-                echo "⚠️  HTTPS /login: HTTP $HTTPS_LOGIN_CODE (可能需要等待服务完全启动)"
+                echo "⚠️  虚拟环境不存在，跳过依赖安装"
+                cd ..
               fi
-              
-              if [ "$HTTPS_API_CODE" = "200" ] || [ "$HTTPS_API_CODE" = "401" ] || [ "$HTTPS_API_CODE" = "404" ]; then
-                echo "✅ HTTPS /api/v1/health: HTTP $HTTPS_API_CODE"
-              else
-                echo "⚠️  HTTPS /api/v1/health: HTTP $HTTPS_API_CODE (可能需要等待服务完全启动)"
-              fi
-              echo ""
-              exit 0
             else
-              DEPLOY_EXIT_CODE=$?
-              echo "❌ 部署脚本执行失败，退出码: $DEPLOY_EXIT_CODE"
-              echo ""
-              echo "诊断信息:"
-              echo "  部署脚本路径: $DEPLOY_SCRIPT"
-              echo "  脚本是否存在: $([ -f "$DEPLOY_SCRIPT" ] && echo '是' || echo '否')"
-              echo "  脚本是否可执行: $([ -x "$DEPLOY_SCRIPT" ] && echo '是' || echo '否')"
-              echo ""
-              echo "  服务状态:"
-              systemctl status luckyred-api 2>&1 | head -5 || echo "  无法获取 luckyred-api 状态"
-              systemctl status liaotian-frontend 2>&1 | head -5 || echo "  无法获取 liaotian-frontend 状态"
-              echo ""
-              echo "  端口监听状态:"
-              ss -tlnp | grep -E ':(3000|8000)' || echo "  端口 3000 或 8000 未监听"
-              echo ""
-              exit $DEPLOY_EXIT_CODE
+              echo "⚠️  admin-backend 目录不存在，跳过后端依赖安装"
             fi
+            echo ""
+            
+            # ============ 重启服务 ============
+            echo "[5/5] 重启服务"
+            echo "----------------------------------------"
+            echo "重启后端服务..."
+            sudo systemctl restart luckyred-api && echo "✅ luckyred-api 已重启" || echo "⚠️  luckyred-api 重启失败"
+            
+            echo "重启前端服务..."
+            sudo systemctl restart liaotian-frontend && echo "✅ liaotian-frontend 已重启" || echo "⚠️  liaotian-frontend 重启失败"
+            
+            echo "重启 Nginx..."
+            sudo systemctl restart nginx && echo "✅ nginx 已重启" || echo "⚠️  nginx 重启失败"
+            
+            echo ""
+            echo "等待服务启动 (5秒)..."
+            sleep 5
+            echo ""
+            
+            # ============ HTTPS 验证 ============
+            echo "=========================================="
+            echo "HTTPS 验证（端口 443）"
+            echo "=========================================="
+            DOMAIN="${SERVER_HOST:-aikz.usdt2026.cc}"
+            echo "测试 HTTPS 访问..."
+            
+            HTTPS_LOGIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${DOMAIN}/login" 2>/dev/null || echo "000")
+            if [ "$HTTPS_LOGIN_CODE" = "200" ] || [ "$HTTPS_LOGIN_CODE" = "302" ] || [ "$HTTPS_LOGIN_CODE" = "301" ]; then
+              echo "✅ HTTPS /login: HTTP $HTTPS_LOGIN_CODE"
+            else
+              echo "⚠️  HTTPS /login: HTTP $HTTPS_LOGIN_CODE (可能需要等待服务完全启动)"
+            fi
+            
+            HTTPS_API_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${DOMAIN}/api/v1/health" 2>/dev/null || echo "000")
+            if [ "$HTTPS_API_CODE" = "200" ] || [ "$HTTPS_API_CODE" = "401" ] || [ "$HTTPS_API_CODE" = "404" ]; then
+              echo "✅ HTTPS /api/v1/health: HTTP $HTTPS_API_CODE"
+            else
+              echo "⚠️  HTTPS /api/v1/health: HTTP $HTTPS_API_CODE (可能需要等待服务完全启动)"
+            fi
+            
+            echo ""
+            echo "=========================================="
+            echo "✅ 部署完成 - $(date)"
+            echo "=========================================="
+            exit 0

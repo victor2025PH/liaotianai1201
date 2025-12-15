@@ -69,35 +69,77 @@ jobs:
               # 方法 2: 配置备用 DNS 服务器（需要 sudo）
               if ! nslookup github.com >/dev/null 2>&1; then
                 echo "配置备用 DNS 服务器 (8.8.8.8, 8.8.4.4, 1.1.1.1)..."
+                
+                # 检查 resolv.conf 状态
+                if [ -L /etc/resolv.conf ]; then
+                  echo "  /etc/resolv.conf 是软链接，检查 systemd-resolved 配置..."
+                  RESOLV_TARGET=$(readlink -f /etc/resolv.conf 2>/dev/null || echo "")
+                  echo "  软链接目标: $RESOLV_TARGET"
+                fi
+                
                 # 备份 resolv.conf（需要 sudo）
                 if [ -f /etc/resolv.conf ]; then
-                  sudo cp /etc/resolv.conf /etc/resolv.conf.backup.$(date +%Y%m%d_%H%M%S) || true
+                  echo "  备份 /etc/resolv.conf..."
+                  sudo cp /etc/resolv.conf /etc/resolv.conf.backup.$(date +%Y%m%d_%H%M%S) && echo "  ✅ 备份成功" || echo "  ⚠️  备份失败（继续）"
                 fi
                 
                 # 创建临时 resolv.conf（如果 systemd-resolved 未管理，需要 sudo）
                 if [ ! -L /etc/resolv.conf ] || [ ! -f /etc/systemd/resolved.conf ]; then
-                  echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null
-                  echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf > /dev/null
-                  echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf > /dev/null
-                  echo "✅ 已配置备用 DNS 服务器到 /etc/resolv.conf"
+                  echo "  直接写入 /etc/resolv.conf..."
+                  if echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null 2>&1; then
+                    echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf > /dev/null 2>&1 && \
+                    echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf > /dev/null 2>&1 && \
+                    echo "✅ 已配置备用 DNS 服务器到 /etc/resolv.conf"
+                  else
+                    echo "  ⚠️  写入 /etc/resolv.conf 失败，尝试使用 systemd-resolved..."
+                    # 如果直接写入失败，尝试使用 systemd-resolved
+                    if [ -f /etc/systemd/resolved.conf ]; then
+                      echo "  修改 /etc/systemd/resolved.conf..."
+                      if ! grep -q "^DNS=" /etc/systemd/resolved.conf; then
+                        if grep -q "^\[Resolve\]" /etc/systemd/resolved.conf; then
+                          if sudo sed -i '/^\[Resolve\]/a DNS=8.8.8.8 8.8.4.4 1.1.1.1' /etc/systemd/resolved.conf 2>/dev/null; then
+                            echo "✅ 已通过 sed 配置 systemd-resolved DNS"
+                          else
+                            echo "[Resolve]" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
+                            echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
+                            echo "✅ 已通过追加方式配置 systemd-resolved DNS"
+                          fi
+                        else
+                          echo "[Resolve]" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
+                          echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
+                          echo "✅ 已创建 [Resolve] 段并配置 DNS"
+                        fi
+                        sudo systemctl restart systemd-resolved 2>/dev/null || true
+                        sleep 3
+                      fi
+                    fi
+                  fi
                 else
                   # 如果使用 systemd-resolved，修改其配置（需要 sudo）
+                  echo "  使用 systemd-resolved 管理 DNS..."
                   if [ -f /etc/systemd/resolved.conf ]; then
                     if ! grep -q "^DNS=" /etc/systemd/resolved.conf; then
-                      # 使用 sudo 修改配置文件
+                      echo "  修改 /etc/systemd/resolved.conf..."
                       if grep -q "^\[Resolve\]" /etc/systemd/resolved.conf; then
-                        sudo sed -i '/^\[Resolve\]/a DNS=8.8.8.8 8.8.4.4 1.1.1.1' /etc/systemd/resolved.conf || {
-                          echo "[Resolve]" | sudo tee -a /etc/systemd/resolved.conf > /dev/null
-                          echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf > /dev/null
-                        }
+                        if sudo sed -i '/^\[Resolve\]/a DNS=8.8.8.8 8.8.4.4 1.1.1.1' /etc/systemd/resolved.conf 2>/dev/null; then
+                          echo "✅ 已通过 sed 配置 systemd-resolved DNS"
+                        else
+                          echo "[Resolve]" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
+                          echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
+                          echo "✅ 已通过追加方式配置 systemd-resolved DNS"
+                        fi
                       else
-                        echo "[Resolve]" | sudo tee -a /etc/systemd/resolved.conf > /dev/null
-                        echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf > /dev/null
+                        echo "[Resolve]" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
+                        echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf > /dev/null 2>&1 && \
+                        echo "✅ 已创建 [Resolve] 段并配置 DNS"
                       fi
-                      sudo systemctl restart systemd-resolved || true
+                      sudo systemctl restart systemd-resolved 2>/dev/null || true
                       sleep 3
-                      echo "✅ 已配置 systemd-resolved DNS 服务器"
+                    else
+                      echo "  systemd-resolved.conf 已包含 DNS 配置，跳过"
                     fi
+                  else
+                    echo "  ⚠️  /etc/systemd/resolved.conf 不存在"
                   fi
                 fi
               fi

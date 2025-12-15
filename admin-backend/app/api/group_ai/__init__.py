@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 # 导入基础模块（logs 延迟导入以避免循环导入）
 # 注意：statistics 模块不存在，已从导入列表移除
-from app.api.group_ai import accounts, scripts, monitor, control, role_assignments, script_versions, servers, dashboard, alert_rules, dialogue, redpacket, script_review, role_assignment_schemes, export, automation_tasks, telegram_alerts, session_export, account_allocation, allocation, account_management, account_import, script_deployment, chat_features, advanced_features, private_chat_funnel, alert_management, ai_provider
+from app.api.group_ai import accounts, scripts, monitor, control, role_assignments, script_versions, servers, dashboard, alert_rules, dialogue, redpacket, script_review, role_assignment_schemes, export, automation_tasks, telegram_alerts, session_export, account_allocation, allocation, account_management, account_import, script_deployment, chat_features, advanced_features, private_chat_funnel, alert_management, ai_provider, keyword_monitor, keyword_monitor
 
 # 延迟导入 logs 以避免循环导入（logs 导入 servers，而 __init__ 同时导入两者）
 try:
@@ -220,6 +220,13 @@ router.include_router(
 router.include_router(
     ai_provider.router,
     tags=["ai-provider"],
+    # dependencies=protected_dependency,
+)
+
+# 關鍵詞監控 API
+router.include_router(
+    keyword_monitor.router,
+    tags=["keyword-monitor"],
     # dependencies=protected_dependency,
 )
 

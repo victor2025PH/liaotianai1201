@@ -272,3 +272,43 @@ class AIProviderSettings(Base):
     active_keys = Column(JSON, default=dict)  # 每个提供商当前激活的Key ID { "openai": "key_id_1", "gemini": "key_id_2" }
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class KeywordMonitorRule(Base):
+    """關鍵詞監控規則表"""
+    __tablename__ = "keyword_monitor_rules"
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    name = Column(String(200), nullable=False, index=True)  # 規則名稱
+    keyword = Column(String(200), nullable=True, index=True)  # 關鍵詞（單個，已廢棄，使用 keywords）
+    keywords = Column(JSON, default=list)  # 關鍵詞列表（JSON 數組，優先使用）
+    group_id = Column(BigInteger, nullable=True, index=True)  # 監控的群組ID（NULL 表示所有群組）
+    account_id = Column(String(100), nullable=True, index=True)  # 觸發後使用的賬號ID（NULL 表示使用檢測到關鍵詞的賬號）
+    action = Column(String(50), nullable=False, default="send_private_message")  # 觸發動作：send_private_message, send_message, notify, etc.
+    action_params = Column(JSON, default=dict)  # 動作參數（JSON格式）
+    enabled = Column(Boolean, default=True, nullable=False, index=True)  # 是否啟用
+    match_mode = Column(String(20), default="contains")  # 匹配模式：contains, exact, regex
+    case_sensitive = Column(Boolean, default=False)  # 是否區分大小寫
+    description = Column(Text)  # 規則描述
+    trigger_count = Column(Integer, default=0, nullable=False)  # 觸發次數統計
+    last_triggered_at = Column(DateTime, nullable=True)  # 最後觸發時間
+    created_by = Column(String(100))  # 創建者用戶ID
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class KeywordTriggerEvent(Base):
+    """關鍵詞觸發事件記錄表"""
+    __tablename__ = "keyword_trigger_events"
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    rule_id = Column(String(36), nullable=False, index=True)  # 關聯的規則ID
+    account_id = Column(String(100), nullable=False, index=True)  # 檢測到關鍵詞的賬號ID
+    group_id = Column(BigInteger, nullable=False, index=True)  # 群組ID
+    user_id = Column(BigInteger, nullable=False, index=True)  # 發送消息的用戶ID
+    message_id = Column(BigInteger, nullable=False)  # 消息ID
+    message_text = Column(Text)  # 消息內容
+    matched_keyword = Column(String(200), nullable=False)  # 匹配的關鍵詞
+    action_taken = Column(String(50), nullable=False)  # 執行的動作
+    action_result = Column(JSON, default=dict)  # 動作執行結果
+    triggered_at = Column(DateTime, default=func.now(), nullable=False, index=True)

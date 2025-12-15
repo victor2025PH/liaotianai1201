@@ -61,33 +61,7 @@ server {
     # 客户端最大请求体大小
     client_max_body_size 50M;
     
-    # 登录页面 - 转发到后端 API（必须在根路径之前）
-    location /login {
-        proxy_pass http://127.0.0.1:8000/api/v1/auth/login;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-    
-    # 认证相关路由
-    location /api/v1/auth/ {
-        proxy_pass http://127.0.0.1:8000/api/v1/auth/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-    
-    # 后端 API - 转发到后端
+    # 后端 API - 转发到后端（必须在根路径之前，优先级最高）
     location /api/ {
         proxy_pass http://127.0.0.1:8000/api/;
         proxy_http_version 1.1;
@@ -100,7 +74,7 @@ server {
         proxy_read_timeout 300s;
     }
     
-    # 前端应用 - 转发到前端
+    # 前端应用 - 转发到前端（包括 /login 页面）
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;

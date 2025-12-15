@@ -164,11 +164,20 @@ df -h
 # 查看后端日志
 sudo journalctl -u luckyred-api -n 50 --no-pager
 
-# 查看前端日志
-sudo journalctl -u liaotian-frontend -n 50 --no-pager
+# 查看前端日志（重要：如果前端服务未运行）
+sudo journalctl -u liaotian-frontend -n 50 --no-pager -l
+
+# 查看前端服务详细状态
+sudo systemctl status liaotian-frontend --no-pager -l
 
 # 查看 Nginx 日志
 sudo tail -50 /var/log/nginx/error.log
+
+# 如果前端服务卡在 activating 状态
+sudo systemctl stop liaotian-frontend
+sleep 3
+sudo systemctl start liaotian-frontend
+sudo systemctl status liaotian-frontend --no-pager
 ```
 
 ### 如果端口被占用

@@ -529,262 +529,150 @@ async def start_all_accounts_chat(
     current_user: Optional[User] = Depends(get_current_active_user),
     db: Session = Depends(get_db_session)
 ):
-    """一鍵啟動所有在線賬號的聊天功能"""
+    """
+    一鍵啟動所有在線賬號的聊天功能（純命令模式）
+    
+    此函數只負責發送命令到 Worker 節點，不嘗試在服務器端加載 session 文件。
+    Session 文件由 Worker 節點管理，Worker 節點負責實際的賬號啟動和聊天功能。
+    """
     try:
-        from app.api.group_ai.accounts import get_service_manager
         from app.models.group_ai import GroupAIAccount
         
-        service_manager = get_service_manager()
-        if not service_manager:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="ServiceManager 未初始化"
-            )
-        
-        # 獲取所有在線賬號（從數據庫和 Worker 節點）
+        # 1. 獲取所有活躍賬號（從數據庫）
         db_accounts = db.query(GroupAIAccount).filter(
             GroupAIAccount.active == True
         ).all()
         
-        # 從 Worker 節點獲取在線賬號列表
-        workers = _get_all_workers()
-        online_account_ids_from_workers = set()
-        for node_id, worker_data in workers.items():
-            if worker_data.get("status") == "online":
-                accounts = worker_data.get("accounts", [])
-                for acc in accounts:
-                    if isinstance(acc, dict):
-                        account_id = acc.get("account_id") or acc.get("id")
-                        if account_id:
-                            online_account_ids_from_workers.add(account_id)
-        
-        # 如果數據庫中有賬號但 Worker 節點中沒有，仍然嘗試啟動
-        # 如果 Worker 節點中有賬號但數據庫中沒有，也包含進來
-        all_account_ids = set()
-        for acc in db_accounts:
-            all_account_ids.add(acc.account_id)
-        all_account_ids.update(online_account_ids_from_workers)
-        
-        if not all_account_ids:
-            # 提供更詳細的錯誤信息
+        if not db_accounts:
             total_accounts = db.query(GroupAIAccount).count()
             active_accounts = db.query(GroupAIAccount).filter(GroupAIAccount.active == True).count()
-            online_workers = sum(1 for w in workers.values() if w.get("status") == "online")
             
             return {
                 "success": False,
-                "message": f"沒有找到在線賬號。數據庫中總共有 {total_accounts} 個賬號，其中 {active_accounts} 個標記為活躍，{online_workers} 個 Worker 節點在線。請確保：1) 賬號已標記為活躍(active=True)，2) Worker 節點正在運行並已同步賬號。",
+                "message": f"沒有找到活躍賬號。數據庫中總共有 {total_accounts} 個賬號，其中 {active_accounts} 個標記為活躍。請確保賬號已標記為活躍(active=True)。",
                 "accounts_started": 0,
                 "accounts_total": 0,
+                "successful_accounts": [],
+                "failed_accounts": [],
                 "diagnostics": {
                     "total_accounts_in_db": total_accounts,
-                    "active_accounts_in_db": active_accounts,
-                    "online_workers": online_workers,
-                    "online_accounts_from_workers": len(online_account_ids_from_workers)
+                    "active_accounts_in_db": active_accounts
                 }
             }
         
-        # 使用所有找到的賬號 ID，優先使用數據庫中的賬號信息
-        accounts_to_start = []
-        for account_id in all_account_ids:
-            db_account = next((acc for acc in db_accounts if acc.account_id == account_id), None)
-            if db_account:
-                accounts_to_start.append(db_account)
-            else:
-                # 如果數據庫中沒有，創建一個臨時對象（僅用於發送命令）
-                from types import SimpleNamespace
-                temp_account = SimpleNamespace()
-                temp_account.account_id = account_id
-                temp_account.server_id = None  # 不知道服務器ID，發送到所有節點
-                accounts_to_start.append(temp_account)
+        # 2. 獲取在線 Worker 節點
+        workers = _get_all_workers()
+        online_workers = {nid: data for nid, data in workers.items() 
+                         if data.get("status") == "online"}
         
+        if not online_workers:
+            return {
+                "success": False,
+                "message": "沒有在線的 Worker 節點。請確保 Worker 節點正在運行並能連接到服務器。",
+                "accounts_started": 0,
+                "accounts_total": len(db_accounts),
+                "successful_accounts": [],
+                "failed_accounts": [],
+                "diagnostics": {
+                    "total_accounts_in_db": len(db_accounts),
+                    "online_workers": 0
+                }
+            }
+        
+        # 3. 按 server_id 分組賬號
+        accounts_by_server: Dict[str, List[GroupAIAccount]] = {}
+        accounts_without_server = []
+        
+        for account in db_accounts:
+            server_id = getattr(account, 'server_id', None)
+            if server_id and server_id in online_workers:
+                if server_id not in accounts_by_server:
+                    accounts_by_server[server_id] = []
+                accounts_by_server[server_id].append(account)
+            else:
+                accounts_without_server.append(account)
+        
+        # 4. 發送命令到對應的 Worker 節點（純命令模式，不嘗試加載 session）
         started_count = 0
         failed_accounts = []
-        
-        # 先啟動所有賬號
-        for db_account in accounts_to_start:
-            account_id = db_account.account_id
-            try:
-                server_id = getattr(db_account, 'server_id', None)
-                logger.info(f"[DEBUG] 賬號 {account_id} 的 server_id: {server_id}")
-                
-                # 如果賬號已分配到遠程服務器，不需要在本地啟動，直接發送命令
-                if server_id:
-                    logger.info(f"賬號 {account_id} 已分配到節點 {server_id}，跳過本地啟動，直接發送命令")
-                    # 跳過本地加載和啟動，直接發送命令到 Worker 節點
-                else:
-                    logger.warning(f"賬號 {account_id} 沒有 server_id，嘗試在本地啟動（Session 文件可能在 Worker 節點上）")
-                    # 檢查賬號是否已在內存中
-                    if account_id not in service_manager.account_manager.accounts:
-                        # 如果不在內存中，先嘗試從數據庫加載到 AccountManager
-                        logger.info(f"賬號 {account_id} 不在內存中，嘗試從數據庫加載...")
-                        try:
-                            # 檢查數據庫中是否存在
-                            db_account_for_load = db.query(GroupAIAccount).filter(
-                                GroupAIAccount.account_id == account_id
-                            ).first()
-                            
-                            if not db_account_for_load:
-                                error_details = [f"賬號 {account_id} 在數據庫中不存在"]
-                                failed_accounts.append({
-                                    "account_id": account_id,
-                                    "error": f"啟動賬號失敗: {', '.join(error_details)}"
-                                })
-                                continue
-                            
-                            # 從數據庫加載賬號到 AccountManager
-                            from group_ai_service.models.account import AccountConfig
-                            from pathlib import Path
-                            
-                            # 解析 session 文件路徑
-                            session_file = db_account_for_load.session_file
-                            session_path = Path(session_file)
-                            
-                            # 如果是相對路徑，嘗試從項目根目錄解析
-                            if not session_path.is_absolute():
-                                from group_ai_service.config import get_group_ai_config
-                                config_obj = get_group_ai_config()
-                                api_file_path = Path(__file__).resolve()
-                                project_root = api_file_path.parent.parent.parent.parent.parent
-                                sessions_dir = project_root / config_obj.session_files_directory
-                                session_path = sessions_dir / Path(session_file).name
-                                if session_path.exists():
-                                    session_file = str(session_path)
-                                elif Path(session_file).exists():
-                                    session_file = str(Path(session_file).resolve())
-                            
-                            # 創建配置
-                            account_config = AccountConfig(
-                                account_id=db_account_for_load.account_id,
-                                session_file=session_file,
-                                script_id=db_account_for_load.script_id or "default",
-                                group_ids=db_account_for_load.group_ids or [],
-                                active=db_account_for_load.active if db_account_for_load.active is not None else True,
-                                reply_rate=db_account_for_load.reply_rate or 0.3,
-                                redpacket_enabled=db_account_for_load.redpacket_enabled if db_account_for_load.redpacket_enabled is not None else True,
-                                redpacket_probability=db_account_for_load.redpacket_probability or 0.5,
-                                max_replies_per_hour=db_account_for_load.max_replies_per_hour or 50,
-                                min_reply_interval=db_account_for_load.min_reply_interval or 3
-                            )
-                            
-                            # 添加到 AccountManager
-                            account = await service_manager.account_manager.add_account(
-                                account_id=db_account_for_load.account_id,
-                                session_file=session_file,
-                                config=account_config
-                            )
-                            logger.info(f"成功從數據庫加載賬號 {account_id} 到 AccountManager")
-                            
-                            # 現在嘗試啟動賬號
-                            success = await service_manager.start_account(account_id)
-                            if not success:
-                                # 獲取詳細的錯誤信息
-                                error_details = []
-                                account = service_manager.account_manager.accounts.get(account_id)
-                                
-                                if not account:
-                                    error_details.append("賬號未在 AccountManager 中")
-                                else:
-                                    # 檢查 session 文件是否存在
-                                    from pathlib import Path
-                                    session_path = Path(account.config.session_file)
-                                    if not session_path.exists():
-                                        error_details.append(f"Session 文件不存在: {account.config.session_file}")
-                                    
-                                    # 檢查賬號狀態
-                                    from group_ai_service.models.account import AccountStatusEnum
-                                    if account.status == AccountStatusEnum.ERROR:
-                                        error_details.append("Telegram 連接失敗（請檢查 session 文件是否有效）")
-                                    
-                                    if account.error_count > 0:
-                                        error_details.append(f"已嘗試 {account.error_count} 次啟動")
-                                
-                                error_msg = "啟動賬號失敗"
-                                if error_details:
-                                    error_msg += f": {', '.join(error_details)}"
-                                else:
-                                    error_msg += "（未知原因，請檢查日誌）"
-                                
-                                failed_accounts.append({
-                                    "account_id": account_id,
-                                    "error": error_msg
-                                })
-                                continue
-                        except Exception as e:
-                            logger.error(f"啟動賬號 {account_id} 時發生異常: {e}", exc_info=True)
-                            failed_accounts.append({
-                                "account_id": account_id,
-                                "error": f"啟動賬號時發生異常: {str(e)}"
-                            })
-                            continue
-                
-                # 啟動聊天功能
-                chat_command = {
-                    "action": "start_enhanced_chat",
-                    "params": {"group_id": group_id, "account_id": account_id},
-                    "timestamp": datetime.now().isoformat()
-                }
-                
-                # 發送啟動聊天命令
-                if server_id:
-                    # 檢查目標節點是否在線
-                    target_worker = workers.get(server_id)
-                    if target_worker and target_worker.get("status") == "online":
-                        _add_command(server_id, chat_command)
-                        logger.info(f"發送啟動聊天命令到節點 {server_id} (賬號: {account_id})")
-                    else:
-                        logger.warning(f"目標節點 {server_id} 不在線，無法發送啟動聊天命令 (賬號: {account_id})")
-                        failed_accounts.append({
-                            "account_id": account_id,
-                            "error": f"目標節點 {server_id} 不在線（請檢查 Worker 節點是否運行並能連接到服務器 https://aikz.usdt2026.cc）"
-                        })
-                        continue
-                else:
-                    # 發送到所有在線節點
-                    online_workers = {nid: data for nid, data in workers.items() if data.get("status") == "online"}
-                    if online_workers:
-                        for nid in online_workers:
-                            _add_command(nid, chat_command)
-                        logger.info(f"發送啟動聊天命令到所有在線節點 (共 {len(online_workers)} 個) (賬號: {account_id})")
-                    else:
-                        logger.warning(f"沒有在線的 Worker 節點，無法發送啟動聊天命令 (賬號: {account_id})")
-                        failed_accounts.append({
-                            "account_id": account_id,
-                            "error": "沒有在線的 Worker 節點（請檢查 Worker 節點是否運行並能連接到服務器 https://aikz.usdt2026.cc）"
-                        })
-                        continue
-                
-                started_count += 1
-                logger.info(f"已啟動賬號 {account_id} 的聊天功能")
-                
-            except Exception as e:
-                logger.error(f"啟動賬號 {account_id} 聊天失敗: {e}", exc_info=True)
-                failed_accounts.append({
-                    "account_id": account_id,
-                    "error": str(e)
-                })
-        
-        # 收集成功啟動的賬號列表
         successful_accounts = []
-        for db_account in accounts_to_start:
-            account_id = db_account.account_id
-            # 如果不在失敗列表中，則視為成功
-            if not any(fa.get("account_id") == account_id for fa in failed_accounts):
-                successful_accounts.append({
-                    "account_id": account_id,
-                    "phone": getattr(db_account, 'phone_number', None) or account_id,
-                    "username": getattr(db_account, 'username', None) or "",
-                    "server_id": getattr(db_account, 'server_id', None)
-                })
+        
+        # 4.1 處理有 server_id 的賬號（發送到指定節點）
+        for server_id, accounts in accounts_by_server.items():
+            for account in accounts:
+                account_id = account.account_id
+                try:
+                    chat_command = {
+                        "action": "start_enhanced_chat",
+                        "params": {
+                            "account_id": account_id,
+                            "group_id": group_id
+                        },
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    
+                    _add_command(server_id, chat_command)
+                    logger.info(f"發送啟動聊天命令到節點 {server_id} (賬號: {account_id})")
+                    
+                    successful_accounts.append({
+                        "account_id": account_id,
+                        "phone": account.phone_number or account_id,
+                        "username": account.username or "",
+                        "server_id": server_id
+                    })
+                    started_count += 1
+                    
+                except Exception as e:
+                    logger.error(f"發送命令到節點 {server_id} 失敗 (賬號: {account_id}): {e}", exc_info=True)
+                    failed_accounts.append({
+                        "account_id": account_id,
+                        "error": f"發送命令失敗: {str(e)}"
+                    })
+        
+        # 4.2 處理沒有 server_id 的賬號（廣播到所有在線節點）
+        if accounts_without_server:
+            for account in accounts_without_server:
+                account_id = account.account_id
+                try:
+                    chat_command = {
+                        "action": "start_enhanced_chat",
+                        "params": {
+                            "account_id": account_id,
+                            "group_id": group_id
+                        },
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    
+                    # 廣播到所有在線節點
+                    for node_id in online_workers:
+                        _add_command(node_id, chat_command)
+                    
+                    logger.info(f"發送啟動聊天命令到所有在線節點 (共 {len(online_workers)} 個) (賬號: {account_id})")
+                    
+                    successful_accounts.append({
+                        "account_id": account_id,
+                        "phone": account.phone_number or account_id,
+                        "username": account.username or "",
+                        "server_id": "所有在線節點"
+                    })
+                    started_count += 1
+                    
+                except Exception as e:
+                    logger.error(f"廣播命令失敗 (賬號: {account_id}): {e}", exc_info=True)
+                    failed_accounts.append({
+                        "account_id": account_id,
+                        "error": f"廣播命令失敗: {str(e)}"
+                    })
         
         return {
             "success": True,
-            "message": f"已啟動 {started_count}/{len(accounts_to_start)} 個賬號的聊天功能",
+            "message": f"已發送啟動命令到 {started_count}/{len(db_accounts)} 個賬號",
             "accounts_started": started_count,
-            "accounts_total": len(accounts_to_start),
+            "accounts_total": len(db_accounts),
             "successful_accounts": successful_accounts,
             "failed_accounts": failed_accounts,
-            "group_id": group_id
+            "group_id": group_id,
+            "note": "命令已發送到 Worker 節點。實際執行結果取決於 Worker 節點上的 session 文件是否有效。"
         }
         
     except Exception as e:
@@ -793,11 +681,6 @@ async def start_all_accounts_chat(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"啟動失敗: {str(e)}"
         )
-    
-    return {
-        "success": True,
-        "message": "聊天已停止"
-    }
 
 
 @router.post("/chat/send", status_code=status.HTTP_200_OK)
@@ -986,3 +869,251 @@ async def apply_optimization(
         "success": True,
         "message": f"優化 {action_type} 已應用"
     }
+
+
+# ============ 新增命令 API（純命令模式） ============
+
+class SearchGroupsRequest(BaseModel):
+    """搜索群組請求"""
+    account_id: str = Field(..., description="賬號ID")
+    keyword: str = Field(..., description="搜索關鍵詞")
+
+
+class SendPrivateMessageRequest(BaseModel):
+    """發送私聊消息請求"""
+    account_id: str = Field(..., description="賬號ID")
+    user_id: int = Field(..., description="目標用戶ID")
+    message: str = Field(..., description="消息內容")
+
+
+class GuideGameRequest(BaseModel):
+    """指導遊戲請求"""
+    account_id: str = Field(..., description="賬號ID")
+    group_id: int = Field(..., description="群組ID")
+    game_type: str = Field(..., description="遊戲類型")
+
+
+@router.post("/commands/search-groups", status_code=status.HTTP_200_OK)
+async def search_groups_command(
+    request: SearchGroupsRequest,
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """
+    發送搜索群組命令（純命令模式）
+    
+    Worker 節點執行搜索後會上報結果。
+    """
+    try:
+        from app.models.group_ai import GroupAIAccount
+        
+        # 1. 檢查賬號是否存在
+        db_account = db.query(GroupAIAccount).filter(
+            GroupAIAccount.account_id == request.account_id
+        ).first()
+        
+        if not db_account:
+            raise HTTPException(
+                status_code=404,
+                detail=f"賬號 {request.account_id} 不存在"
+            )
+        
+        # 2. 獲取賬號的 server_id
+        server_id = db_account.server_id
+        if not server_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"賬號 {request.account_id} 沒有 server_id，無法確定目標 Worker 節點"
+            )
+        
+        # 3. 檢查目標 Worker 節點是否在線
+        workers = _get_all_workers()
+        target_worker = workers.get(server_id)
+        
+        if not target_worker or target_worker.get("status") != "online":
+            raise HTTPException(
+                status_code=400,
+                detail=f"目標 Worker 節點 {server_id} 不在線"
+            )
+        
+        # 4. 發送搜索群組命令
+        command = {
+            "action": "search_groups",
+            "params": {
+                "account_id": request.account_id,
+                "keyword": request.keyword
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        _add_command(server_id, command)
+        logger.info(f"發送搜索群組命令到節點 {server_id} (賬號: {request.account_id}, 關鍵詞: {request.keyword})")
+        
+        return {
+            "success": True,
+            "message": f"搜索群組命令已發送到 Worker 節點 {server_id}",
+            "account_id": request.account_id,
+            "keyword": request.keyword,
+            "server_id": server_id,
+            "note": "搜索結果將由 Worker 節點上報，或通過輪詢 API 查詢結果。"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"發送搜索群組命令失敗: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"發送搜索群組命令失敗: {str(e)}"
+        )
+
+
+@router.post("/commands/send-private-message", status_code=status.HTTP_200_OK)
+async def send_private_message_command(
+    request: SendPrivateMessageRequest,
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """
+    發送私聊消息命令（純命令模式）
+    
+    Worker 節點執行發送私聊消息。
+    """
+    try:
+        from app.models.group_ai import GroupAIAccount
+        
+        # 1. 檢查賬號是否存在
+        db_account = db.query(GroupAIAccount).filter(
+            GroupAIAccount.account_id == request.account_id
+        ).first()
+        
+        if not db_account:
+            raise HTTPException(
+                status_code=404,
+                detail=f"賬號 {request.account_id} 不存在"
+            )
+        
+        # 2. 獲取賬號的 server_id
+        server_id = db_account.server_id
+        if not server_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"賬號 {request.account_id} 沒有 server_id，無法確定目標 Worker 節點"
+            )
+        
+        # 3. 檢查目標 Worker 節點是否在線
+        workers = _get_all_workers()
+        target_worker = workers.get(server_id)
+        
+        if not target_worker or target_worker.get("status") != "online":
+            raise HTTPException(
+                status_code=400,
+                detail=f"目標 Worker 節點 {server_id} 不在線"
+            )
+        
+        # 4. 發送私聊消息命令
+        command = {
+            "action": "send_private_message",
+            "params": {
+                "account_id": request.account_id,
+                "user_id": request.user_id,
+                "message": request.message
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        _add_command(server_id, command)
+        logger.info(f"發送私聊消息命令到節點 {server_id} (賬號: {request.account_id}, 用戶: {request.user_id})")
+        
+        return {
+            "success": True,
+            "message": f"私聊消息命令已發送到 Worker 節點 {server_id}",
+            "account_id": request.account_id,
+            "user_id": request.user_id,
+            "server_id": server_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"發送私聊消息命令失敗: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"發送私聊消息命令失敗: {str(e)}"
+        )
+
+
+@router.post("/commands/guide-game", status_code=status.HTTP_200_OK)
+async def guide_game_command(
+    request: GuideGameRequest,
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """
+    發送指導遊戲命令（純命令模式）
+    
+    Worker 節點執行遊戲指導操作。
+    """
+    try:
+        from app.models.group_ai import GroupAIAccount
+        
+        # 1. 檢查賬號是否存在
+        db_account = db.query(GroupAIAccount).filter(
+            GroupAIAccount.account_id == request.account_id
+        ).first()
+        
+        if not db_account:
+            raise HTTPException(
+                status_code=404,
+                detail=f"賬號 {request.account_id} 不存在"
+            )
+        
+        # 2. 獲取賬號的 server_id
+        server_id = db_account.server_id
+        if not server_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"賬號 {request.account_id} 沒有 server_id，無法確定目標 Worker 節點"
+            )
+        
+        # 3. 檢查目標 Worker 節點是否在線
+        workers = _get_all_workers()
+        target_worker = workers.get(server_id)
+        
+        if not target_worker or target_worker.get("status") != "online":
+            raise HTTPException(
+                status_code=400,
+                detail=f"目標 Worker 節點 {server_id} 不在線"
+            )
+        
+        # 4. 發送指導遊戲命令
+        command = {
+            "action": "guide_game",
+            "params": {
+                "account_id": request.account_id,
+                "group_id": request.group_id,
+                "game_type": request.game_type
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        _add_command(server_id, command)
+        logger.info(f"發送指導遊戲命令到節點 {server_id} (賬號: {request.account_id}, 群組: {request.group_id}, 遊戲: {request.game_type})")
+        
+        return {
+            "success": True,
+            "message": f"指導遊戲命令已發送到 Worker 節點 {server_id}",
+            "account_id": request.account_id,
+            "group_id": request.group_id,
+            "game_type": request.game_type,
+            "server_id": server_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"發送指導遊戲命令失敗: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"發送指導遊戲命令失敗: {str(e)}"
+        )

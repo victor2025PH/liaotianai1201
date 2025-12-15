@@ -78,145 +78,80 @@ class GroupResponse(BaseModel):
 @router.post("/create", response_model=GroupResponse)
 async def create_group(
     request: CreateGroupRequest,
-    service_manager: ServiceManager = Depends(get_service_manager),
     db: Session = Depends(get_db)
 ):
-    """創建新的Telegram群組並啟動群聊"""
+    """
+    創建新的Telegram群組（純命令模式）
+    
+    此函數只負責發送命令到 Worker 節點，不嘗試在服務器端加載 session 文件。
+    Worker 節點負責實際的群組創建操作。
+    """
     try:
-        from group_ai_service.group_manager import GroupManager
         from app.models.group_ai import GroupAIAccount
-        from group_ai_service.models.account import AccountConfig
-        from pathlib import Path
+        from app.api.workers import _add_command, _get_all_workers
+        from datetime import datetime
         
-        # 檢查賬號是否在 AccountManager 中
-        account = service_manager.account_manager.accounts.get(request.account_id)
+        # 1. 檢查賬號是否存在
+        db_account = db.query(GroupAIAccount).filter(
+            GroupAIAccount.account_id == request.account_id
+        ).first()
         
-        # 如果賬號不在 AccountManager 中，嘗試從數據庫加載
-        if not account:
-            logger.info(f"賬號 {request.account_id} 不在 AccountManager 中，嘗試從數據庫加載")
-            db_account = db.query(GroupAIAccount).filter(
-                GroupAIAccount.account_id == request.account_id
-            ).first()
-            
-            if not db_account:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"賬號 {request.account_id} 不存在"
-                )
-            
-            # 如果賬號在服務器上，需要先加載到本地 AccountManager
-            # 注意：這會創建一個本地連接，但實際運行在服務器上
-            # 這是一個臨時解決方案，理想情況下應該通過SSH在服務器上執行建群操作
-            if db_account.server_id:
-                logger.info(f"賬號 {request.account_id} 在服務器 {db_account.server_id} 上，嘗試加載到本地 AccountManager")
-                
-                # 解析 session 文件路徑
-                session_file = db_account.session_file
-                session_path = Path(session_file)
-                
-                # 如果是相對路徑，嘗試從項目根目錄解析
-                if not session_path.is_absolute():
-                    from group_ai_service.config import get_group_ai_config
-                    config_obj = get_group_ai_config()
-                    api_file_path = Path(__file__).resolve()
-                    project_root = api_file_path.parent.parent.parent.parent.parent
-                    sessions_dir = project_root / config_obj.session_files_directory
-                    session_path = sessions_dir / Path(session_file).name
-                    if session_path.exists():
-                        session_file = str(session_path)
-                    elif Path(session_file).exists():
-                        session_file = str(Path(session_file).resolve())
-                
-                # 創建配置
-                account_config = AccountConfig(
-                    account_id=db_account.account_id,
-                    session_file=session_file,
-                    script_id=db_account.script_id or "default",
-                    group_ids=db_account.group_ids or [],
-                    active=db_account.active if db_account.active is not None else True,
-                    reply_rate=db_account.reply_rate or 0.3,
-                    redpacket_enabled=db_account.redpacket_enabled if db_account.redpacket_enabled is not None else True,
-                    redpacket_probability=db_account.redpacket_probability or 0.5,
-                    max_replies_per_hour=db_account.max_replies_per_hour or 50,
-                    min_reply_interval=db_account.min_reply_interval or 3
-                )
-                
-                # 添加到 AccountManager
-                try:
-                    account = await service_manager.account_manager.add_account(
-                        account_id=db_account.account_id,
-                        session_file=session_file,
-                        config=account_config
-                    )
-                    logger.info(f"成功從數據庫加載賬號 {request.account_id} 到 AccountManager")
-                except Exception as e:
-                    logger.error(f"從數據庫加載賬號 {request.account_id} 失敗: {e}", exc_info=True)
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"從數據庫加載賬號失敗: {str(e)}。請檢查 session 文件是否存在。"
-                    )
-        
-        # 確保賬號在線
-        if not account or account.status.value != "online":
-            logger.warning(f"賬號 {request.account_id} 未在線，嘗試啟動...")
-            # 嘗試啟動賬號
-            success = await service_manager.start_account(request.account_id)
-            if not success:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"賬號 {request.account_id} 未在線且啟動失敗。請確保賬號已啟動。"
-                )
-            # 重新獲取賬號
-            account = service_manager.account_manager.accounts.get(request.account_id)
-        
-        if not account:
+        if not db_account:
             raise HTTPException(
                 status_code=404,
-                detail=f"賬號 {request.account_id} 不存在或無法加載"
+                detail=f"賬號 {request.account_id} 不存在"
             )
         
-        group_manager = GroupManager(service_manager.account_manager)
-        
-        # 創建群組並啟動群聊
-        group_id = await group_manager.create_and_start_group(
-            account_id=request.account_id,
-            title=request.title,
-            description=request.description,
-            member_ids=request.member_ids,
-            auto_reply=request.auto_reply
-        )
-        
-        if group_id:
-            # 獲取群組信息
-            account = service_manager.account_manager.accounts.get(request.account_id)
-            group_title = request.title
-            if account and account.client.is_connected:
-                try:
-                    chat = await account.client.get_chat(group_id)
-                    group_title = chat.title
-                except:
-                    pass
-            
-            return GroupResponse(
-                account_id=request.account_id,
-                group_id=group_id,
-                group_title=group_title,
-                success=True,
-                message=f"群組創建成功並已啟動群聊"
-            )
-        else:
+        # 2. 獲取賬號的 server_id
+        server_id = db_account.server_id
+        if not server_id:
             raise HTTPException(
-                status_code=500,
-                detail="創建群組失敗"
+                status_code=400,
+                detail=f"賬號 {request.account_id} 沒有 server_id，無法確定目標 Worker 節點。請確保 Worker 節點已同步賬號信息。"
             )
+        
+        # 3. 檢查目標 Worker 節點是否在線
+        workers = _get_all_workers()
+        target_worker = workers.get(server_id)
+        
+        if not target_worker or target_worker.get("status") != "online":
+            raise HTTPException(
+                status_code=400,
+                detail=f"目標 Worker 節點 {server_id} 不在線。請確保 Worker 節點正在運行並能連接到服務器。"
+            )
+        
+        # 4. 發送創建群組命令
+        command = {
+            "action": "create_group",
+            "params": {
+                "account_id": request.account_id,
+                "title": request.title,
+                "description": request.description,
+                "member_ids": request.member_ids or [],
+                "auto_reply": request.auto_reply
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        _add_command(server_id, command)
+        logger.info(f"發送創建群組命令到節點 {server_id} (賬號: {request.account_id}, 群組名稱: {request.title})")
+        
+        # 5. 返回響應（注意：實際群組 ID 需要 Worker 節點執行後上報）
+        return GroupResponse(
+            account_id=request.account_id,
+            group_id=0,  # 暫時返回 0，實際 ID 需要 Worker 節點執行後上報
+            group_title=request.title,
+            success=True,
+            message=f"創建群組命令已發送到 Worker 節點 {server_id}。Worker 節點將執行創建操作並上報結果。"
+        )
             
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"創建群組失敗: {e}")
+        logger.exception(f"發送創建群組命令失敗: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"創建群組失敗: {str(e)}"
+            detail=f"發送創建群組命令失敗: {str(e)}"
         )
 
 
@@ -365,17 +300,20 @@ async def get_group_invite_link(
     group_id: int,
     account_id: Optional[str] = Query(None, description="用于获取邀请链接的账号ID"),
     current_user: Optional[User] = Depends(get_current_active_user),
-    service_manager: ServiceManager = Depends(get_service_manager),
     db: Session = Depends(get_db)
 ):
     """
-    获取群组邀请链接或用户名
-    如果本地没有登录Telegram，返回网页链接
+    获取群组邀请链接（純命令模式）
+    
+    此函數發送命令到 Worker 節點，Worker 節點執行後會上報結果。
+    注意：此 API 只發送命令，實際結果需要通過 Worker 節點上報或輪詢獲取。
     """
     try:
         from app.models.group_ai import GroupAIAccount
+        from app.api.workers import _add_command, _get_all_workers
+        from datetime import datetime
         
-        # 如果没有提供account_id，尝试从数据库中找到第一个有该群组的账号
+        # 1. 如果没有提供account_id，尝试从数据库中找到第一个有该群组的账号
         if not account_id:
             db_account = db.query(GroupAIAccount).filter(
                 GroupAIAccount.group_ids.contains([group_id])
@@ -389,67 +327,65 @@ async def get_group_invite_link(
                 detail="未找到拥有该群组的账号，请提供account_id参数"
             )
         
-        # 检查账号是否在AccountManager中
-        account = service_manager.account_manager.accounts.get(account_id)
+        # 2. 获取账号信息
+        db_account = db.query(GroupAIAccount).filter(
+            GroupAIAccount.account_id == account_id
+        ).first()
         
-        if not account or not account.client or not account.client.is_connected:
-            # 账号不在线，返回网页链接（如果知道群组用户名）
-            # 或者提示需要登录
-            return {
-                "success": False,
-                "message": "账号未在线，无法获取邀请链接",
-                "web_link": None,
-                "requires_auth": True,
-                "suggestion": "请先启动账号，或使用群组用户名直接访问"
-            }
+        if not db_account:
+            raise HTTPException(
+                status_code=404,
+                detail=f"账号 {account_id} 不存在"
+            )
         
-        try:
-            # 获取群组信息
-            chat = await account.client.get_entity(group_id)
-            
-            # 尝试获取邀请链接
-            invite_link = None
-            username = None
-            
-            if hasattr(chat, 'username') and chat.username:
-                username = chat.username
-                invite_link = f"https://t.me/{username}"
-            else:
-                # 尝试导出邀请链接
-                try:
-                    from telethon.tl.functions.messages import ExportChatInviteRequest
-                    exported = await account.client(ExportChatInviteRequest(chat))
-                    if hasattr(exported, 'link'):
-                        invite_link = exported.link
-                except Exception as e:
-                    logger.warning(f"无法导出邀请链接: {e}")
-            
-            return {
-                "success": True,
-                "group_id": group_id,
-                "group_title": chat.title if hasattr(chat, 'title') else None,
-                "username": username,
-                "invite_link": invite_link,
-                "web_link": invite_link or (f"https://t.me/c/{str(group_id)[4:]}/{group_id}" if str(group_id).startswith('-100') else None),
-                "telegram_link": f"tg://resolve?domain={username}" if username else None,
-                "requires_auth": False
-            }
-        except Exception as e:
-            logger.error(f"获取群组信息失败: {e}", exc_info=True)
-            return {
-                "success": False,
-                "message": f"获取群组信息失败: {str(e)}",
-                "web_link": None,
-                "requires_auth": True
-            }
+        # 3. 获取账号的 server_id
+        server_id = db_account.server_id
+        if not server_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"账号 {account_id} 没有 server_id，无法确定目标 Worker 节点"
+            )
+        
+        # 4. 检查目标 Worker 节点是否在线
+        workers = _get_all_workers()
+        target_worker = workers.get(server_id)
+        
+        if not target_worker or target_worker.get("status") != "online":
+            raise HTTPException(
+                status_code=400,
+                detail=f"目标 Worker 节点 {server_id} 不在线"
+            )
+        
+        # 5. 发送获取群组链接命令
+        command = {
+            "action": "get_group_link",
+            "params": {
+                "account_id": account_id,
+                "group_id": group_id
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        _add_command(server_id, command)
+        logger.info(f"發送獲取群組鏈接命令到節點 {server_id} (賬號: {account_id}, 群組: {group_id})")
+        
+        # 6. 返回响应（注意：实际链接需要 Worker 节点执行后上报）
+        return {
+            "success": True,
+            "group_id": group_id,
+            "account_id": account_id,
+            "server_id": server_id,
+            "message": f"獲取群組鏈接命令已發送到 Worker 節點 {server_id}。Worker 節點將執行操作並上報結果。",
+            "note": "實際的群組鏈接需要通過 Worker 節點上報獲取，或通過輪詢 API 查詢結果。"
+        }
             
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"获取群组邀请链接失败: {e}", exc_info=True)
+        logger.error(f"發送獲取群組鏈接命令失敗: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"获取邀请链接失败: {str(e)}"
+            detail=f"發送獲取群組鏈接命令失敗: {str(e)}"
         )
 
 

@@ -261,6 +261,30 @@ jobs:
             # 执行部署脚本并捕获退出码
             if bash "$DEPLOY_SCRIPT"; then
               echo "✅ 部署脚本执行成功"
+              echo ""
+              echo "=========================================="
+              echo "外部 HTTPS 验证（可选）"
+              echo "=========================================="
+              echo "注意：端口 3000 和 8000 已被防火墙拦截，只能通过 HTTPS (443) 访问"
+              echo ""
+              # 可选的外部 HTTPS 验证（使用域名，通过 Nginx 代理）
+              DOMAIN="${SERVER_HOST:-aikz.usdt2026.cc}"
+              echo "测试 HTTPS 访问（端口 443）..."
+              HTTPS_LOGIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${DOMAIN}/login" 2>/dev/null || echo "000")
+              HTTPS_API_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${DOMAIN}/api/v1/health" 2>/dev/null || echo "000")
+              
+              if [ "$HTTPS_LOGIN_CODE" = "200" ] || [ "$HTTPS_LOGIN_CODE" = "302" ] || [ "$HTTPS_LOGIN_CODE" = "301" ]; then
+                echo "✅ HTTPS /login: HTTP $HTTPS_LOGIN_CODE"
+              else
+                echo "⚠️  HTTPS /login: HTTP $HTTPS_LOGIN_CODE (可能需要等待服务完全启动)"
+              fi
+              
+              if [ "$HTTPS_API_CODE" = "200" ] || [ "$HTTPS_API_CODE" = "401" ] || [ "$HTTPS_API_CODE" = "404" ]; then
+                echo "✅ HTTPS /api/v1/health: HTTP $HTTPS_API_CODE"
+              else
+                echo "⚠️  HTTPS /api/v1/health: HTTP $HTTPS_API_CODE (可能需要等待服务完全启动)"
+              fi
+              echo ""
               exit 0
             else
               DEPLOY_EXIT_CODE=$?

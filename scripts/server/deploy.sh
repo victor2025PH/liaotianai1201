@@ -469,10 +469,10 @@ if [ -n "$BACKEND_SERVICE" ]; then
   echo "Waiting for backend service to start (15 seconds)..."
   sleep 15
   
-  # 验证后端健康检查
+  # 验证后端健康检查（使用 127.0.0.1，避免防火墙拦截）
   echo "Verifying backend health..."
   for i in {1..6}; do
-    if curl -s http://localhost:8000/health >/dev/null 2>&1; then
+    if curl -s http://127.0.0.1:8000/health >/dev/null 2>&1; then
       echo "✅ Backend health check passed"
       break
     fi
@@ -485,10 +485,10 @@ if [ -n "$BACKEND_SERVICE" ]; then
     fi
   done
   
-  # 验证 AI Provider API 路由是否可用
+  # 验证 AI Provider API 路由是否可用（使用 127.0.0.1，避免防火墙拦截）
   echo "Verifying AI Provider API routes..."
   sleep 2
-  AI_PROVIDER_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" http://localhost:8000/api/v1/group-ai/ai-provider/providers 2>/dev/null || echo "ERROR")
+  AI_PROVIDER_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" http://127.0.0.1:8000/api/v1/group-ai/ai-provider/providers 2>/dev/null || echo "ERROR")
   AI_PROVIDER_HTTP_CODE=$(echo "$AI_PROVIDER_RESPONSE" | grep "HTTP_CODE" | cut -d: -f2 || echo "000")
   
   if [ "$AI_PROVIDER_HTTP_CODE" = "200" ] || [ "$AI_PROVIDER_HTTP_CODE" = "401" ] || [ "$AI_PROVIDER_HTTP_CODE" = "403" ]; then
@@ -578,9 +578,9 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
   RETRY_COUNT=$((RETRY_COUNT + 1))
   echo "Health check attempt $RETRY_COUNT/$MAX_RETRIES..."
   
-  # 检查后端健康
+  # 检查后端健康（使用 127.0.0.1，避免防火墙拦截）
   BACKEND_HEALTHY=false
-  if curl -s -f --max-time 5 http://localhost:8000/health >/dev/null 2>&1; then
+  if curl -s -f --max-time 5 http://127.0.0.1:8000/health >/dev/null 2>&1; then
     BACKEND_HEALTHY=true
     echo "✅ Backend health check passed"
   else
@@ -604,10 +604,10 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     fi
   fi
   
-  # 检查前端健康
+  # 检查前端健康（使用 127.0.0.1，避免防火墙拦截）
   FRONTEND_HEALTHY=false
   if [ -n "$FRONTEND_SERVICE_NAME" ]; then
-    HTTP_CODE=$(timeout 5s curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://localhost:3000 2>/dev/null || echo "000")
+    HTTP_CODE=$(timeout 5s curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:3000 2>/dev/null || echo "000")
     if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
       FRONTEND_HEALTHY=true
       echo "✅ Frontend health check passed (HTTP $HTTP_CODE)"
@@ -730,9 +730,9 @@ fi
 
 if [ "$BACKEND_STATUS" = "active" ]; then
   echo "✅ Backend service ($TARGET_SERVICE) is running"
-  # 健康检查
-  if timeout 10s curl -s -f --max-time 5 http://localhost:8000/health > /dev/null 2>&1; then
-    echo "✅ Backend health check: Passed"
+    # 健康检查（使用 127.0.0.1，避免防火墙拦截）
+    if timeout 10s curl -s -f --max-time 5 http://127.0.0.1:8000/health > /dev/null 2>&1; then
+      echo "✅ Backend health check: Passed"
   else
     echo "⚠️  Backend health check: Failed (Service is up but API not responding)"
     echo "⬇️ Last 20 lines of logs:"
@@ -867,7 +867,7 @@ if [ -n "$FRONTEND_SERVICE" ]; then
   
   if [ "$FRONTEND_STATUS" = "active" ]; then
     echo "✅ Frontend service ($FRONTEND_SERVICE): Running"
-    HTTP_CODE=$(timeout 10s curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3000 2>/dev/null || echo "000")
+    HTTP_CODE=$(timeout 10s curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:3000 2>/dev/null || echo "000")
     if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
       echo "✅ Frontend HTTP response: Normal (HTTP $HTTP_CODE)"
     else
@@ -907,9 +907,13 @@ echo "  - Frontend: https://$SERVER_HOST"
 echo "  - Backend API: https://$SERVER_HOST/api/v1"
 echo "  - API Docs: https://$SERVER_HOST/api/v1/docs"
 echo ""
-echo "To verify services manually:"
-echo "  - Backend: curl http://localhost:8000/health"
-echo "  - Frontend: curl http://localhost:3000"
+echo "To verify services manually (internal only, use 127.0.0.1):"
+echo "  - Backend: curl http://127.0.0.1:8000/health"
+echo "  - Frontend: curl http://127.0.0.1:3000"
+echo ""
+echo "To verify external access (HTTPS only, port 443):"
+echo "  - Frontend: curl https://aikz.usdt2026.cc/login"
+echo "  - Backend API: curl https://aikz.usdt2026.cc/api/v1/health"
 if [ -n "$BACKEND_SERVICE" ] && [ -n "$FRONTEND_SERVICE_NAME" ]; then
   echo "  - Service status: sudo systemctl status $BACKEND_SERVICE $FRONTEND_SERVICE_NAME"
 fi

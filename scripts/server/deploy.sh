@@ -905,3 +905,8 @@ if [ -n "$BACKEND_SERVICE" ] && [ -n "$FRONTEND_SERVICE_NAME" ]; then
   echo "  - Service status: sudo systemctl status $BACKEND_SERVICE $FRONTEND_SERVICE_NAME"
 fi
 
+# 确保脚本正确退出（避免 SSH 连接问题）
+echo ""
+echo "Deployment script finished successfully"
+exit 0
+

@@ -74,14 +74,30 @@ jobs:
               npm install --prefer-offline --no-audit --no-fund || {
                 echo "⚠️  npm install 失败，继续尝试构建..."
               }
-              echo "构建前端项目..."
-              export NODE_OPTIONS="--max-old-space-size=2048"
-              npm run build || {
-                echo "❌ 前端构建失败"
-                exit 1
-              }
+              
+              # 检查是否已有构建产物
+              if [ -d ".next/standalone" ] && [ -d ".next/static" ] && [ -f ".next/standalone/server.js" ]; then
+                echo "⚠️  检测到已有构建产物，跳过构建（如需强制构建，请删除 .next 目录）"
+              else
+                echo "构建前端项目（这可能需要几分钟）..."
+                export NODE_OPTIONS="--max-old-space-size=4096"
+                # 使用 timeout 防止卡死，最多等待 20 分钟
+                timeout 20m npm run build 2>&1 | tee /tmp/build.log || {
+                  BUILD_EXIT_CODE=$?
+                  if [ $BUILD_EXIT_CODE -eq 124 ]; then
+                    echo "❌ 前端构建超时（超过 20 分钟）"
+                    echo "构建日志（最后 50 行）:"
+                    tail -50 /tmp/build.log 2>/dev/null || echo "无法读取构建日志"
+                  else
+                    echo "❌ 前端构建失败（退出码: $BUILD_EXIT_CODE）"
+                    echo "构建日志（最后 50 行）:"
+                    tail -50 /tmp/build.log 2>/dev/null || echo "无法读取构建日志"
+                  fi
+                  exit 1
+                }
+                echo "✅ 前端构建完成"
+              fi
               cd ..
-              echo "✅ 前端构建完成"
             else
               echo "⚠️  saas-demo 目录不存在，跳过前端构建"
             fi

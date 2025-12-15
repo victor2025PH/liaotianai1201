@@ -200,9 +200,13 @@ jobs:
                     sleep 3
                     # 如果 resolv.conf 不是软链接，直接写入 DNS
                     if [ ! -L /etc/resolv.conf ]; then
-                      echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null
-                      echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf > /dev/null
-                      echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf > /dev/null
+                      echo "  直接写入 DNS 到 /etc/resolv.conf..."
+                      echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null 2>&1 && \
+                      echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf > /dev/null 2>&1 && \
+                      echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf > /dev/null 2>&1 && \
+                      echo "  ✅ DNS 配置已更新" || echo "  ⚠️  DNS 配置更新失败（继续）"
+                    else
+                      echo "  /etc/resolv.conf 是软链接，跳过直接写入"
                     fi
                     sleep 2
                   fi

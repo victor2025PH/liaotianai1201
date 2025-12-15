@@ -56,7 +56,7 @@ echo "[2/3] 修复配置..."
 echo "----------------------------------------"
 
 # 使用 Python 修复
-python3 <<'PYTHON_SCRIPT'
+python3 <<PYTHON_SCRIPT
 import re
 import sys
 

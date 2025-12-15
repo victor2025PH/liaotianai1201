@@ -257,4 +257,26 @@ jobs:
             # 设置环境变量强制前端重新构建（确保新功能被部署）
             export FORCE_FRONTEND_BUILD=true
             chmod +x "$DEPLOY_SCRIPT"
-            bash "$DEPLOY_SCRIPT"
+            
+            # 执行部署脚本并捕获退出码
+            if bash "$DEPLOY_SCRIPT"; then
+              echo "✅ 部署脚本执行成功"
+              exit 0
+            else
+              DEPLOY_EXIT_CODE=$?
+              echo "❌ 部署脚本执行失败，退出码: $DEPLOY_EXIT_CODE"
+              echo ""
+              echo "诊断信息:"
+              echo "  部署脚本路径: $DEPLOY_SCRIPT"
+              echo "  脚本是否存在: $([ -f "$DEPLOY_SCRIPT" ] && echo '是' || echo '否')"
+              echo "  脚本是否可执行: $([ -x "$DEPLOY_SCRIPT" ] && echo '是' || echo '否')"
+              echo ""
+              echo "  服务状态:"
+              systemctl status luckyred-api 2>&1 | head -5 || echo "  无法获取 luckyred-api 状态"
+              systemctl status liaotian-frontend 2>&1 | head -5 || echo "  无法获取 liaotian-frontend 状态"
+              echo ""
+              echo "  端口监听状态:"
+              ss -tlnp | grep -E ':(3000|8000)' || echo "  端口 3000 或 8000 未监听"
+              echo ""
+              exit $DEPLOY_EXIT_CODE
+            fi

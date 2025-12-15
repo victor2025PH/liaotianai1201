@@ -51,14 +51,107 @@ jobs:
             echo "GitHub 仓库: $GITHUB_REPO"
             echo ""
             
+            # ============ DNS 故障处理 ============
+            echo "[0/5] 修复 DNS 解析问题"
+            echo "----------------------------------------"
+            
+            # 测试 DNS 解析
+            if ! nslookup github.com >/dev/null 2>&1; then
+              echo "⚠️  DNS 解析失败，尝试修复..."
+              
+              # 方法 1: 重启 systemd-resolved
+              if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
+                echo "重启 systemd-resolved 服务..."
+                systemctl restart systemd-resolved || true
+                sleep 3
+              fi
+              
+              # 方法 2: 配置备用 DNS 服务器
+              if ! nslookup github.com >/dev/null 2>&1; then
+                echo "配置备用 DNS 服务器 (8.8.8.8, 1.1.1.1)..."
+                # 备份 resolv.conf
+                if [ -f /etc/resolv.conf ]; then
+                  cp /etc/resolv.conf /etc/resolv.conf.backup.$(date +%Y%m%d_%H%M%S) || true
+                fi
+                
+                # 创建临时 resolv.conf（如果 systemd-resolved 未管理）
+                if [ ! -L /etc/resolv.conf ] || [ ! -f /etc/systemd/resolved.conf ]; then
+                  cat > /etc/resolv.conf <<EOF
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+nameserver 1.1.1.1
+EOF
+                  echo "✅ 已配置备用 DNS 服务器"
+                else
+                  # 如果使用 systemd-resolved，修改其配置
+                  if [ -f /etc/systemd/resolved.conf ]; then
+                    if ! grep -q "^DNS=" /etc/systemd/resolved.conf; then
+                      sed -i '/^\[Resolve\]/a DNS=8.8.8.8 8.8.4.4 1.1.1.1' /etc/systemd/resolved.conf || {
+                        echo "[Resolve]" >> /etc/systemd/resolved.conf
+                        echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" >> /etc/systemd/resolved.conf
+                      }
+                      systemctl restart systemd-resolved || true
+                      sleep 3
+                    fi
+                  fi
+                fi
+              fi
+              
+              # 再次测试 DNS
+              if nslookup github.com >/dev/null 2>&1; then
+                echo "✅ DNS 解析已恢复"
+              else
+                echo "⚠️  DNS 解析仍然失败，但继续尝试 Git 操作..."
+              fi
+            else
+              echo "✅ DNS 解析正常"
+            fi
+            
+            echo ""
+            
+            # ============ 检查项目目录 ============
+            echo "[1/5] 检查项目目录"
+            echo "----------------------------------------"
+            
             # 检查项目目录是否存在
             if [ ! -d "$PROJECT_DIR" ]; then
               echo "⚠️  项目目录不存在，正在克隆..."
               cd /home/ubuntu || exit 1
-              git clone "https://github.com/$GITHUB_REPO.git" telegram-ai-system || {
-                echo "❌ Git clone 失败"
+              
+              # Git clone 带重试和 DNS 故障处理
+              MAX_CLONE_RETRIES=3
+              CLONE_RETRY_COUNT=0
+              CLONE_SUCCESS=false
+              
+              while [ $CLONE_RETRY_COUNT -lt $MAX_CLONE_RETRIES ]; do
+                if timeout 10m git clone "https://github.com/$GITHUB_REPO.git" telegram-ai-system 2>&1; then
+                  CLONE_SUCCESS=true
+                  break
+                else
+                  CLONE_RETRY_COUNT=$((CLONE_RETRY_COUNT + 1))
+                  if [ $CLONE_RETRY_COUNT -lt $MAX_CLONE_RETRIES ]; then
+                    echo "⚠️  Git clone 失败，重试 $CLONE_RETRY_COUNT/$MAX_CLONE_RETRIES..."
+                    sleep 10
+                    # 再次尝试修复 DNS
+                    systemctl restart systemd-resolved 2>/dev/null || true
+                    sleep 3
+                  fi
+                fi
+              done
+              
+              if [ "$CLONE_SUCCESS" != "true" ]; then
+                echo "❌ Git clone 失败（已重试 $MAX_CLONE_RETRIES 次）"
+                echo ""
+                echo "诊断信息:"
+                echo "  DNS 测试:"
+                nslookup github.com 2>&1 || echo "  DNS 解析失败"
+                echo ""
+                echo "  网络连接测试:"
+                ping -c 2 8.8.8.8 2>&1 || echo "  网络连接失败"
                 exit 1
-              }
+              fi
+            else
+              echo "✅ 项目目录已存在"
             fi
             
             # 进入项目目录
@@ -72,21 +165,35 @@ jobs:
             echo "最新提交: $(git log -1 --oneline 2>/dev/null || echo 'unknown')"
             echo ""
             
-            # 拉取最新代码（带重试）
-            echo "拉取最新代码..."
-            MAX_FETCH_RETRIES=3
+            # ============ 拉取最新代码 ============
+            echo "[2/5] 拉取最新代码"
+            echo "----------------------------------------"
+            
+            # 拉取最新代码（带重试和 DNS 故障处理）
+            MAX_FETCH_RETRIES=5
             FETCH_RETRY_COUNT=0
             FETCH_SUCCESS=false
             
             while [ $FETCH_RETRY_COUNT -lt $MAX_FETCH_RETRIES ]; do
-              if timeout 5m git fetch origin main; then
+              if timeout 5m git fetch origin main 2>&1; then
                 FETCH_SUCCESS=true
                 break
               else
                 FETCH_RETRY_COUNT=$((FETCH_RETRY_COUNT + 1))
+                ERROR_MSG=$(timeout 5m git fetch origin main 2>&1 || true)
+                
                 if [ $FETCH_RETRY_COUNT -lt $MAX_FETCH_RETRIES ]; then
                   echo "⚠️  Git fetch 失败，重试 $FETCH_RETRY_COUNT/$MAX_FETCH_RETRIES..."
-                  sleep 5
+                  echo "错误信息: $ERROR_MSG"
+                  
+                  # 如果是 DNS 错误，尝试修复
+                  if echo "$ERROR_MSG" | grep -q "Could not resolve host\|Name or service not known"; then
+                    echo "检测到 DNS 错误，尝试修复..."
+                    systemctl restart systemd-resolved 2>/dev/null || true
+                    sleep 5
+                  fi
+                  
+                  sleep 10
                   # 尝试重新设置远程仓库
                   git remote set-url origin "https://github.com/$GITHUB_REPO.git" || true
                 fi
@@ -95,8 +202,21 @@ jobs:
             
             if [ "$FETCH_SUCCESS" != "true" ]; then
               echo "❌ Git fetch 失败（已重试 $MAX_FETCH_RETRIES 次）"
+              echo ""
+              echo "诊断信息:"
+              echo "  DNS 测试:"
+              nslookup github.com 2>&1 || echo "  DNS 解析失败"
+              echo ""
+              echo "  网络连接测试:"
+              ping -c 2 8.8.8.8 2>&1 || echo "  网络连接失败"
+              echo ""
+              echo "  Git 远程配置:"
+              git remote -v || echo "  无法获取远程配置"
               exit 1
             fi
+            
+            echo "[3/5] 重置到最新版本"
+            echo "----------------------------------------"
             
             if ! timeout 1m git reset --hard origin/main; then
               echo "❌ Git reset 失败"
@@ -107,7 +227,10 @@ jobs:
             echo "最新提交: $(git log -1 --oneline)"
             echo ""
             
-            # 检查部署脚本是否存在
+            # ============ 检查部署脚本 ============
+            echo "[4/5] 检查部署脚本"
+            echo "----------------------------------------"
+            
             DEPLOY_SCRIPT="$PROJECT_DIR/scripts/server/deploy.sh"
             echo "检查部署脚本: $DEPLOY_SCRIPT"
             
@@ -130,9 +253,8 @@ jobs:
             echo "✅ 部署脚本存在"
             echo ""
             
-            # 执行部署脚本
-            echo "=========================================="
-            echo "执行部署脚本"
+            # ============ 执行部署脚本 ============
+            echo "[5/5] 执行部署脚本"
             echo "=========================================="
             # 设置环境变量强制前端重新构建（确保新功能被部署）
             export FORCE_FRONTEND_BUILD=true

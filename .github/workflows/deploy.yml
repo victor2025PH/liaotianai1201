@@ -38,6 +38,19 @@ jobs:
             echo "GitHub 仓库: $GITHUB_REPO"
             echo ""
             
+            # ============ 检查 DNS ============
+            echo "[0/5] 检查 DNS 连接"
+            echo "----------------------------------------"
+            if ! nslookup github.com >/dev/null 2>&1; then
+              echo "❌ DNS 解析失败：无法解析 github.com"
+              echo "请检查服务器 DNS 配置（应配置为 8.8.8.8）"
+              echo "当前 DNS 配置:"
+              cat /etc/resolv.conf 2>/dev/null || echo "无法读取 /etc/resolv.conf"
+              exit 1
+            fi
+            echo "✅ DNS 解析正常"
+            echo ""
+            
             # ============ 进入项目目录 ============
             echo "[1/5] 进入项目目录"
             echo "----------------------------------------"

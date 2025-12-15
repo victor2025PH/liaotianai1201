@@ -76,11 +76,9 @@ jobs:
                 
                 # 创建临时 resolv.conf（如果 systemd-resolved 未管理）
                 if [ ! -L /etc/resolv.conf ] || [ ! -f /etc/systemd/resolved.conf ]; then
-                  cat > /etc/resolv.conf <<EOF
-nameserver 8.8.8.8
-nameserver 8.8.4.4
-nameserver 1.1.1.1
-EOF
+                  echo "nameserver 8.8.8.8" > /etc/resolv.conf
+                  echo "nameserver 8.8.4.4" >> /etc/resolv.conf
+                  echo "nameserver 1.1.1.1" >> /etc/resolv.conf
                   echo "✅ 已配置备用 DNS 服务器"
                 else
                   # 如果使用 systemd-resolved，修改其配置

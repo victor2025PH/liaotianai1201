@@ -189,6 +189,10 @@ class TaskExecutor:
             return await self._execute_data_export(action_config, db)
         elif action == "role_assignment":
             return await self._execute_role_assignment(action_config, db)
+        elif action == "send_message":
+            return await self._execute_send_message(action_config, db)
+        elif action == "send_ai_message":
+            return await self._execute_send_ai_message(action_config, db)
         else:
             raise ValueError(f"不支持的任務動作: {action}")
     

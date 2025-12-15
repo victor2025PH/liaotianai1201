@@ -508,6 +508,172 @@ class TaskExecutor:
             logger.error(f"執行角色分配失敗: {e}", exc_info=True)
             raise
     
+    async def _execute_send_message(self, config: Dict[str, Any], db: Session) -> Dict[str, Any]:
+        """
+        執行發送消息任務（純命令模式）
+        
+        Args:
+            config: 動作配置，應包含：
+                - account_id: 賬號ID
+                - group_id: 群組ID
+                - message: 消息內容
+        """
+        try:
+            from app.models.group_ai import GroupAIAccount
+            from app.api.workers import _add_command, _get_all_workers
+            from datetime import datetime
+            
+            account_id = config.get("account_id")
+            group_id = config.get("group_id")
+            message = config.get("message")
+            
+            if not account_id or not group_id or not message:
+                return {
+                    "success": False,
+                    "message": "缺少必要參數：account_id, group_id, message"
+                }
+            
+            # 獲取賬號信息
+            db_account = db.query(GroupAIAccount).filter(
+                GroupAIAccount.account_id == account_id
+            ).first()
+            
+            if not db_account:
+                return {
+                    "success": False,
+                    "message": f"賬號 {account_id} 不存在"
+                }
+            
+            # 獲取 server_id
+            server_id = db_account.server_id
+            if not server_id:
+                return {
+                    "success": False,
+                    "message": f"賬號 {account_id} 沒有 server_id"
+                }
+            
+            # 檢查 Worker 節點是否在線
+            workers = _get_all_workers()
+            target_worker = workers.get(server_id)
+            
+            if not target_worker or target_worker.get("status") != "online":
+                return {
+                    "success": False,
+                    "message": f"Worker 節點 {server_id} 不在線"
+                }
+            
+            # 發送消息命令
+            command = {
+                "action": "send_message",
+                "params": {
+                    "account_id": account_id,
+                    "group_id": group_id,
+                    "message": message
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            _add_command(server_id, command)
+            logger.info(f"定時任務發送消息命令到節點 {server_id} (賬號: {account_id}, 群組: {group_id})")
+            
+            return {
+                "success": True,
+                "message": f"消息命令已發送到 Worker 節點 {server_id}",
+                "account_id": account_id,
+                "group_id": group_id,
+                "server_id": server_id
+            }
+            
+        except Exception as e:
+            logger.error(f"執行發送消息任務失敗: {e}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"執行失敗: {str(e)}"
+            }
+    
+    async def _execute_send_ai_message(self, config: Dict[str, Any], db: Session) -> Dict[str, Any]:
+        """
+        執行發送 AI 消息任務（純命令模式）
+        
+        Args:
+            config: 動作配置，應包含：
+                - account_id: 賬號ID
+                - group_id: 群組ID
+                - prompt: AI 提示詞（可選，如果不提供則使用默認提示）
+        """
+        try:
+            from app.models.group_ai import GroupAIAccount
+            from app.api.workers import _add_command, _get_all_workers
+            from datetime import datetime
+            
+            account_id = config.get("account_id")
+            group_id = config.get("group_id")
+            prompt = config.get("prompt")
+            
+            if not account_id or not group_id:
+                return {
+                    "success": False,
+                    "message": "缺少必要參數：account_id, group_id"
+                }
+            
+            # 獲取賬號信息
+            db_account = db.query(GroupAIAccount).filter(
+                GroupAIAccount.account_id == account_id
+            ).first()
+            
+            if not db_account:
+                return {
+                    "success": False,
+                    "message": f"賬號 {account_id} 不存在"
+                }
+            
+            # 獲取 server_id
+            server_id = db_account.server_id
+            if not server_id:
+                return {
+                    "success": False,
+                    "message": f"賬號 {account_id} 沒有 server_id"
+                }
+            
+            # 檢查 Worker 節點是否在線
+            workers = _get_all_workers()
+            target_worker = workers.get(server_id)
+            
+            if not target_worker or target_worker.get("status") != "online":
+                return {
+                    "success": False,
+                    "message": f"Worker 節點 {server_id} 不在線"
+                }
+            
+            # 發送 AI 消息命令
+            command = {
+                "action": "send_ai_message",
+                "params": {
+                    "account_id": account_id,
+                    "group_id": group_id,
+                    "prompt": prompt
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            _add_command(server_id, command)
+            logger.info(f"定時任務發送 AI 消息命令到節點 {server_id} (賬號: {account_id}, 群組: {group_id})")
+            
+            return {
+                "success": True,
+                "message": f"AI 消息命令已發送到 Worker 節點 {server_id}",
+                "account_id": account_id,
+                "group_id": group_id,
+                "server_id": server_id
+            }
+            
+        except Exception as e:
+            logger.error(f"執行發送 AI 消息任務失敗: {e}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"執行失敗: {str(e)}"
+            }
+    
     async def _execute_data_backup(self, config: Dict[str, Any], db: Session) -> Dict[str, Any]:
         """執行數據備份"""
         try:

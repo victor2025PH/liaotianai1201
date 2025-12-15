@@ -59,47 +59,69 @@ jobs:
             if ! nslookup github.com >/dev/null 2>&1; then
               echo "⚠️  DNS 解析失败，尝试修复..."
               
-              # 方法 1: 重启 systemd-resolved
+              # 方法 1: 重启 systemd-resolved（需要 sudo）
               if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
                 echo "重启 systemd-resolved 服务..."
-                systemctl restart systemd-resolved || true
+                sudo systemctl restart systemd-resolved || true
                 sleep 3
               fi
               
-              # 方法 2: 配置备用 DNS 服务器
+              # 方法 2: 配置备用 DNS 服务器（需要 sudo）
               if ! nslookup github.com >/dev/null 2>&1; then
-                echo "配置备用 DNS 服务器 (8.8.8.8, 1.1.1.1)..."
-                # 备份 resolv.conf
+                echo "配置备用 DNS 服务器 (8.8.8.8, 8.8.4.4, 1.1.1.1)..."
+                # 备份 resolv.conf（需要 sudo）
                 if [ -f /etc/resolv.conf ]; then
-                  cp /etc/resolv.conf /etc/resolv.conf.backup.$(date +%Y%m%d_%H%M%S) || true
+                  sudo cp /etc/resolv.conf /etc/resolv.conf.backup.$(date +%Y%m%d_%H%M%S) || true
                 fi
                 
-                # 创建临时 resolv.conf（如果 systemd-resolved 未管理）
+                # 创建临时 resolv.conf（如果 systemd-resolved 未管理，需要 sudo）
                 if [ ! -L /etc/resolv.conf ] || [ ! -f /etc/systemd/resolved.conf ]; then
-                  echo "nameserver 8.8.8.8" > /etc/resolv.conf
-                  echo "nameserver 8.8.4.4" >> /etc/resolv.conf
-                  echo "nameserver 1.1.1.1" >> /etc/resolv.conf
-                  echo "✅ 已配置备用 DNS 服务器"
+                  echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null
+                  echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf > /dev/null
+                  echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf > /dev/null
+                  echo "✅ 已配置备用 DNS 服务器到 /etc/resolv.conf"
                 else
-                  # 如果使用 systemd-resolved，修改其配置
+                  # 如果使用 systemd-resolved，修改其配置（需要 sudo）
                   if [ -f /etc/systemd/resolved.conf ]; then
                     if ! grep -q "^DNS=" /etc/systemd/resolved.conf; then
-                      sed -i '/^\[Resolve\]/a DNS=8.8.8.8 8.8.4.4 1.1.1.1' /etc/systemd/resolved.conf || {
-                        echo "[Resolve]" >> /etc/systemd/resolved.conf
-                        echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" >> /etc/systemd/resolved.conf
-                      }
-                      systemctl restart systemd-resolved || true
+                      # 使用 sudo 修改配置文件
+                      if grep -q "^\[Resolve\]" /etc/systemd/resolved.conf; then
+                        sudo sed -i '/^\[Resolve\]/a DNS=8.8.8.8 8.8.4.4 1.1.1.1' /etc/systemd/resolved.conf || {
+                          echo "[Resolve]" | sudo tee -a /etc/systemd/resolved.conf > /dev/null
+                          echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf > /dev/null
+                        }
+                      else
+                        echo "[Resolve]" | sudo tee -a /etc/systemd/resolved.conf > /dev/null
+                        echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1" | sudo tee -a /etc/systemd/resolved.conf > /dev/null
+                      fi
+                      sudo systemctl restart systemd-resolved || true
                       sleep 3
+                      echo "✅ 已配置 systemd-resolved DNS 服务器"
                     fi
                   fi
                 fi
               fi
               
-              # 再次测试 DNS
-              if nslookup github.com >/dev/null 2>&1; then
-                echo "✅ DNS 解析已恢复"
-              else
+              # 再次测试 DNS（最多等待 10 秒）
+              echo "验证 DNS 解析..."
+              DNS_WORKING=false
+              for i in {1..5}; do
+                if nslookup github.com >/dev/null 2>&1; then
+                  DNS_WORKING=true
+                  echo "✅ DNS 解析已恢复（尝试 $i/5）"
+                  break
+                else
+                  if [ $i -lt 5 ]; then
+                    echo "  DNS 解析仍失败，等待 2 秒后重试 ($i/5)..."
+                    sleep 2
+                  fi
+                fi
+              done
+              
+              if [ "$DNS_WORKING" != "true" ]; then
                 echo "⚠️  DNS 解析仍然失败，但继续尝试 Git 操作..."
+                echo "  当前 DNS 配置:"
+                cat /etc/resolv.conf 2>/dev/null || echo "  无法读取 /etc/resolv.conf"
               fi
             else
               echo "✅ DNS 解析正常"
@@ -130,9 +152,17 @@ jobs:
                   if [ $CLONE_RETRY_COUNT -lt $MAX_CLONE_RETRIES ]; then
                     echo "⚠️  Git clone 失败，重试 $CLONE_RETRY_COUNT/$MAX_CLONE_RETRIES..."
                     sleep 10
-                    # 再次尝试修复 DNS
-                    systemctl restart systemd-resolved 2>/dev/null || true
+                    # 再次尝试修复 DNS（需要 sudo）
+                    echo "再次尝试修复 DNS..."
+                    sudo systemctl restart systemd-resolved 2>/dev/null || true
                     sleep 3
+                    # 如果 resolv.conf 不是软链接，直接写入 DNS
+                    if [ ! -L /etc/resolv.conf ]; then
+                      echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null
+                      echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf > /dev/null
+                      echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf > /dev/null
+                    fi
+                    sleep 2
                   fi
                 fi
               done
@@ -184,11 +214,18 @@ jobs:
                   echo "⚠️  Git fetch 失败，重试 $FETCH_RETRY_COUNT/$MAX_FETCH_RETRIES..."
                   echo "错误信息: $ERROR_MSG"
                   
-                  # 如果是 DNS 错误，尝试修复
+                  # 如果是 DNS 错误，尝试修复（需要 sudo）
                   if echo "$ERROR_MSG" | grep -q "Could not resolve host\|Name or service not known"; then
                     echo "检测到 DNS 错误，尝试修复..."
-                    systemctl restart systemd-resolved 2>/dev/null || true
-                    sleep 5
+                    sudo systemctl restart systemd-resolved 2>/dev/null || true
+                    sleep 2
+                    # 如果 resolv.conf 不是软链接，直接写入 DNS
+                    if [ ! -L /etc/resolv.conf ]; then
+                      echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null
+                      echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf > /dev/null
+                      echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf > /dev/null
+                    fi
+                    sleep 3
                   fi
                   
                   sleep 10

@@ -118,9 +118,18 @@ if [ -d "admin-backend" ]; then
   source venv/bin/activate
   echo "Updating Python packages..."
   timeout 2m pip install --quiet --upgrade pip || echo "⚠️  pip upgrade failed or timeout, continuing..."
+  echo "Installing dependencies (including google-generativeai)..."
   timeout 10m pip install --quiet -r requirements.txt --timeout=300 --cache-dir=/tmp/pip-cache || {
     echo "⚠️  Some dependencies failed or timeout, continuing..."
   }
+  # 特别确保 google-generativeai 已安装（如果 requirements.txt 中有）
+  if grep -q "google-generativeai" requirements.txt; then
+    echo "Verifying google-generativeai installation..."
+    python3 -c "import google.generativeai" 2>/dev/null && echo "✅ google-generativeai is installed" || {
+      echo "⚠️  google-generativeai not found, installing separately..."
+      timeout 2m pip install --quiet google-generativeai>=0.3.0 || echo "⚠️  Failed to install google-generativeai"
+    }
+  fi
   cd ..
   echo "✅ Backend dependencies updated"
 else

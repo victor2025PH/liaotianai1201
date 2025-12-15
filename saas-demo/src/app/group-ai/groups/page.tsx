@@ -305,8 +305,10 @@ export default function GroupsPage() {
                             className="h-7 text-xs"
                             onClick={() => {
                               // 嘗試打開 Telegram 客戶端
-                              const telegramUrl = `tg://resolve?domain=${group.username.replace('@', '')}`
-                              const webUrl = `https://t.me/${group.username.replace('@', '')}`
+                              if (!group.username) return
+                              const username = group.username.replace('@', '')
+                              const telegramUrl = `tg://resolve?domain=${username}`
+                              const webUrl = `https://t.me/${username}`
                               
                               // 嘗試打開客戶端，如果失敗則打開網頁
                               window.open(telegramUrl, '_blank')

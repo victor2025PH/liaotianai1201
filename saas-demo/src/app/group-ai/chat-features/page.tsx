@@ -88,8 +88,8 @@ export default function ChatFeaturesPage() {
   // 人設狀態
   const [personas, setPersonas] = useState(DEFAULT_PERSONAS)
   
-  // 排程狀態
-  const [schedules, setSchedules] = useState(DEFAULT_SCHEDULES)
+  // 排程狀態（确保所有 enabled 都是 boolean）
+  const [schedules, setSchedules] = useState(DEFAULT_SCHEDULES.map(s => ({ ...s, enabled: Boolean(s.enabled) })))
   
   // 遊戲狀態
   const [games, setGames] = useState(DEFAULT_GAMES)
@@ -1414,10 +1414,10 @@ export default function ChatFeaturesPage() {
                         <p className="text-sm text-muted-foreground">每日 {schedule.time}</p>
                       </div>
                     </div>
-                    <Switch 
-                      checked={schedule.enabled}
-                      onCheckedChange={(checked) => toggleSchedule(schedule.id, checked)}
-                    />
+                  <Switch 
+                    checked={Boolean(schedule.enabled)}
+                    onCheckedChange={(checked) => toggleSchedule(schedule.id, Boolean(checked))}
+                  />
                   </div>
                 ))}
               </div>

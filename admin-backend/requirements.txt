@@ -32,3 +32,4 @@ langchain-openai
 langchain-community
 tiktoken
 ffmpeg-python
+google-generativeai>=0.3.0

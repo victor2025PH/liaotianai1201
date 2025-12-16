@@ -128,31 +128,27 @@ jobs:
             # ============ 修复服务配置（如果需要） ============
             echo "[4.5/5] 检查并修复服务配置"
             echo "----------------------------------------"
-            if systemctl list-unit-files 2>/dev/null | grep -q "liaotian-frontend.service"; then
+            SERVICE_FILE="/etc/systemd/system/liaotian-frontend.service"
+            if [ -f "$SERVICE_FILE" ]; then
               echo "检查前端服务配置..."
               # 检查当前服务配置中的路径（使用更健壮的方法）
-              SERVICE_FILE="/etc/systemd/system/liaotian-frontend.service"
-              if [ -f "$SERVICE_FILE" ]; then
-                CURRENT_PATH=$(grep "ExecStart=" "$SERVICE_FILE" 2>/dev/null | grep -o "\.next/standalone[^ ]*" || echo "")
-                EXPECTED_PATH=".next/standalone/saas-demo/server.js"
-                if [ -z "$CURRENT_PATH" ] || [ "$CURRENT_PATH" != "$EXPECTED_PATH" ]; then
-                  echo "⚠️  服务路径不匹配（当前: ${CURRENT_PATH:-未找到}, 期望: $EXPECTED_PATH）"
-                  if [ -f "scripts/server/fix-frontend-service-path.sh" ]; then
-                    echo "执行修复脚本..."
-                    bash scripts/server/fix-frontend-service-path.sh || {
-                      echo "⚠️  自动修复失败，但继续部署..."
-                    }
-                  else
-                    echo "⚠️  修复脚本不存在，跳过自动修复"
-                  fi
+              CURRENT_PATH=$(grep "ExecStart=" "$SERVICE_FILE" 2>/dev/null | grep -o "\.next/standalone[^ ]*" || echo "")
+              EXPECTED_PATH=".next/standalone/saas-demo/server.js"
+              if [ -z "$CURRENT_PATH" ] || [ "$CURRENT_PATH" != "$EXPECTED_PATH" ]; then
+                echo "⚠️  服务路径不匹配（当前: ${CURRENT_PATH:-未找到}, 期望: $EXPECTED_PATH）"
+                if [ -f "scripts/server/fix-frontend-service-path.sh" ]; then
+                  echo "执行修复脚本..."
+                  bash scripts/server/fix-frontend-service-path.sh || {
+                    echo "⚠️  自动修复失败，但继续部署..."
+                  }
                 else
-                  echo "✅ 服务配置路径正确: $CURRENT_PATH"
+                  echo "⚠️  修复脚本不存在，跳过自动修复"
                 fi
               else
-                echo "⚠️  服务文件不存在: $SERVICE_FILE，跳过检查"
+                echo "✅ 服务配置路径正确: $CURRENT_PATH"
               fi
             else
-              echo "⚠️  服务不存在，跳过服务配置检查"
+              echo "⚠️  服务文件不存在: $SERVICE_FILE，跳过检查"
             fi
             echo ""
             

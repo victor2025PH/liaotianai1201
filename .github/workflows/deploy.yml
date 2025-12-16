@@ -141,10 +141,19 @@ jobs:
               
               # 验证关键文件是否存在（继续使用 set +e）
               SERVER_JS_FOUND=false
-              if [ -f ".next/standalone/saas-demo/server.js" ]; then
-                echo "✅ server.js 文件已生成"
+              SERVER_JS=""
+              
+              # 检查多个可能的路径（Next.js 16 可能的结构）
+              if [ -f ".next/standalone/server.js" ]; then
+                echo "✅ server.js 文件已生成 (.next/standalone/server.js)"
                 SERVER_JS_FOUND=true
+                SERVER_JS=".next/standalone/server.js"
+              elif [ -f ".next/standalone/saas-demo/server.js" ]; then
+                echo "✅ server.js 文件已生成 (.next/standalone/saas-demo/server.js)"
+                SERVER_JS_FOUND=true
+                SERVER_JS=".next/standalone/saas-demo/server.js"
               else
+                # 尝试查找 server.js 文件
                 SERVER_JS=$(find .next -name "server.js" -type f 2>/dev/null | head -1)
                 if [ -n "$SERVER_JS" ]; then
                   echo "✅ server.js 文件已生成（位置: $SERVER_JS）"
@@ -152,7 +161,9 @@ jobs:
                 else
                   echo "⚠️  server.js 文件未找到"
                   echo "查找结果:"
-                  find .next -name "server.js" -type f 2>/dev/null || echo "未找到 server.js"
+                  find .next -type f -name "server.js" 2>/dev/null | head -5 || echo "   未找到 server.js"
+                  echo "检查 .next/standalone 目录结构:"
+                  ls -la .next/standalone 2>/dev/null | head -10 || echo "   .next/standalone 目录不存在"
                   SERVER_JS_FOUND=false
                 fi
               fi
@@ -161,14 +172,12 @@ jobs:
               if [ "$BUILD_SUCCESS" = "true" ] && [ "$SERVER_JS_FOUND" != "true" ]; then
                 echo "⚠️  构建日志显示成功，但找不到 server.js，可能是路径问题，继续部署..."
                 echo "   提示：请检查 .next/standalone 目录结构"
-                echo "   目录内容:"
-                ls -la .next/standalone 2>/dev/null || echo "   .next/standalone 目录不存在"
-                ls -la .next/standalone/saas-demo 2>/dev/null || echo "   .next/standalone/saas-demo 目录不存在"
               fi
               
               # 只有在构建失败且找不到 server.js 时才退出
               if [ "$BUILD_SUCCESS" != "true" ] && [ "$SERVER_JS_FOUND" != "true" ]; then
                 echo "❌ 构建失败且找不到 server.js，部署终止"
+                cd ..
                 set -e
                 exit 1
               fi
@@ -178,9 +187,13 @@ jobs:
                 echo "✅ 构建成功，继续部署流程..."
               fi
               
-              set -e  # 重新开启错误中断
-              
-              cd ..
+              # 安全地返回上级目录（即使失败也不退出）
+              cd .. || {
+                echo "⚠️  无法返回上级目录，尝试使用绝对路径..."
+                cd "$PROJECT_DIR" || {
+                  echo "⚠️  无法返回项目目录，但继续执行..."
+                }
+              }
             else
               echo "⚠️  saas-demo 目录不存在，跳过前端构建"
             fi
@@ -189,36 +202,58 @@ jobs:
             # ============ 安装后端依赖 ============
             echo "[3.5/4] 安装后端依赖"
             echo "----------------------------------------"
+            set +e  # 暂时关闭错误中断，因为依赖安装失败不应该阻止部署
             if [ -d "admin-backend" ]; then
-              cd admin-backend
+              cd admin-backend || {
+                echo "⚠️  无法进入 admin-backend 目录，跳过后端依赖安装"
+                set -e
+                echo ""
+                # 跳转到部署步骤
+              }
               if [ -d "venv" ] && [ -f "venv/bin/activate" ]; then
-                source venv/bin/activate
+                source venv/bin/activate 2>/dev/null || {
+                  echo "⚠️  虚拟环境激活失败，继续..."
+                }
                 echo "安装 Python 依赖..."
                 pip install -r requirements.txt --quiet || {
                   echo "⚠️  部分依赖安装失败，继续..."
                 }
-                cd ..
+                cd .. || cd "$PROJECT_DIR" || true
                 echo "✅ 后端依赖安装完成"
               else
                 echo "⚠️  虚拟环境不存在，跳过依赖安装"
-                cd ..
+                cd .. || cd "$PROJECT_DIR" || true
               fi
             else
               echo "⚠️  admin-backend 目录不存在，跳过后端依赖安装"
             fi
+            set -e  # 重新开启错误中断
             echo ""
             
             # ============ 重启服务 ============
             echo "[4/4] 重启服务"
             echo "----------------------------------------"
+            set +e  # 关闭错误中断，服务重启失败不应该阻止部署完成
             echo "重启后端服务..."
-            sudo systemctl restart luckyred-api && echo "✅ luckyred-api 已重启" || echo "⚠️  luckyred-api 重启失败"
+            if sudo systemctl restart luckyred-api 2>/dev/null; then
+              echo "✅ luckyred-api 已重启"
+            else
+              echo "⚠️  luckyred-api 重启失败（继续部署）"
+            fi
             
             echo "重启前端服务..."
-            sudo systemctl restart liaotian-frontend && echo "✅ liaotian-frontend 已重启" || echo "⚠️  liaotian-frontend 重启失败"
+            if sudo systemctl restart liaotian-frontend 2>/dev/null; then
+              echo "✅ liaotian-frontend 已重启"
+            else
+              echo "⚠️  liaotian-frontend 重启失败（继续部署）"
+            fi
             
             echo "重启 Nginx..."
-            sudo systemctl restart nginx && echo "✅ nginx 已重启" || echo "⚠️  nginx 重启失败"
+            if sudo systemctl restart nginx 2>/dev/null; then
+              echo "✅ nginx 已重启"
+            else
+              echo "⚠️  nginx 重启失败（继续部署）"
+            fi
             
             echo ""
             echo "等待服务启动 (20秒)..."

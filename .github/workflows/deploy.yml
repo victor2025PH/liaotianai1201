@@ -119,8 +119,10 @@ jobs:
               fi
               
               # 验证构建是否成功（通过日志内容判断，而不是退出码）
+              BUILD_SUCCESS=false
               if grep -q "Compiled successfully" /tmp/build.log 2>/dev/null; then
                 echo "✅ 前端构建成功"
+                BUILD_SUCCESS=true
               else
                 # 检查是否有明显的错误信息
                 if grep -qiE "error|failed|failed to compile|build failed" /tmp/build.log 2>/dev/null; then
@@ -134,24 +136,35 @@ jobs:
                 fi
               fi
               
-              # 验证关键文件是否存在
+              # 验证关键文件是否存在（使用 set +e 避免找不到文件时退出）
+              set +e
               if [ -f ".next/standalone/saas-demo/server.js" ]; then
                 echo "✅ server.js 文件已生成"
+                SERVER_JS_FOUND=true
               else
                 SERVER_JS=$(find .next -name "server.js" -type f 2>/dev/null | head -1)
                 if [ -n "$SERVER_JS" ]; then
                   echo "✅ server.js 文件已生成（位置: $SERVER_JS）"
+                  SERVER_JS_FOUND=true
                 else
-                  echo "❌ server.js 文件未找到，构建可能失败"
+                  echo "⚠️  server.js 文件未找到"
                   echo "查找结果:"
                   find .next -name "server.js" -type f 2>/dev/null || echo "未找到 server.js"
-                  # 如果构建日志显示成功，但找不到文件，可能是路径问题，不退出
-                  if grep -q "Compiled successfully" /tmp/build.log 2>/dev/null; then
-                    echo "⚠️  构建日志显示成功，但找不到 server.js，可能是路径问题，继续部署..."
-                  else
-                    exit 1
-                  fi
+                  SERVER_JS_FOUND=false
                 fi
+              fi
+              set -e
+              
+              # 如果构建成功但找不到 server.js，记录警告但继续部署
+              if [ "$BUILD_SUCCESS" = true ] && [ "$SERVER_JS_FOUND" != true ]; then
+                echo "⚠️  构建日志显示成功，但找不到 server.js，可能是路径问题，继续部署..."
+                echo "   提示：请检查 .next/standalone 目录结构"
+              fi
+              
+              # 只有在构建失败且找不到 server.js 时才退出
+              if [ "$BUILD_SUCCESS" != true ] && [ "$SERVER_JS_FOUND" != true ]; then
+                echo "❌ 构建失败且找不到 server.js，部署终止"
+                exit 1
               fi
               
               cd ..

@@ -908,13 +908,30 @@ async def list_accounts(
         result = AccountListResponse(items=items, total=total)
         
         # 緩存結果（僅在無搜索/過濾時，使用同步内存缓存）
-        if use_cache and cache_key:
-            from datetime import datetime, timedelta
-            cache_manager.memory_cache[cache_key] = {
-                "value": result.model_dump(),
-                "expires_at": datetime.now() + timedelta(seconds=30)  # 緩存30秒
-            }
-            logger.debug(f"賬號列表已緩存: {cache_key}")
+        # 判斷是否應該使用緩存：只有在沒有搜索、過濾、排序參數時才緩存
+        use_cache = not (search or status_filter or script_id or server_id or active is not None or sort_by != "created_at" or sort_order != "desc")
+        
+        if use_cache:
+            try:
+                from app.core.cache import get_cache_manager
+                from datetime import datetime, timedelta
+                from app.core.cache import cache_key
+                
+                # 生成緩存鍵（排除 current_user 和 db 等不可序列化的參數）
+                cache_key = cache_key(
+                    "accounts_list",
+                    page=page,
+                    page_size=page_size
+                )
+                
+                cache_manager = get_cache_manager()
+                cache_manager.memory_cache[cache_key] = {
+                    "value": result.model_dump(),
+                    "expires_at": datetime.now() + timedelta(seconds=30)  # 緩存30秒
+                }
+                logger.debug(f"賬號列表已緩存: {cache_key}")
+            except Exception as e:
+                logger.warning(f"緩存賬號列表失敗: {e}，繼續執行")
         
         return result
     except HTTPException:

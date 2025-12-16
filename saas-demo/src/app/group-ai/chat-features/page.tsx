@@ -671,7 +671,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="auto_chat" className="min-w-[100px]">自動聊天</Label>
                     <Switch 
                       id="auto_chat"
-                      checked={Boolean(settings.auto_chat_enabled)}
+                      checked={settings.auto_chat_enabled ?? false}
                       onCheckedChange={(checked) => setSettings({...settings, auto_chat_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -679,7 +679,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="games" className="min-w-[100px]">遊戲功能</Label>
                     <Switch 
                       id="games"
-                      checked={Boolean(settings.games_enabled)}
+                      checked={settings.games_enabled ?? false}
                       onCheckedChange={(checked) => setSettings({...settings, games_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -687,7 +687,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="scripts" className="min-w-[100px]">劇本功能</Label>
                     <Switch 
                       id="scripts"
-                      checked={Boolean(settings.scripts_enabled)}
+                      checked={settings.scripts_enabled ?? false}
                       onCheckedChange={(checked) => setSettings({...settings, scripts_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -695,7 +695,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="scheduler" className="min-w-[100px]">排程功能</Label>
                     <Switch 
                       id="scheduler"
-                      checked={Boolean(settings.scheduler_enabled)}
+                      checked={settings.scheduler_enabled ?? false}
                       onCheckedChange={(checked) => setSettings({...settings, scheduler_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -703,7 +703,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="redpacket" className="min-w-[100px]">紅包功能</Label>
                     <Switch 
                       id="redpacket"
-                      checked={Boolean(settings.redpacket_enabled)}
+                      checked={settings.redpacket_enabled ?? false}
                       onCheckedChange={(checked) => setSettings({...settings, redpacket_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -1319,7 +1319,7 @@ export default function ChatFeaturesPage() {
                     <p className="text-sm text-muted-foreground">當當前 AI 提供商失敗時，自動切換到備用提供商</p>
                   </div>
                   <Switch
-                    checked={Boolean(aiProvider.autoFailover)}
+                    checked={aiProvider.autoFailover ?? false}
                     onCheckedChange={(checked) => {
                       setAiProvider(prev => ({ ...prev, autoFailover: Boolean(checked) }))
                     }}
@@ -1415,7 +1415,7 @@ export default function ChatFeaturesPage() {
                       </div>
                     </div>
                   <Switch 
-                    checked={Boolean(schedule.enabled)}
+                    checked={schedule.enabled ?? false}
                     onCheckedChange={(checked) => toggleSchedule(schedule.id, Boolean(checked))}
                   />
                   </div>

@@ -165,11 +165,25 @@ if [ -n "$TEST_FILE" ]; then
     echo "✅ Nginx 用户 ($NGINX_USER) 可以读取文件"
   else
     echo "⚠️  Nginx 用户 ($NGINX_USER) 无法读取文件"
-    echo "尝试添加 Nginx 用户到 ubuntu 组..."
-    sudo usermod -a -G ubuntu "$NGINX_USER" 2>/dev/null || echo "⚠️  添加用户组失败"
-    echo "或者设置文件组权限..."
-    sudo chgrp -R "$NGINX_USER" "$STATIC_DIR" 2>/dev/null || echo "⚠️  设置组失败"
-    sudo chmod -R g+r "$STATIC_DIR" 2>/dev/null || echo "⚠️  设置组读权限失败"
+    echo "修复方案 1: 设置文件组为 www-data 并添加组读权限..."
+    sudo chgrp -R "$NGINX_USER" "$FRONTEND_DIR/.next" 2>/dev/null || echo "    ⚠️  设置组失败"
+    sudo chmod -R g+r "$FRONTEND_DIR/.next" 2>/dev/null || echo "    ⚠️  设置组读权限失败"
+    sudo find "$FRONTEND_DIR/.next" -type d -exec chmod g+x {} \; 2>/dev/null || echo "    ⚠️  设置目录组执行权限失败"
+    
+    echo "修复方案 2: 添加 www-data 用户到 ubuntu 组..."
+    sudo usermod -a -G ubuntu "$NGINX_USER" 2>/dev/null && echo "    ✅ 已添加 $NGINX_USER 到 ubuntu 组" || echo "    ⚠️  添加用户组失败（可能需要重新登录）"
+    
+    echo "修复方案 3: 设置所有文件为 644，目录为 755..."
+    sudo find "$FRONTEND_DIR/.next" -type f -exec chmod 644 {} \; 2>/dev/null || echo "    ⚠️  设置文件权限失败"
+    sudo find "$FRONTEND_DIR/.next" -type d -exec chmod 755 {} \; 2>/dev/null || echo "    ⚠️  设置目录权限失败"
+    
+    # 再次测试
+    sleep 1
+    if sudo -u "$NGINX_USER" test -r "$TEST_FILE" 2>/dev/null; then
+      echo "✅ 修复成功，Nginx 用户现在可以读取文件"
+    else
+      echo "⚠️  修复后仍无法读取，可能需要检查父目录权限或 ACL"
+    fi
   fi
 else
   echo "⚠️  未找到测试文件"

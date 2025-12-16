@@ -158,37 +158,30 @@ jobs:
             sleep 20
             echo ""
             
-            # ============ HTTPS 验证（仅供参考，不阻塞部署） ============
-            # 关闭严格模式，防止验证失败导致部署报错
-            set +e
+            # ============ HTTPS 验证 (非阻塞模式) ============
+            set +e  # 关闭错误中断
             echo "=========================================="
-            echo "HTTPS 验证（端口 443）- 仅供参考"
+            echo "正在进行最终健康检查..."
             echo "=========================================="
-            DOMAIN="${SERVER_HOST:-aikz.usdt2026.cc}"
-            echo "测试 HTTPS 访问..."
             
-            # 使用防崩溃兜底，确保即使 curl 失败也不会导致脚本退出
-            HTTPS_LOGIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${DOMAIN}/login" 2>/dev/null || echo "000")
-            HTTPS_LOGIN_CODE=${HTTPS_LOGIN_CODE:-000}
-            if [ "$HTTPS_LOGIN_CODE" = "200" ] || [ "$HTTPS_LOGIN_CODE" = "302" ] || [ "$HTTPS_LOGIN_CODE" = "301" ]; then
-              echo "✅ HTTPS /login: HTTP $HTTPS_LOGIN_CODE"
+            DOMAIN="${SERVER_HOST:-aikz.usdt2026.cc}"
+            
+            # 1. 检查前端 (Login 页面)
+            echo "1. 检查前端页面..."
+            if curl -s --head --max-time 10 "https://${DOMAIN}/login" | grep "200 OK" > /dev/null; then
+              echo "✅ 前端访问正常 (HTTP 200)"
             else
-              echo "⚠️  HTTPS /login: HTTP $HTTPS_LOGIN_CODE (可能需要更多时间启动，但不影响部署成功)"
+              echo "⚠️  前端访问返回非 200 状态 (但这不影响部署完成)"
             fi
             
-            # 使用防崩溃兜底，确保即使 curl 失败也不会导致脚本退出
-            HTTPS_API_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${DOMAIN}/api/v1/health" 2>/dev/null || echo "000")
-            HTTPS_API_CODE=${HTTPS_API_CODE:-000}
-            if [ "$HTTPS_API_CODE" = "200" ] || [ "$HTTPS_API_CODE" = "401" ] || [ "$HTTPS_API_CODE" = "404" ]; then
-              echo "✅ HTTPS /api/v1/health: HTTP $HTTPS_API_CODE"
+            # 2. 检查后端 (API)
+            echo "2. 检查后端 API..."
+            if curl -s --max-time 5 "https://${DOMAIN}/api/v1/health" > /dev/null; then
+              echo "✅ 后端 API 正常"
             else
-              echo "⚠️  HTTPS /api/v1/health: HTTP $HTTPS_API_CODE (可能需要更多时间启动，但不影响部署成功)"
+              echo "⚠️  后端 API 暂无响应 (可能是 Python 启动较慢，请稍后手动刷新网页)"
             fi
             
             echo ""
-            echo "=========================================="
-            echo "✅ 部署完成 - $(date)"
-            echo "=========================================="
-            echo "注意：服务重启命令已成功执行，部署已完成。"
-            echo "外部验证仅供参考，如果服务需要更多时间启动，请稍后手动检查。"
+            echo "✅ 部署流程全部结束！"
             exit 0

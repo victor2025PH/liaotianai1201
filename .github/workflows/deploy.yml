@@ -167,14 +167,18 @@ jobs:
             DOMAIN="${SERVER_HOST:-aikz.usdt2026.cc}"
             echo "测试 HTTPS 访问..."
             
+            # 使用防崩溃兜底，确保即使 curl 失败也不会导致脚本退出
             HTTPS_LOGIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${DOMAIN}/login" 2>/dev/null || echo "000")
+            HTTPS_LOGIN_CODE=${HTTPS_LOGIN_CODE:-000}
             if [ "$HTTPS_LOGIN_CODE" = "200" ] || [ "$HTTPS_LOGIN_CODE" = "302" ] || [ "$HTTPS_LOGIN_CODE" = "301" ]; then
               echo "✅ HTTPS /login: HTTP $HTTPS_LOGIN_CODE"
             else
               echo "⚠️  HTTPS /login: HTTP $HTTPS_LOGIN_CODE (可能需要更多时间启动，但不影响部署成功)"
             fi
             
+            # 使用防崩溃兜底，确保即使 curl 失败也不会导致脚本退出
             HTTPS_API_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${DOMAIN}/api/v1/health" 2>/dev/null || echo "000")
+            HTTPS_API_CODE=${HTTPS_API_CODE:-000}
             if [ "$HTTPS_API_CODE" = "200" ] || [ "$HTTPS_API_CODE" = "401" ] || [ "$HTTPS_API_CODE" = "404" ]; then
               echo "✅ HTTPS /api/v1/health: HTTP $HTTPS_API_CODE"
             else

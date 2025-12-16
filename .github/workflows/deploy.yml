@@ -131,8 +131,11 @@ jobs:
             SERVICE_FILE="/etc/systemd/system/liaotian-frontend.service"
             if [ -f "$SERVICE_FILE" ]; then
               echo "检查前端服务配置..."
-              # 检查当前服务配置中的路径（使用更健壮的方法）
-              CURRENT_PATH=$(grep "ExecStart=" "$SERVICE_FILE" 2>/dev/null | grep -o "\.next/standalone[^ ]*" || echo "")
+              # 检查当前服务配置中的路径（使用更健壮的方法，避免 grep 失败导致脚本退出）
+              CURRENT_PATH=""
+              if grep -q "ExecStart=" "$SERVICE_FILE" 2>/dev/null; then
+                CURRENT_PATH=$(grep "ExecStart=" "$SERVICE_FILE" 2>/dev/null | grep -o "\.next/standalone[^ ]*" 2>/dev/null || echo "")
+              fi
               EXPECTED_PATH=".next/standalone/saas-demo/server.js"
               if [ -z "$CURRENT_PATH" ] || [ "$CURRENT_PATH" != "$EXPECTED_PATH" ]; then
                 echo "⚠️  服务路径不匹配（当前: ${CURRENT_PATH:-未找到}, 期望: $EXPECTED_PATH）"

@@ -10,7 +10,7 @@ WorkingDirectory=/home/ubuntu/telegram-ai-system/admin-backend
 Environment="PATH=/home/ubuntu/telegram-ai-system/admin-backend/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONUNBUFFERED=1"
 Environment="PYTHONPATH=/home/ubuntu/telegram-ai-system/admin-backend"
-EnvironmentFile=/home/ubuntu/telegram-ai-system/admin-backend/.env
+EnvironmentFile=-/home/ubuntu/telegram-ai-system/admin-backend/.env
 
 # 使用虚拟环境中的 uvicorn 运行 FastAPI
 ExecStart=/home/ubuntu/telegram-ai-system/admin-backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000

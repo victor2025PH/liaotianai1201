@@ -77,7 +77,7 @@ jobs:
               
               # 强制重新构建（删除旧构建产物，避免使用损坏的文件）
               echo "清理旧的构建产物..."
-              rm -rf .next
+              sudo rm -rf .next
               echo "✅ 已清理 .next 目录"
               
               echo "构建前端项目（这可能需要几分钟）..."

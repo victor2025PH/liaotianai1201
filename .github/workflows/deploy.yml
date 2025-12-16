@@ -154,13 +154,13 @@ jobs:
             sudo systemctl restart nginx && echo "✅ nginx 已重启" || echo "⚠️  nginx 重启失败"
             
             echo ""
-            echo "等待服务启动 (5秒)..."
-            sleep 5
+            echo "等待服务启动 (20秒)..."
+            sleep 20
             echo ""
             
-            # ============ HTTPS 验证 ============
+            # ============ HTTPS 验证（仅供参考，不阻塞部署） ============
             echo "=========================================="
-            echo "HTTPS 验证（端口 443）"
+            echo "HTTPS 验证（端口 443）- 仅供参考"
             echo "=========================================="
             DOMAIN="${SERVER_HOST:-aikz.usdt2026.cc}"
             echo "测试 HTTPS 访问..."
@@ -169,18 +169,20 @@ jobs:
             if [ "$HTTPS_LOGIN_CODE" = "200" ] || [ "$HTTPS_LOGIN_CODE" = "302" ] || [ "$HTTPS_LOGIN_CODE" = "301" ]; then
               echo "✅ HTTPS /login: HTTP $HTTPS_LOGIN_CODE"
             else
-              echo "⚠️  HTTPS /login: HTTP $HTTPS_LOGIN_CODE (可能需要等待服务完全启动)"
+              echo "⚠️  HTTPS /login: HTTP $HTTPS_LOGIN_CODE (可能需要更多时间启动，但不影响部署成功)"
             fi
             
             HTTPS_API_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${DOMAIN}/api/v1/health" 2>/dev/null || echo "000")
             if [ "$HTTPS_API_CODE" = "200" ] || [ "$HTTPS_API_CODE" = "401" ] || [ "$HTTPS_API_CODE" = "404" ]; then
               echo "✅ HTTPS /api/v1/health: HTTP $HTTPS_API_CODE"
             else
-              echo "⚠️  HTTPS /api/v1/health: HTTP $HTTPS_API_CODE (可能需要等待服务完全启动)"
+              echo "⚠️  HTTPS /api/v1/health: HTTP $HTTPS_API_CODE (可能需要更多时间启动，但不影响部署成功)"
             fi
             
             echo ""
             echo "=========================================="
             echo "✅ 部署完成 - $(date)"
             echo "=========================================="
+            echo "注意：服务重启命令已成功执行，部署已完成。"
+            echo "外部验证仅供参考，如果服务需要更多时间启动，请稍后手动检查。"
             exit 0

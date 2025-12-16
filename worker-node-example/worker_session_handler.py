@@ -187,13 +187,149 @@ def handle_upload_session_command(params: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
+def handle_download_session_command(params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    处理 download_session 命令
+    
+    读取本地 Session 文件，编码为 base64 返回
+    
+    Args:
+        params: 命令参数，包含：
+            - filename: 文件名
+    
+    Returns:
+        包含 base64 编码文件内容的响应数据
+    """
+    try:
+        filename = params.get("filename")
+        
+        if not filename:
+            return {
+                "success": False,
+                "error": "缺少文件名"
+            }
+        
+        # 验证文件扩展名
+        if not filename.endswith('.session'):
+            return {
+                "success": False,
+                "error": "只支持 .session 文件"
+            }
+        
+        # 构建文件路径
+        file_path = SESSIONS_DIR / filename
+        
+        if not file_path.exists():
+            return {
+                "success": False,
+                "error": f"文件不存在: {filename}"
+            }
+        
+        # 读取文件内容
+        try:
+            with open(file_path, "rb") as f:
+                file_content = f.read()
+            
+            file_size = len(file_content)
+            
+            # 编码为 base64
+            file_content_b64 = base64.b64encode(file_content).decode('utf-8')
+            
+            logger.info(f"Session 文件已读取: {file_path} (大小: {file_size} bytes)")
+            
+            return {
+                "success": True,
+                "data": {
+                    "filename": filename,
+                    "file_content": file_content_b64,
+                    "file_size": file_size
+                }
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"读取文件失败: {str(e)}"
+            }
+    
+    except Exception as e:
+        logger.error(f"处理 download_session 命令失败: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": f"下载 Session 文件失败: {str(e)}"
+        }
+
+
+def handle_delete_session_command(params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    处理 delete_session 命令
+    
+    删除本地 Session 文件
+    
+    Args:
+        params: 命令参数，包含：
+            - filename: 文件名
+    
+    Returns:
+        删除结果
+    """
+    try:
+        filename = params.get("filename")
+        
+        if not filename:
+            return {
+                "success": False,
+                "error": "缺少文件名"
+            }
+        
+        # 验证文件扩展名
+        if not filename.endswith('.session'):
+            return {
+                "success": False,
+                "error": "只支持 .session 文件"
+            }
+        
+        # 构建文件路径
+        file_path = SESSIONS_DIR / filename
+        
+        if not file_path.exists():
+            return {
+                "success": False,
+                "error": f"文件不存在: {filename}"
+            }
+        
+        # 删除文件
+        try:
+            file_path.unlink()
+            logger.info(f"Session 文件已删除: {file_path}")
+            
+            return {
+                "success": True,
+                "data": {
+                    "filename": filename,
+                    "path": str(file_path.absolute())
+                }
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"删除文件失败: {str(e)}"
+            }
+    
+    except Exception as e:
+        logger.error(f"处理 delete_session 命令失败: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": f"删除 Session 文件失败: {str(e)}"
+        }
+
+
 def process_command(command: Dict[str, Any]) -> Dict[str, Any]:
     """
     处理命令并返回结果
     
     Args:
         command: 命令字典，包含：
-            - action: 命令动作（list_sessions 或 upload_session）
+            - action: 命令动作（list_sessions, upload_session, download_session, delete_session）
             - params: 命令参数
             - command_id: 命令 ID（用于标识响应）
     
@@ -211,6 +347,10 @@ def process_command(command: Dict[str, Any]) -> Dict[str, Any]:
         result = handle_list_sessions_command(params)
     elif action == "upload_session":
         result = handle_upload_session_command(params)
+    elif action == "download_session":
+        result = handle_download_session_command(params)
+    elif action == "delete_session":
+        result = handle_delete_session_command(params)
     else:
         result = {
             "success": False,

@@ -13,8 +13,9 @@ import { useToast } from "@/hooks/use-toast"
 import { 
   Monitor, Play, Square, RefreshCw, Users, Laptop, Cloud, 
   Zap, Wifi, WifiOff, MessageSquare, Gift, Loader2, Plus,
-  Trash2, AlertTriangle, CheckCircle2, Search
+  Trash2, AlertTriangle, CheckCircle2, Search, FileText, ChevronDown, ChevronUp
 } from "lucide-react"
+import { WorkerSessionManager } from "@/components/worker-session-manager"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,6 +74,9 @@ export default function NodesPage() {
   // 重複帳號檢測
   const [duplicates, setDuplicates] = useState<any[]>([])
   const [showDuplicateAlert, setShowDuplicateAlert] = useState(false)
+  
+  // Session 管理展开状态
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
 
   const fetchWorkers = async () => {
     try {
@@ -640,6 +644,31 @@ export default function NodesPage() {
                     >
                       <MessageSquare className="mr-1 h-3 w-3" /> 導出帳號
                     </Button>
+                    {/* Session 文件管理按钮 */}
+                    {worker.status === "online" && (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="h-6 text-xs text-purple-500 border-purple-500/50"
+                        onClick={() => {
+                          const newExpanded = new Set(expandedSessions)
+                          if (newExpanded.has(nodeId)) {
+                            newExpanded.delete(nodeId)
+                          } else {
+                            newExpanded.add(nodeId)
+                          }
+                          setExpandedSessions(newExpanded)
+                        }}
+                      >
+                        <FileText className="mr-1 h-3 w-3" /> 
+                        {expandedSessions.has(nodeId) ? "隐藏 Session" : "Session 管理"}
+                        {expandedSessions.has(nodeId) ? (
+                          <ChevronUp className="ml-1 h-3 w-3" />
+                        ) : (
+                          <ChevronDown className="ml-1 h-3 w-3" />
+                        )}
+                      </Button>
+                    )}
                     {/* 刪除節點按鈕 */}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
@@ -677,6 +706,12 @@ export default function NodesPage() {
                       </AlertDialogContent>
                     </AlertDialog>
                   </div>
+                  {/* Session 文件管理区域 */}
+                  {expandedSessions.has(nodeId) && worker.status === "online" && (
+                    <div className="mt-3 pt-3 border-t">
+                      <WorkerSessionManager workerId={nodeId} workerName={nodeId} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

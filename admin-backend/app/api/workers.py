@@ -112,6 +112,42 @@ class SessionUploadResponse(BaseModel):
     message: str
 
 
+class SessionDownloadResponse(BaseModel):
+    """Session 下载响应"""
+    success: bool
+    node_id: str
+    filename: str
+    file_content: str  # base64 编码的文件内容
+    file_size: int
+    message: str
+
+
+class SessionDeleteResponse(BaseModel):
+    """Session 删除响应"""
+    success: bool
+    node_id: str
+    filename: str
+    message: str
+
+
+class BatchOperationRequest(BaseModel):
+    """批量操作请求"""
+    filenames: List[str] = Field(..., description="文件名列表")
+    operation: str = Field(..., description="操作类型: upload, download, delete")
+
+
+class BatchOperationResponse(BaseModel):
+    """批量操作响应"""
+    success: bool
+    node_id: str
+    operation: str
+    total: int
+    successful: int
+    failed: int
+    results: List[Dict[str, Any]]
+    message: str
+
+
 # ============ 辅助函数 ============
 
 def _get_worker_key(node_id: str) -> str:
@@ -807,4 +843,300 @@ async def upload_session_to_worker(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"上传 Session 文件失败: {str(e)}"
+        )
+
+
+@router.get("/{worker_id}/sessions/{filename}/download", response_model=SessionDownloadResponse, status_code=status.HTTP_200_OK)
+async def download_session_from_worker(
+    worker_id: str,
+    filename: str,
+    timeout: int = 30,
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """
+    从 Worker 节点下载 Session 文件
+    
+    工作流程：
+    1. 检查 Worker 节点是否在线
+    2. 生成唯一的命令 ID
+    3. 通过命令队列发送 "download_session" 命令
+    4. 等待 Worker 节点响应
+    5. 返回 base64 编码的文件内容
+    """
+    try:
+        # 检查 Worker 节点是否在线
+        worker_status = _get_worker_status(worker_id)
+        if not worker_status:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Worker 节点 {worker_id} 不存在"
+            )
+        
+        if worker_status.get("status") != "online":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Worker 节点 {worker_id} 不在线"
+            )
+        
+        # 验证文件名
+        if not filename or not filename.endswith('.session'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="只支持 .session 文件"
+            )
+        
+        # 生成唯一的命令 ID
+        import uuid
+        command_id = str(uuid.uuid4())
+        
+        # 发送命令到 Worker 节点
+        command = {
+            "action": "download_session",
+            "params": {
+                "filename": filename
+            },
+            "command_id": command_id,
+            "timestamp": datetime.now().isoformat(),
+            "from": "master"
+        }
+        
+        _add_command(worker_id, command)
+        logger.info(f"向节点 {worker_id} 发送 download_session 命令 (ID: {command_id}, 文件: {filename})")
+        
+        # 等待响应（轮询方式）
+        response = _wait_for_response(worker_id, command_id, timeout=timeout)
+        
+        if not response:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=f"等待 Worker 节点 {worker_id} 响应超时（{timeout}秒）"
+            )
+        
+        if not response.get("success"):
+            error_msg = response.get("error", "未知错误")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Worker 节点下载失败: {error_msg}"
+            )
+        
+        # 解析响应数据
+        result_data = response.get("data", {})
+        file_content_b64 = result_data.get("file_content", "")
+        file_size = result_data.get("file_size", 0)
+        
+        if not file_content_b64:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Worker 节点返回的文件内容为空"
+            )
+        
+        return SessionDownloadResponse(
+            success=True,
+            node_id=worker_id,
+            filename=filename,
+            file_content=file_content_b64,
+            file_size=file_size,
+            message=f"Session 文件已成功从节点 {worker_id} 下载"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"下载 Session 文件失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"下载 Session 文件失败: {str(e)}"
+        )
+
+
+@router.delete("/{worker_id}/sessions/{filename}", response_model=SessionDeleteResponse, status_code=status.HTTP_200_OK)
+async def delete_session_from_worker(
+    worker_id: str,
+    filename: str,
+    timeout: int = 30,
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """
+    从 Worker 节点删除 Session 文件
+    
+    工作流程：
+    1. 检查 Worker 节点是否在线
+    2. 生成唯一的命令 ID
+    3. 通过命令队列发送 "delete_session" 命令
+    4. 等待 Worker 节点响应
+    5. 返回删除结果
+    """
+    try:
+        # 检查 Worker 节点是否在线
+        worker_status = _get_worker_status(worker_id)
+        if not worker_status:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Worker 节点 {worker_id} 不存在"
+            )
+        
+        if worker_status.get("status") != "online":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Worker 节点 {worker_id} 不在线"
+            )
+        
+        # 验证文件名
+        if not filename or not filename.endswith('.session'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="只支持 .session 文件"
+            )
+        
+        # 生成唯一的命令 ID
+        import uuid
+        command_id = str(uuid.uuid4())
+        
+        # 发送命令到 Worker 节点
+        command = {
+            "action": "delete_session",
+            "params": {
+                "filename": filename
+            },
+            "command_id": command_id,
+            "timestamp": datetime.now().isoformat(),
+            "from": "master"
+        }
+        
+        _add_command(worker_id, command)
+        logger.info(f"向节点 {worker_id} 发送 delete_session 命令 (ID: {command_id}, 文件: {filename})")
+        
+        # 等待响应（轮询方式）
+        response = _wait_for_response(worker_id, command_id, timeout=timeout)
+        
+        if not response:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=f"等待 Worker 节点 {worker_id} 响应超时（{timeout}秒）"
+            )
+        
+        if not response.get("success"):
+            error_msg = response.get("error", "未知错误")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Worker 节点删除失败: {error_msg}"
+            )
+        
+        return SessionDeleteResponse(
+            success=True,
+            node_id=worker_id,
+            filename=filename,
+            message=f"Session 文件已成功从节点 {worker_id} 删除"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除 Session 文件失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"删除 Session 文件失败: {str(e)}"
+        )
+
+
+@router.post("/{worker_id}/sessions/batch", response_model=BatchOperationResponse, status_code=status.HTTP_200_OK)
+async def batch_operation_sessions(
+    worker_id: str,
+    request: BatchOperationRequest,
+    timeout: int = 120,
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """
+    批量操作 Session 文件（下载、删除）
+    
+    注意：批量操作会为每个文件发送单独的命令，并等待所有响应
+    """
+    try:
+        # 检查 Worker 节点是否在线
+        worker_status = _get_worker_status(worker_id)
+        if not worker_status:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Worker 节点 {worker_id} 不存在"
+            )
+        
+        if worker_status.get("status") != "online":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Worker 节点 {worker_id} 不在线"
+            )
+        
+        # 验证操作类型
+        if request.operation not in ["download", "delete"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"不支持的批量操作类型: {request.operation}。支持: download, delete"
+            )
+        
+        # 批量发送命令
+        import uuid
+        command_ids = []
+        for filename in request.filenames:
+            command_id = str(uuid.uuid4())
+            command_ids.append((filename, command_id))
+            
+            command = {
+                "action": f"{request.operation}_session",
+                "params": {
+                    "filename": filename
+                },
+                "command_id": command_id,
+                "timestamp": datetime.now().isoformat(),
+                "from": "master"
+            }
+            
+            _add_command(worker_id, command)
+        
+        logger.info(f"向节点 {worker_id} 发送批量 {request.operation} 命令: {len(request.filenames)} 个文件")
+        
+        # 等待所有响应
+        results = []
+        successful = 0
+        failed = 0
+        
+        for filename, command_id in command_ids:
+            response = _wait_for_response(worker_id, command_id, timeout=timeout)
+            
+            if response and response.get("success"):
+                successful += 1
+                results.append({
+                    "filename": filename,
+                    "success": True,
+                    "data": response.get("data", {})
+                })
+            else:
+                failed += 1
+                error_msg = response.get("error", "超时或未知错误") if response else "超时"
+                results.append({
+                    "filename": filename,
+                    "success": False,
+                    "error": error_msg
+                })
+        
+        return BatchOperationResponse(
+            success=successful > 0,
+            node_id=worker_id,
+            operation=request.operation,
+            total=len(request.filenames),
+            successful=successful,
+            failed=failed,
+            results=results,
+            message=f"批量操作完成: {successful} 成功, {failed} 失败"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"批量操作 Session 文件失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"批量操作失败: {str(e)}"
         )

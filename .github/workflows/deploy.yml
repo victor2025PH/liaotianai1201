@@ -168,20 +168,35 @@ jobs:
             
             # 1. 检查前端 (Login 页面)
             echo "1. 检查前端页面..."
-            if curl -s --head --max-time 10 "https://${DOMAIN}/login" | grep "200 OK" > /dev/null; then
+            FRONTEND_CHECK=$(curl -s --head --max-time 10 "https://${DOMAIN}/login" 2>&1 | grep "200 OK" || echo "")
+            if [ -n "$FRONTEND_CHECK" ]; then
               echo "✅ 前端访问正常 (HTTP 200)"
             else
               echo "⚠️  前端访问返回非 200 状态 (但这不影响部署完成)"
             fi
             
-            # 2. 检查后端 (API)
+            # 2. 检查后端 (API) - 增加超时时间并重试
             echo "2. 检查后端 API..."
-            if curl -s --max-time 5 "https://${DOMAIN}/api/v1/health" > /dev/null; then
-              echo "✅ 后端 API 正常"
-            else
+            BACKEND_CHECK_SUCCESS=false
+            for i in 1 2 3; do
+              if curl -s --max-time 15 "https://${DOMAIN}/api/v1/health" > /dev/null 2>&1; then
+                echo "✅ 后端 API 正常 (尝试 $i/3)"
+                BACKEND_CHECK_SUCCESS=true
+                break
+              else
+                if [ $i -lt 3 ]; then
+                  echo "   ⏳ 后端 API 暂无响应，等待 5 秒后重试 ($i/3)..."
+                  sleep 5
+                fi
+              fi
+            done
+            
+            if [ "$BACKEND_CHECK_SUCCESS" = false ]; then
               echo "⚠️  后端 API 暂无响应 (可能是 Python 启动较慢，请稍后手动刷新网页)"
+              echo "   提示：可以运行 'sudo journalctl -u luckyred-api -n 50 --no-pager' 查看后端日志"
             fi
             
             echo ""
             echo "✅ 部署流程全部结束！"
+            # 确保总是以成功状态退出，即使健康检查失败
             exit 0

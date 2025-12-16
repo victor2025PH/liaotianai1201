@@ -210,6 +210,41 @@ sudo ss -tlnp | grep -E ':3000|:8000|:443'
 - [ ] **构建文件是否存在？** `ls -la saas-demo/.next/standalone/server.js`
 - [ ] **服务日志是否有错误？** `sudo journalctl -u liaotian-frontend -n 30 --no-pager`
 
+### ⚠️ 重要：Nginx HTTPS 端口问题
+
+如果端口检查显示 **443 端口未监听**，这通常是网站无法访问的主要原因。
+
+**快速诊断：**
+```bash
+# 检查 Nginx 配置是否包含 HTTPS
+sudo grep -E "listen\s+443" /etc/nginx/sites-available/aikz.usdt2026.cc
+
+# 如果上面没有输出，说明未配置 HTTPS
+# 检查 SSL 证书是否存在
+sudo ls -la /etc/letsencrypt/live/aikz.usdt2026.cc/ 2>/dev/null || echo "证书不存在"
+```
+
+**临时解决方案（如果只有 HTTP）：**
+如果暂时没有 SSL 证书，可以：
+1. 使用 HTTP 访问：`http://aikz.usdt2026.cc`（注意是 http 不是 https）
+2. 或者配置 SSL 证书（推荐使用 Let's Encrypt）
+
+**配置 HTTPS 的快速命令：**
+```bash
+# 1. 安装 Certbot（如果未安装）
+sudo apt-get update
+sudo apt-get install -y certbot python3-certbot-nginx
+
+# 2. 获取 SSL 证书
+sudo certbot --nginx -d aikz.usdt2026.cc
+
+# 3. 重启 Nginx
+sudo systemctl restart nginx
+
+# 4. 验证 443 端口
+sudo ss -tlnp | grep :443
+```
+
 ---
 
 ## 故障排查

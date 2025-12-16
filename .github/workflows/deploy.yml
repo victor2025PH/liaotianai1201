@@ -29,276 +29,66 @@ jobs:
           envs: GITHUB_REPO=${{ github.repository }},SERVER_HOST=${{ secrets.SERVER_HOST }}
           script: |
             PROJECT_DIR="/home/ubuntu/telegram-ai-system"
-            GITHUB_REPO="${GITHUB_REPO:-victor2025PH/liaotianai1201}"
             
             echo "=========================================="
             echo "开始部署 - $(date)"
             echo "=========================================="
-            echo "项目目录: $PROJECT_DIR"
-            echo "GitHub 仓库: $GITHUB_REPO"
             echo ""
             
             # ============ 进入项目目录 ============
-            echo "[1/4] 进入项目目录"
-            echo "----------------------------------------"
-            if [ ! -d "$PROJECT_DIR" ]; then
-              echo "❌ 项目目录不存在: $PROJECT_DIR"
-              echo "请先手动克隆仓库或检查路径"
-              exit 1
-            fi
-            
-            cd "$PROJECT_DIR" || {
-              echo "❌ 无法进入项目目录: $PROJECT_DIR"
-              exit 1
-            }
+            echo "[1/5] 进入项目目录"
+            cd "$PROJECT_DIR"
             echo "✅ 当前目录: $(pwd)"
             echo ""
             
             # ============ 拉取最新代码 ============
-            echo "[2/4] 拉取最新代码"
-            echo "----------------------------------------"
-            git pull origin main || {
-              echo "❌ Git pull 失败"
-              exit 1
-            }
+            echo "[2/5] 拉取最新代码"
+            git pull origin main
             echo "✅ 代码已更新"
             echo "最新提交: $(git log -1 --oneline)"
             echo ""
             
             # ============ 修复文件权限 ============
-            echo "[2.5/4] 修复文件权限"
-            echo "----------------------------------------"
-            echo "修复项目目录权限（确保 ubuntu 用户拥有所有文件）..."
-            sudo chown -R ubuntu:ubuntu "$PROJECT_DIR" || {
-              echo "⚠️  权限修复失败，继续..."
-            }
+            echo "[3/5] 修复文件权限"
+            sudo chown -R ubuntu:ubuntu "$PROJECT_DIR"
             echo "✅ 文件权限已修复"
             echo ""
             
             # ============ 构建前端 ============
-            echo "[3/4] 构建前端"
-            echo "----------------------------------------"
-            if [ -d "saas-demo" ]; then
-              cd saas-demo
-              
-              # 清理旧的构建产物和 node_modules（如果有权限问题）
-              echo "清理旧的构建产物和 node_modules..."
-              sudo rm -rf .next node_modules/.cache 2>/dev/null || true
-              # 确保目录权限正确
-              sudo chown -R ubuntu:ubuntu . 2>/dev/null || true
-              echo "✅ 已清理并修复权限"
-              
-              echo "安装前端依赖..."
-              npm install --prefer-offline --no-audit --no-fund || {
-                echo "⚠️  npm install 失败，尝试修复权限后重试..."
-                # 如果失败，修复权限后重试
-                sudo chown -R ubuntu:ubuntu node_modules 2>/dev/null || true
-                sudo rm -rf node_modules 2>/dev/null || true
-                npm install --prefer-offline --no-audit --no-fund || {
-                  echo "❌ npm install 仍然失败"
-                  exit 1
-                }
-              }
-              
-              echo "构建前端项目（这可能需要几分钟）..."
-              export NODE_ENV=production
-              export NODE_OPTIONS="--max-old-space-size=4096"
-              # 使用 timeout 防止卡死，最多等待 20 分钟
-              # 注意：timeout 在管道中使用时，退出码可能不准确，需要通过日志判断
-              set +e  # 暂时关闭错误中断，以便检查日志
-              timeout 20m npm run build 2>&1 | tee /tmp/build.log
-              BUILD_EXIT_CODE=${PIPESTATUS[0]}  # 获取 timeout 的退出码
-              set -e  # 重新开启错误中断
-              
-              # 检查是否超时
-              if [ $BUILD_EXIT_CODE -eq 124 ]; then
-                echo "❌ 前端构建超时（超过 20 分钟）"
-                echo "构建日志（最后 50 行）:"
-                tail -50 /tmp/build.log 2>/dev/null || echo "无法读取构建日志"
-                exit 1
-              fi
-              
-              # 验证构建是否成功（通过日志内容判断，而不是退出码）
-              # 使用 set +e 避免 grep 失败导致脚本退出
-              set +e
-              BUILD_SUCCESS=false
-              if grep -q "Compiled successfully" /tmp/build.log 2>/dev/null; then
-                echo "✅ 前端构建成功"
-                BUILD_SUCCESS=true
-              else
-                # 检查是否有明显的错误信息
-                if grep -qiE "error|failed|failed to compile|build failed" /tmp/build.log 2>/dev/null; then
-                  echo "❌ 前端构建失败（检测到错误信息）"
-                  echo "构建日志（最后 50 行）:"
-                  tail -50 /tmp/build.log 2>/dev/null || echo "无法读取构建日志"
-                  set -e
-                  exit 1
-                else
-                  echo "⚠️  构建日志中未找到 'Compiled successfully'，但未检测到明显错误"
-                  # 继续执行，通过文件存在性验证
-                fi
-              fi
-              
-              # 验证关键文件是否存在（继续使用 set +e）
-              SERVER_JS_FOUND=false
-              SERVER_JS=""
-              
-              # 检查多个可能的路径（Next.js 16 可能的结构）
-              if [ -f ".next/standalone/server.js" ]; then
-                echo "✅ server.js 文件已生成 (.next/standalone/server.js)"
-                SERVER_JS_FOUND=true
-                SERVER_JS=".next/standalone/server.js"
-              elif [ -f ".next/standalone/saas-demo/server.js" ]; then
-                echo "✅ server.js 文件已生成 (.next/standalone/saas-demo/server.js)"
-                SERVER_JS_FOUND=true
-                SERVER_JS=".next/standalone/saas-demo/server.js"
-              else
-                # 尝试查找 server.js 文件
-                SERVER_JS=$(find .next -name "server.js" -type f 2>/dev/null | head -1)
-                if [ -n "$SERVER_JS" ]; then
-                  echo "✅ server.js 文件已生成（位置: $SERVER_JS）"
-                  SERVER_JS_FOUND=true
-                else
-                  echo "⚠️  server.js 文件未找到"
-                  echo "查找结果:"
-                  find .next -type f -name "server.js" 2>/dev/null | head -5 || echo "   未找到 server.js"
-                  echo "检查 .next/standalone 目录结构:"
-                  ls -la .next/standalone 2>/dev/null | head -10 || echo "   .next/standalone 目录不存在"
-                  SERVER_JS_FOUND=false
-                fi
-              fi
-              
-              # 如果构建成功但找不到 server.js，记录警告但继续部署
-              if [ "$BUILD_SUCCESS" = "true" ] && [ "$SERVER_JS_FOUND" != "true" ]; then
-                echo "⚠️  构建日志显示成功，但找不到 server.js，可能是路径问题，继续部署..."
-                echo "   提示：请检查 .next/standalone 目录结构"
-              fi
-              
-              # 只有在构建失败且找不到 server.js 时才退出
-              if [ "$BUILD_SUCCESS" != "true" ] && [ "$SERVER_JS_FOUND" != "true" ]; then
-                echo "❌ 构建失败且找不到 server.js，部署终止"
-                cd ..
-                set -e
-                exit 1
-              fi
-              
-              # 如果构建成功，无论是否找到 server.js，都继续部署
-              if [ "$BUILD_SUCCESS" = "true" ]; then
-                echo "✅ 构建成功，继续部署流程..."
-              fi
-              
-              # 安全地返回上级目录（即使失败也不退出）
-              cd .. || {
-                echo "⚠️  无法返回上级目录，尝试使用绝对路径..."
-                cd "$PROJECT_DIR" || {
-                  echo "⚠️  无法返回项目目录，但继续执行..."
-                }
-              }
-            else
-              echo "⚠️  saas-demo 目录不存在，跳过前端构建"
-            fi
+            echo "[4/5] 构建前端"
+            cd saas-demo
+            
+            echo "安装前端依赖..."
+            npm install --prefer-offline --no-audit --no-fund
+            
+            echo "构建前端项目..."
+            export NODE_ENV=production
+            export NODE_OPTIONS="--max-old-space-size=4096"
+            npm run build
+            
+            echo "✅ 前端构建完成"
+            cd ..
             echo ""
             
             # ============ 安装后端依赖 ============
-            echo "[3.5/4] 安装后端依赖"
-            echo "----------------------------------------"
-            set +e  # 暂时关闭错误中断，因为依赖安装失败不应该阻止部署
-            if [ -d "admin-backend" ]; then
-              cd admin-backend || {
-                echo "⚠️  无法进入 admin-backend 目录，跳过后端依赖安装"
-                set -e
-                echo ""
-                # 跳转到部署步骤
-              }
-              if [ -d "venv" ] && [ -f "venv/bin/activate" ]; then
-                source venv/bin/activate 2>/dev/null || {
-                  echo "⚠️  虚拟环境激活失败，继续..."
-                }
-                echo "安装 Python 依赖..."
-                pip install -r requirements.txt --quiet || {
-                  echo "⚠️  部分依赖安装失败，继续..."
-                }
-                cd .. || cd "$PROJECT_DIR" || true
-                echo "✅ 后端依赖安装完成"
-              else
-                echo "⚠️  虚拟环境不存在，跳过依赖安装"
-                cd .. || cd "$PROJECT_DIR" || true
-              fi
-            else
-              echo "⚠️  admin-backend 目录不存在，跳过后端依赖安装"
-            fi
-            set -e  # 重新开启错误中断
+            echo "[4.5/5] 安装后端依赖"
+            cd admin-backend
+            source venv/bin/activate
+            pip install -r requirements.txt --quiet
+            cd ..
+            echo "✅ 后端依赖安装完成"
             echo ""
             
             # ============ 重启服务 ============
-            echo "[4/4] 重启服务"
-            echo "----------------------------------------"
-            set +e  # 关闭错误中断，服务重启失败不应该阻止部署完成
-            echo "重启后端服务..."
-            if sudo systemctl restart luckyred-api 2>/dev/null; then
-              echo "✅ luckyred-api 已重启"
-            else
-              echo "⚠️  luckyred-api 重启失败（继续部署）"
-            fi
-            
-            echo "重启前端服务..."
-            if sudo systemctl restart liaotian-frontend 2>/dev/null; then
-              echo "✅ liaotian-frontend 已重启"
-            else
-              echo "⚠️  liaotian-frontend 重启失败（继续部署）"
-            fi
-            
-            echo "重启 Nginx..."
-            if sudo systemctl restart nginx 2>/dev/null; then
-              echo "✅ nginx 已重启"
-            else
-              echo "⚠️  nginx 重启失败（继续部署）"
-            fi
+            echo "[5/5] 重启服务"
+            sudo systemctl restart luckyred-api
+            sudo systemctl restart liaotian-frontend
+            sudo systemctl restart nginx
             
             echo ""
             echo "等待服务启动 (20秒)..."
             sleep 20
-            echo ""
-            
-            # ============ HTTPS 验证 (非阻塞模式) ============
-            set +e  # 关闭错误中断
-            echo "=========================================="
-            echo "正在进行最终健康检查..."
-            echo "=========================================="
-            
-            DOMAIN="${SERVER_HOST:-aikz.usdt2026.cc}"
-            
-            # 1. 检查前端 (Login 页面)
-            echo "1. 检查前端页面..."
-            FRONTEND_CHECK=$(curl -s --head --max-time 10 "https://${DOMAIN}/login" 2>&1 | grep "200 OK" || echo "")
-            if [ -n "$FRONTEND_CHECK" ]; then
-              echo "✅ 前端访问正常 (HTTP 200)"
-            else
-              echo "⚠️  前端访问返回非 200 状态 (但这不影响部署完成)"
-            fi
-            
-            # 2. 检查后端 (API) - 增加超时时间并重试
-            echo "2. 检查后端 API..."
-            BACKEND_CHECK_SUCCESS=false
-            for i in 1 2 3; do
-              if curl -s --max-time 15 "https://${DOMAIN}/api/v1/health" > /dev/null 2>&1; then
-                echo "✅ 后端 API 正常 (尝试 $i/3)"
-                BACKEND_CHECK_SUCCESS=true
-                break
-              else
-                if [ $i -lt 3 ]; then
-                  echo "   ⏳ 后端 API 暂无响应，等待 5 秒后重试 ($i/3)..."
-                  sleep 5
-                fi
-              fi
-            done
-            
-            if [ "$BACKEND_CHECK_SUCCESS" = false ]; then
-              echo "⚠️  后端 API 暂无响应 (可能是 Python 启动较慢，请稍后手动刷新网页)"
-              echo "   提示：可以运行 'sudo journalctl -u luckyred-api -n 50 --no-pager' 查看后端日志"
-            fi
             
             echo ""
-            echo "✅ 部署流程全部结束！"
-            # 确保总是以成功状态退出，即使健康检查失败
-            exit 0
+            echo "✅ 部署完成！"
+            echo "完成时间: $(date)"

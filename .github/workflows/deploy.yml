@@ -55,7 +55,7 @@ jobs:
             echo ""
             
             # ============ 拉取最新代码 ============
-            echo "[2/3] 拉取最新代码"
+            echo "[2/4] 拉取最新代码"
             echo "----------------------------------------"
             git pull origin main || {
               echo "❌ Git pull 失败"
@@ -65,20 +65,40 @@ jobs:
             echo "最新提交: $(git log -1 --oneline)"
             echo ""
             
+            # ============ 修复文件权限 ============
+            echo "[2.5/4] 修复文件权限"
+            echo "----------------------------------------"
+            echo "修复项目目录权限（确保 ubuntu 用户拥有所有文件）..."
+            sudo chown -R ubuntu:ubuntu "$PROJECT_DIR" || {
+              echo "⚠️  权限修复失败，继续..."
+            }
+            echo "✅ 文件权限已修复"
+            echo ""
+            
             # ============ 构建前端 ============
-            echo "[3/3] 构建前端"
+            echo "[3/4] 构建前端"
             echo "----------------------------------------"
             if [ -d "saas-demo" ]; then
               cd saas-demo
+              
+              # 清理旧的构建产物和 node_modules（如果有权限问题）
+              echo "清理旧的构建产物和 node_modules..."
+              sudo rm -rf .next node_modules/.cache 2>/dev/null || true
+              # 确保目录权限正确
+              sudo chown -R ubuntu:ubuntu . 2>/dev/null || true
+              echo "✅ 已清理并修复权限"
+              
               echo "安装前端依赖..."
               npm install --prefer-offline --no-audit --no-fund || {
-                echo "⚠️  npm install 失败，继续尝试构建..."
+                echo "⚠️  npm install 失败，尝试修复权限后重试..."
+                # 如果失败，修复权限后重试
+                sudo chown -R ubuntu:ubuntu node_modules 2>/dev/null || true
+                sudo rm -rf node_modules 2>/dev/null || true
+                npm install --prefer-offline --no-audit --no-fund || {
+                  echo "❌ npm install 仍然失败"
+                  exit 1
+                }
               }
-              
-              # 强制重新构建（删除旧构建产物，避免使用损坏的文件）
-              echo "清理旧的构建产物..."
-              sudo rm -rf .next
-              echo "✅ 已清理 .next 目录"
               
               echo "构建前端项目（这可能需要几分钟）..."
               export NODE_ENV=production

@@ -55,7 +55,7 @@ jobs:
             echo ""
             
             # ============ 拉取最新代码 ============
-            echo "[2/4] 拉取最新代码"
+            echo "[2/3] 拉取最新代码"
             echo "----------------------------------------"
             git pull origin main || {
               echo "❌ Git pull 失败"
@@ -66,7 +66,7 @@ jobs:
             echo ""
             
             # ============ 构建前端 ============
-            echo "[3/4] 构建前端"
+            echo "[3/3] 构建前端"
             echo "----------------------------------------"
             if [ -d "saas-demo" ]; then
               cd saas-demo
@@ -75,28 +75,44 @@ jobs:
                 echo "⚠️  npm install 失败，继续尝试构建..."
               }
               
-              # 检查是否已有构建产物（Next.js 16 standalone 输出在 .next/standalone/saas-demo/server.js）
-              if [ -d ".next/standalone" ] && [ -d ".next/static" ] && [ -f ".next/standalone/saas-demo/server.js" ]; then
-                echo "✅ 检测到已有构建产物，跳过构建（如需强制构建，请删除 .next 目录）"
+              # 强制重新构建（删除旧构建产物，避免使用损坏的文件）
+              echo "清理旧的构建产物..."
+              rm -rf .next
+              echo "✅ 已清理 .next 目录"
+              
+              echo "构建前端项目（这可能需要几分钟）..."
+              export NODE_ENV=production
+              export NODE_OPTIONS="--max-old-space-size=4096"
+              # 使用 timeout 防止卡死，最多等待 20 分钟
+              timeout 20m npm run build 2>&1 | tee /tmp/build.log || {
+                BUILD_EXIT_CODE=$?
+                if [ $BUILD_EXIT_CODE -eq 124 ]; then
+                  echo "❌ 前端构建超时（超过 20 分钟）"
+                  echo "构建日志（最后 50 行）:"
+                  tail -50 /tmp/build.log 2>/dev/null || echo "无法读取构建日志"
+                else
+                  echo "❌ 前端构建失败（退出码: $BUILD_EXIT_CODE）"
+                  echo "构建日志（最后 50 行）:"
+                  tail -50 /tmp/build.log 2>/dev/null || echo "无法读取构建日志"
+                fi
+                exit 1
+              }
+              
+              # 验证构建是否成功
+              if grep -q "Compiled successfully" /tmp/build.log 2>/dev/null; then
+                echo "✅ 前端构建成功"
               else
-                echo "构建前端项目（这可能需要几分钟）..."
-                export NODE_OPTIONS="--max-old-space-size=4096"
-                # 使用 timeout 防止卡死，最多等待 20 分钟
-                timeout 20m npm run build 2>&1 | tee /tmp/build.log || {
-                  BUILD_EXIT_CODE=$?
-                  if [ $BUILD_EXIT_CODE -eq 124 ]; then
-                    echo "❌ 前端构建超时（超过 20 分钟）"
-                    echo "构建日志（最后 50 行）:"
-                    tail -50 /tmp/build.log 2>/dev/null || echo "无法读取构建日志"
-                  else
-                    echo "❌ 前端构建失败（退出码: $BUILD_EXIT_CODE）"
-                    echo "构建日志（最后 50 行）:"
-                    tail -50 /tmp/build.log 2>/dev/null || echo "无法读取构建日志"
-                  fi
-                  exit 1
-                }
-                echo "✅ 前端构建完成"
+                echo "⚠️  构建日志中未找到 'Compiled successfully'，但构建命令已执行完成"
               fi
+              
+              # 验证关键文件是否存在
+              if [ -f ".next/standalone/saas-demo/server.js" ]; then
+                echo "✅ server.js 文件已生成"
+              else
+                echo "⚠️  server.js 文件未找到，查找实际位置..."
+                find .next -name "server.js" -type f 2>/dev/null | head -3 || echo "未找到 server.js"
+              fi
+              
               cd ..
             else
               echo "⚠️  saas-demo 目录不存在，跳过前端构建"
@@ -104,7 +120,7 @@ jobs:
             echo ""
             
             # ============ 安装后端依赖 ============
-            echo "[4/4] 安装后端依赖"
+            echo "[3.5/4] 安装后端依赖"
             echo "----------------------------------------"
             if [ -d "admin-backend" ]; then
               cd admin-backend
@@ -125,39 +141,8 @@ jobs:
             fi
             echo ""
             
-            # ============ 修复服务配置（如果需要） ============
-            echo "[4.5/5] 检查并修复服务配置"
-            echo "----------------------------------------"
-            SERVICE_FILE="/etc/systemd/system/liaotian-frontend.service"
-            if [ -f "$SERVICE_FILE" ]; then
-              echo "检查前端服务配置..."
-              # 检查当前服务配置中的路径（使用更健壮的方法，避免任何命令失败导致脚本退出）
-              CURRENT_PATH=""
-              # 使用 || true 确保命令失败不会导致脚本退出
-              if grep -q "ExecStart=" "$SERVICE_FILE" 2>/dev/null || true; then
-                CURRENT_PATH=$(grep "ExecStart=" "$SERVICE_FILE" 2>/dev/null | grep -o "\.next/standalone[^ ]*" 2>/dev/null || echo "")
-              fi
-              EXPECTED_PATH=".next/standalone/saas-demo/server.js"
-              if [ -z "$CURRENT_PATH" ] || [ "$CURRENT_PATH" != "$EXPECTED_PATH" ]; then
-                echo "⚠️  服务路径不匹配（当前: ${CURRENT_PATH:-未找到}, 期望: $EXPECTED_PATH）"
-                if [ -f "scripts/server/fix-frontend-service-path.sh" ]; then
-                  echo "执行修复脚本..."
-                  bash scripts/server/fix-frontend-service-path.sh || {
-                    echo "⚠️  自动修复失败，但继续部署..."
-                  }
-                else
-                  echo "⚠️  修复脚本不存在，跳过自动修复"
-                fi
-              else
-                echo "✅ 服务配置路径正确: $CURRENT_PATH"
-              fi
-            else
-              echo "⚠️  服务文件不存在: $SERVICE_FILE，跳过检查"
-            fi
-            echo ""
-            
             # ============ 重启服务 ============
-            echo "[5/5] 重启服务"
+            echo "[4/4] 重启服务"
             echo "----------------------------------------"
             echo "重启后端服务..."
             sudo systemctl restart luckyred-api && echo "✅ luckyred-api 已重启" || echo "⚠️  luckyred-api 重启失败"

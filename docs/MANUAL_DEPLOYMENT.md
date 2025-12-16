@@ -144,6 +144,74 @@ sudo systemctl restart luckyred-api liaotian-frontend nginx
 
 ---
 
+## 🔧 网站无法访问 - 快速诊断和修复
+
+### 方法一：使用诊断脚本（推荐）
+
+首先上传诊断脚本到服务器，然后执行：
+
+```bash
+# 上传 scripts/server/diagnose-website.sh 到服务器后执行
+chmod +x diagnose-website.sh
+./diagnose-website.sh
+```
+
+这会显示所有服务的状态、端口监听情况、构建文件是否存在以及最新的错误日志。
+
+### 方法二：使用快速修复脚本
+
+如果诊断发现问题，可以使用自动修复脚本：
+
+```bash
+# 上传 scripts/server/fix-and-restart-services.sh 到服务器后执行
+chmod +x fix-and-restart-services.sh
+./fix-and-restart-services.sh
+```
+
+这个脚本会自动：
+1. 停止所有服务
+2. 修复文件权限
+3. 验证构建文件
+4. 重启所有服务
+5. 检查服务状态
+
+### 方法三：手动快速修复命令
+
+如果脚本不可用，直接执行以下命令：
+
+```bash
+# 1. 进入项目目录
+cd /home/ubuntu/telegram-ai-system
+
+# 2. 修复文件权限
+sudo chown -R ubuntu:ubuntu /home/ubuntu/telegram-ai-system
+
+# 3. 重启所有服务
+sudo systemctl restart luckyred-api
+sudo systemctl restart liaotian-frontend
+sudo systemctl restart nginx
+
+# 4. 等待服务启动
+sleep 15
+
+# 5. 检查服务状态
+sudo systemctl status liaotian-frontend --no-pager | head -10
+sudo systemctl status luckyred-api --no-pager | head -10
+sudo systemctl status nginx --no-pager | head -10
+
+# 6. 检查端口监听
+sudo ss -tlnp | grep -E ':3000|:8000|:443'
+```
+
+### 常见问题检查清单
+
+- [ ] **服务是否运行？** `sudo systemctl is-active liaotian-frontend luckyred-api nginx`
+- [ ] **端口是否监听？** `sudo ss -tlnp | grep -E ':3000|:8000|:443'`
+- [ ] **构建文件是否存在？** `ls -la saas-demo/.next/standalone/server.js`
+- [ ] **服务日志是否有错误？** `sudo journalctl -u liaotian-frontend -n 30 --no-pager`
+
+---
+
 ## 故障排查
 
 ### 如果前端构建失败

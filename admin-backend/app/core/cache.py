@@ -12,6 +12,54 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
+
+def _json_serializer_default(obj: Any) -> Any:
+    """
+    自定义 JSON 序列化器，用于处理 SQLAlchemy 模型对象和其他不可序列化的对象
+    
+    处理逻辑：
+    1. 如果对象有 id 属性，只序列化 id
+    2. 如果对象有 __dict__ 属性，尝试序列化其字典表示
+    3. 否则使用 str() 作为后备
+    """
+    # 处理 SQLAlchemy 模型对象（通常有 id 属性）
+    if hasattr(obj, 'id'):
+        try:
+            return obj.id
+        except Exception:
+            pass
+    
+    # 处理有 __dict__ 的对象（如普通类实例）
+    if hasattr(obj, '__dict__'):
+        try:
+            # 尝试获取对象的字典表示，但只包含基本类型
+            obj_dict = {}
+            for key, value in obj.__dict__.items():
+                # 跳过私有属性
+                if key.startswith('_'):
+                    continue
+                # 只包含可序列化的值
+                try:
+                    json.dumps(value, default=str)
+                    obj_dict[key] = value
+                except (TypeError, ValueError):
+                    # 如果值不可序列化，使用 str() 表示
+                    obj_dict[key] = str(value)
+            return obj_dict
+        except Exception:
+            pass
+    
+    # 处理 datetime 对象
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    
+    # 处理 timedelta 对象
+    if isinstance(obj, timedelta):
+        return obj.total_seconds()
+    
+    # 后备方案：使用字符串表示
+    return str(obj)
+
 try:
     import redis
     REDIS_AVAILABLE = True
@@ -48,13 +96,60 @@ class CacheManager:
                 self.use_redis = False
     
     def _generate_key(self, prefix: str, *args, **kwargs) -> str:
-        """生成缓存键"""
+        """
+        生成缓存键
+        
+        使用自定义 JSON 序列化器处理 SQLAlchemy 模型对象和其他不可序列化的对象
+        """
+        # 处理 args：对于对象，尝试提取 id 或使用字符串表示
+        serialized_args = []
+        for arg in args:
+            if hasattr(arg, 'id'):
+                # 如果是 SQLAlchemy 模型对象，只使用 id
+                try:
+                    serialized_args.append(f"id:{arg.id}")
+                except Exception:
+                    serialized_args.append(str(arg))
+            else:
+                # 其他类型直接转换为字符串
+                try:
+                    json.dumps(arg, default=str)
+                    serialized_args.append(str(arg))
+                except (TypeError, ValueError):
+                    serialized_args.append(str(arg))
+        
+        # 处理 kwargs：使用自定义序列化器
+        try:
+            serialized_kwargs = json.dumps(kwargs, sort_keys=True, default=_json_serializer_default)
+        except (TypeError, ValueError) as e:
+            # 如果序列化失败，使用更宽松的方式
+            logger.warning(f"缓存键生成时序列化 kwargs 失败: {e}，使用备用方案")
+            # 备用方案：手动处理每个值
+            safe_kwargs = {}
+            for key, value in kwargs.items():
+                if hasattr(value, 'id'):
+                    safe_kwargs[key] = f"id:{value.id}"
+                else:
+                    try:
+                        json.dumps(value, default=str)
+                        safe_kwargs[key] = value
+                    except (TypeError, ValueError):
+                        safe_kwargs[key] = str(value)
+            serialized_kwargs = json.dumps(safe_kwargs, sort_keys=True, default=str)
+        
         key_data = {
             "prefix": prefix,
-            "args": str(args),
-            "kwargs": json.dumps(kwargs, sort_keys=True)
+            "args": serialized_args,
+            "kwargs": serialized_kwargs
         }
-        key_str = json.dumps(key_data, sort_keys=True)
+        
+        try:
+            key_str = json.dumps(key_data, sort_keys=True, default=_json_serializer_default)
+        except (TypeError, ValueError) as e:
+            # 如果仍然失败，使用最宽松的方式
+            logger.warning(f"缓存键生成时序列化 key_data 失败: {e}，使用备用方案")
+            key_str = json.dumps(key_data, sort_keys=True, default=str)
+        
         key_hash = hashlib.md5(key_str.encode()).hexdigest()
         return f"{prefix}:{key_hash}"
     

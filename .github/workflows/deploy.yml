@@ -75,9 +75,9 @@ jobs:
                 echo "⚠️  npm install 失败，继续尝试构建..."
               }
               
-              # 检查是否已有构建产物
-              if [ -d ".next/standalone" ] && [ -d ".next/static" ] && [ -f ".next/standalone/server.js" ]; then
-                echo "⚠️  检测到已有构建产物，跳过构建（如需强制构建，请删除 .next 目录）"
+              # 检查是否已有构建产物（Next.js 16 standalone 输出在 .next/standalone/saas-demo/server.js）
+              if [ -d ".next/standalone" ] && [ -d ".next/static" ] && [ -f ".next/standalone/saas-demo/server.js" ]; then
+                echo "✅ 检测到已有构建产物，跳过构建（如需强制构建，请删除 .next 目录）"
               else
                 echo "构建前端项目（这可能需要几分钟）..."
                 export NODE_OPTIONS="--max-old-space-size=4096"
@@ -122,6 +122,25 @@ jobs:
               fi
             else
               echo "⚠️  admin-backend 目录不存在，跳过后端依赖安装"
+            fi
+            echo ""
+            
+            # ============ 修复服务配置（如果需要） ============
+            echo "[4.5/5] 检查并修复服务配置"
+            echo "----------------------------------------"
+            if [ -f "scripts/server/fix-frontend-service-path.sh" ]; then
+              echo "检查前端服务配置..."
+              # 检查当前服务配置中的路径
+              CURRENT_PATH=$(sudo systemctl cat liaotian-frontend 2>/dev/null | grep "ExecStart=" | grep -o "\.next/standalone[^ ]*" || echo "")
+              EXPECTED_PATH=".next/standalone/saas-demo/server.js"
+              if [ "$CURRENT_PATH" != "$EXPECTED_PATH" ]; then
+                echo "⚠️  服务路径不匹配，执行修复脚本..."
+                bash scripts/server/fix-frontend-service-path.sh || {
+                  echo "⚠️  自动修复失败，但继续部署..."
+                }
+              else
+                echo "✅ 服务配置路径正确"
+              fi
             fi
             echo ""
             

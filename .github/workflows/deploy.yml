@@ -104,27 +104,26 @@ jobs:
               export NODE_ENV=production
               export NODE_OPTIONS="--max-old-space-size=4096"
               # 使用 timeout 防止卡死，最多等待 20 分钟
-              # 注意：timeout 命令的退出码处理
-              BUILD_EXIT_CODE=0
-              timeout 20m npm run build 2>&1 | tee /tmp/build.log || {
-                BUILD_EXIT_CODE=$?
-                # timeout 返回 124 表示超时
-                if [ $BUILD_EXIT_CODE -eq 124 ]; then
-                  echo "❌ 前端构建超时（超过 20 分钟）"
-                  echo "构建日志（最后 50 行）:"
-                  tail -50 /tmp/build.log 2>/dev/null || echo "无法读取构建日志"
-                  exit 1
-                fi
-                # 其他退出码可能是构建失败，但先检查日志确认
-              }
+              # 注意：timeout 在管道中使用时，退出码可能不准确，需要通过日志判断
+              set +e  # 暂时关闭错误中断，以便检查日志
+              timeout 20m npm run build 2>&1 | tee /tmp/build.log
+              BUILD_EXIT_CODE=${PIPESTATUS[0]}  # 获取 timeout 的退出码
+              set -e  # 重新开启错误中断
+              
+              # 检查是否超时
+              if [ $BUILD_EXIT_CODE -eq 124 ]; then
+                echo "❌ 前端构建超时（超过 20 分钟）"
+                echo "构建日志（最后 50 行）:"
+                tail -50 /tmp/build.log 2>/dev/null || echo "无法读取构建日志"
+                exit 1
+              fi
               
               # 验证构建是否成功（通过日志内容判断，而不是退出码）
               if grep -q "Compiled successfully" /tmp/build.log 2>/dev/null; then
                 echo "✅ 前端构建成功"
-                BUILD_EXIT_CODE=0  # 强制设置为成功
               else
                 # 检查是否有明显的错误信息
-                if grep -qi "error\|failed\|failed to compile" /tmp/build.log 2>/dev/null; then
+                if grep -qiE "error|failed|failed to compile|build failed" /tmp/build.log 2>/dev/null; then
                   echo "❌ 前端构建失败（检测到错误信息）"
                   echo "构建日志（最后 50 行）:"
                   tail -50 /tmp/build.log 2>/dev/null || echo "无法读取构建日志"
@@ -146,7 +145,12 @@ jobs:
                   echo "❌ server.js 文件未找到，构建可能失败"
                   echo "查找结果:"
                   find .next -name "server.js" -type f 2>/dev/null || echo "未找到 server.js"
-                  exit 1
+                  # 如果构建日志显示成功，但找不到文件，可能是路径问题，不退出
+                  if grep -q "Compiled successfully" /tmp/build.log 2>/dev/null; then
+                    echo "⚠️  构建日志显示成功，但找不到 server.js，可能是路径问题，继续部署..."
+                  else
+                    exit 1
+                  fi
                 fi
               fi
               

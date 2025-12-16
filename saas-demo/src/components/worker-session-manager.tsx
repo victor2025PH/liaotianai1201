@@ -25,11 +25,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import {
-  Upload, Download, Trash2, RefreshCw, File, Loader2, Checkbox,
+  Upload, Download, Trash2, RefreshCw, File, Loader2,
   AlertCircle, CheckCircle2
 } from "lucide-react"
 import { getApiBaseUrl } from "@/lib/api/config"
-import { Checkbox as UICheckbox } from "@/components/ui/checkbox"
+import { Checkbox } from "@/components/ui/checkbox"
 
 const API_BASE = getApiBaseUrl()
 
@@ -419,7 +419,7 @@ export function WorkerSessionManager({ workerId, workerName }: WorkerSessionMana
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">
-                      <UICheckbox
+                      <Checkbox
                         checked={selectedFiles.size === sessions.length && sessions.length > 0}
                         onCheckedChange={toggleSelectAll}
                       />
@@ -434,7 +434,7 @@ export function WorkerSessionManager({ workerId, workerName }: WorkerSessionMana
                   {sessions.map((session) => (
                     <TableRow key={session.filename}>
                       <TableCell>
-                        <UICheckbox
+                        <Checkbox
                           checked={selectedFiles.has(session.filename)}
                           onCheckedChange={() => toggleFileSelection(session.filename)}
                         />

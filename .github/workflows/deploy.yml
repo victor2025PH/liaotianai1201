@@ -119,6 +119,8 @@ jobs:
               fi
               
               # 验证构建是否成功（通过日志内容判断，而不是退出码）
+              # 使用 set +e 避免 grep 失败导致脚本退出
+              set +e
               BUILD_SUCCESS=false
               if grep -q "Compiled successfully" /tmp/build.log 2>/dev/null; then
                 echo "✅ 前端构建成功"
@@ -129,6 +131,7 @@ jobs:
                   echo "❌ 前端构建失败（检测到错误信息）"
                   echo "构建日志（最后 50 行）:"
                   tail -50 /tmp/build.log 2>/dev/null || echo "无法读取构建日志"
+                  set -e
                   exit 1
                 else
                   echo "⚠️  构建日志中未找到 'Compiled successfully'，但未检测到明显错误"
@@ -136,8 +139,8 @@ jobs:
                 fi
               fi
               
-              # 验证关键文件是否存在（使用 set +e 避免找不到文件时退出）
-              set +e
+              # 验证关键文件是否存在（继续使用 set +e）
+              SERVER_JS_FOUND=false
               if [ -f ".next/standalone/saas-demo/server.js" ]; then
                 echo "✅ server.js 文件已生成"
                 SERVER_JS_FOUND=true
@@ -153,19 +156,29 @@ jobs:
                   SERVER_JS_FOUND=false
                 fi
               fi
-              set -e
               
               # 如果构建成功但找不到 server.js，记录警告但继续部署
-              if [ "$BUILD_SUCCESS" = true ] && [ "$SERVER_JS_FOUND" != true ]; then
+              if [ "$BUILD_SUCCESS" = "true" ] && [ "$SERVER_JS_FOUND" != "true" ]; then
                 echo "⚠️  构建日志显示成功，但找不到 server.js，可能是路径问题，继续部署..."
                 echo "   提示：请检查 .next/standalone 目录结构"
+                echo "   目录内容:"
+                ls -la .next/standalone 2>/dev/null || echo "   .next/standalone 目录不存在"
+                ls -la .next/standalone/saas-demo 2>/dev/null || echo "   .next/standalone/saas-demo 目录不存在"
               fi
               
               # 只有在构建失败且找不到 server.js 时才退出
-              if [ "$BUILD_SUCCESS" != true ] && [ "$SERVER_JS_FOUND" != true ]; then
+              if [ "$BUILD_SUCCESS" != "true" ] && [ "$SERVER_JS_FOUND" != "true" ]; then
                 echo "❌ 构建失败且找不到 server.js，部署终止"
+                set -e
                 exit 1
               fi
+              
+              # 如果构建成功，无论是否找到 server.js，都继续部署
+              if [ "$BUILD_SUCCESS" = "true" ]; then
+                echo "✅ 构建成功，继续部署流程..."
+              fi
+              
+              set -e  # 重新开启错误中断
               
               cd ..
             else

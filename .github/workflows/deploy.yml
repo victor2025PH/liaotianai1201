@@ -26,6 +26,10 @@ jobs:
           command_timeout: 55m
           script_stop: true
           debug: true
+          # SSH 连接选项（增加超时和重试）
+          ssh_options: StrictHostKeyChecking=no,ConnectTimeout=60,ServerAliveInterval=30,ServerAliveCountMax=3
+          retry: 3
+          retry_interval: 10s
           envs: GITHUB_REPO=${{ github.repository }},SERVER_HOST=${{ secrets.SERVER_HOST }}
           script: |
             # 遇到任何命令错误(非逻辑判断)则退出

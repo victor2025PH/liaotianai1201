@@ -67,17 +67,25 @@ jobs:
             echo "[4/5] 构建前端"
             cd saas-demo
             
-            echo "清理构建锁文件..."
+            echo "清理构建锁文件和残留进程..."
             # 检查并删除 .next/lock 文件（如果存在）
             if [ -f ".next/lock" ]; then
               echo "⚠️  发现锁文件，正在删除..."
               rm -f .next/lock
               echo "✅ 锁文件已删除"
+            else
+              echo "✅ 无锁文件"
             fi
             
-            # 检查是否有正在运行的 next build 进程并终止
-            pkill -f "next build" || true
-            echo "✅ 已清理可能的构建进程"
+            # 检查是否有正在运行的 next build 进程并终止（静默执行，不报错）
+            if pgrep -f "next build" > /dev/null 2>&1; then
+              echo "⚠️  发现正在运行的构建进程，正在终止..."
+              pkill -f "next build" || true
+              sleep 2
+              echo "✅ 构建进程已终止"
+            else
+              echo "✅ 无运行中的构建进程"
+            fi
             echo ""
             
             echo "安装前端依赖..."

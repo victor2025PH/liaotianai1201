@@ -79,7 +79,9 @@ jobs:
             echo "✅ 当前目录: $(pwd)"
             
             echo "清理构建锁文件和残留进程..."
+            
             # 检查并删除 .next/lock 文件（如果存在）
+            echo "[清理] 检查锁文件..."
             if [ -f ".next/lock" ]; then
               echo "⚠️  发现锁文件，正在删除..."
               rm -f .next/lock || echo "⚠️  删除锁文件失败，继续执行..."
@@ -87,25 +89,26 @@ jobs:
             else
               echo "✅ 无锁文件"
             fi
+            echo "[清理] 锁文件检查完成"
             
             # 检查是否有正在运行的 next build 进程并终止（静默执行，不报错）
-            # 使用 pgrep 检查进程，捕获退出码但不让它影响脚本
-            set +e  # 临时禁用错误退出
+            echo "[清理] 检查构建进程..."
+            # 完全禁用错误退出，确保不会意外退出
+            set +e
             pgrep_output=$(pgrep -f "next build" 2>/dev/null)
             pgrep_exit=$?
-            set -e  # 恢复错误退出
+            set +e  # 保持 set +e，避免后续命令导致退出
             
-            if [ $pgrep_exit -eq 0 ] && [ -n "$pgrep_output" ]; then
+            if [ "$pgrep_exit" = "0" ] && [ -n "$pgrep_output" ]; then
               echo "⚠️  发现正在运行的构建进程 (PID: $pgrep_output)，正在终止..."
-              set +e
-              pkill -f "next build" 2>/dev/null
-              pkill_exit=$?
-              set -e
+              pkill -f "next build" 2>/dev/null || true
               sleep 2
               echo "✅ 构建进程已终止"
             else
-              echo "✅ 无运行中的构建进程"
+              echo "✅ 无运行中的构建进程 (退出码: $pgrep_exit)"
             fi
+            set -e  # 现在恢复错误退出
+            echo "[清理] 进程检查完成"
             echo ""
             
             echo "安装前端依赖..."

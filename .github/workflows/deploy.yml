@@ -28,12 +28,22 @@ jobs:
           debug: true
           envs: GITHUB_REPO=${{ github.repository }},SERVER_HOST=${{ secrets.SERVER_HOST }}
           script: |
+            set -e  # 遇到错误立即退出，但后续会处理
             PROJECT_DIR="/home/ubuntu/telegram-ai-system"
             
             echo "=========================================="
             echo "开始部署 - $(date)"
             echo "=========================================="
             echo ""
+            
+            # 错误处理函数
+            handle_error() {
+              echo "❌ 部署过程中发生错误: $1"
+              exit 1
+            }
+            
+            # 设置 trap 来捕获错误（但不立即退出）
+            trap 'handle_error "脚本执行失败，行号: $LINENO"' ERR
             
             # ============ 进入项目目录 ============
             echo "[1/5] 进入项目目录"
@@ -59,8 +69,12 @@ jobs:
             
             # ============ 修复文件权限 ============
             echo "[3/5] 修复文件权限"
-            sudo chown -R ubuntu:ubuntu "$PROJECT_DIR"
-            echo "✅ 文件权限已修复"
+            set +e  # 允许命令失败
+            sudo chown -R ubuntu:ubuntu "$PROJECT_DIR" || {
+              echo "⚠️  文件权限修复失败，继续执行..."
+            }
+            set -e  # 恢复错误处理
+            echo "✅ 文件权限处理完成"
             echo ""
             
             # ============ 构建前端 ============
@@ -78,14 +92,16 @@ jobs:
             fi
             
             # 检查是否有正在运行的 next build 进程并终止（静默执行，不报错）
+            set +e  # 允许 pgrep/pkill 失败
             if pgrep -f "next build" > /dev/null 2>&1; then
               echo "⚠️  发现正在运行的构建进程，正在终止..."
-              pkill -f "next build" || true
+              pkill -f "next build" 2>/dev/null || true
               sleep 2
               echo "✅ 构建进程已终止"
             else
               echo "✅ 无运行中的构建进程"
             fi
+            set -e  # 恢复错误处理
             echo ""
             
             echo "安装前端依赖..."

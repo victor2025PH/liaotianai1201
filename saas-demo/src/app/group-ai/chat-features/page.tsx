@@ -150,13 +150,13 @@ export default function ChatFeaturesPage() {
         if (data.settings) {
           // 确保所有布尔值都是明确的，避免 undefined
           setSettings({
-            auto_chat_enabled: data.settings.auto_chat_enabled ?? true,
-            games_enabled: data.settings.games_enabled ?? true,
-            scripts_enabled: data.settings.scripts_enabled ?? true,
-            scheduler_enabled: data.settings.scheduler_enabled ?? true,
+            auto_chat_enabled: Boolean(data.settings.auto_chat_enabled ?? true),
+            games_enabled: Boolean(data.settings.games_enabled ?? true),
+            scripts_enabled: Boolean(data.settings.scripts_enabled ?? true),
+            scheduler_enabled: Boolean(data.settings.scheduler_enabled ?? true),
             chat_interval_min: data.settings.chat_interval_min ?? 30,
             chat_interval_max: data.settings.chat_interval_max ?? 120,
-            redpacket_enabled: data.settings.redpacket_enabled ?? true,
+            redpacket_enabled: Boolean(data.settings.redpacket_enabled ?? true),
             redpacket_interval: data.settings.redpacket_interval ?? 300,
             emoji_frequency: data.settings.emoji_frequency ?? "medium",
           })
@@ -254,15 +254,23 @@ export default function ChatFeaturesPage() {
           }
         } else {
           // 完全失敗或沒有找到賬號
+          // 暫時註釋掉關於 active_count 的強制檢查，允許強制啟動服務
+          // 即使後端返回失敗，也顯示為警告而不是錯誤，以便用戶可以嘗試強制啟動
           if (data.diagnostics) {
             const diag = data.diagnostics
+            // 改為警告級別，允許用戶繼續嘗試
             toast({ 
-              title: "啟動失敗", 
-              description: `${data.message || "啟動失敗"}\n數據庫賬號: ${diag.active_accounts_in_db || 0}, 在線節點: ${diag.online_workers || 0}`, 
-              variant: "destructive" 
+              title: "啟動提示", 
+              description: `${data.message || "啟動提示"}\n數據庫賬號: ${diag.active_accounts_in_db || 0}, 在線節點: ${diag.online_workers || 0}\n（即使顯示 0，您仍可以嘗試保存設置並啟動）`, 
+              variant: "default"
             })
           } else {
-            toast({ title: "啟動失敗", description: data.message || "啟動失敗", variant: "destructive" })
+            // 改為警告級別
+            toast({ 
+              title: "啟動提示", 
+              description: data.message || "啟動提示（您仍可以嘗試保存設置並啟動）", 
+              variant: "default" 
+            })
           }
         }
       } else {
@@ -377,7 +385,7 @@ export default function ChatFeaturesPage() {
             gemini: false,
             grok: false,
           },
-          autoFailover: Boolean(data.auto_failover_enabled),
+          autoFailover: Boolean(data.auto_failover_enabled ?? false),
           failoverProviders: data.failover_providers || [],
         }))
       }
@@ -671,7 +679,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="auto_chat" className="min-w-[100px]">自動聊天</Label>
                     <Switch 
                       id="auto_chat"
-                      checked={settings.auto_chat_enabled ?? false}
+                      checked={Boolean(settings?.auto_chat_enabled)}
                       onCheckedChange={(checked) => setSettings({...settings, auto_chat_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -679,7 +687,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="games" className="min-w-[100px]">遊戲功能</Label>
                     <Switch 
                       id="games"
-                      checked={settings.games_enabled ?? false}
+                      checked={Boolean(settings?.games_enabled)}
                       onCheckedChange={(checked) => setSettings({...settings, games_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -687,7 +695,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="scripts" className="min-w-[100px]">劇本功能</Label>
                     <Switch 
                       id="scripts"
-                      checked={settings.scripts_enabled ?? false}
+                      checked={Boolean(settings?.scripts_enabled)}
                       onCheckedChange={(checked) => setSettings({...settings, scripts_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -695,7 +703,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="scheduler" className="min-w-[100px]">排程功能</Label>
                     <Switch 
                       id="scheduler"
-                      checked={settings.scheduler_enabled ?? false}
+                      checked={Boolean(settings?.scheduler_enabled)}
                       onCheckedChange={(checked) => setSettings({...settings, scheduler_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -703,7 +711,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="redpacket" className="min-w-[100px]">紅包功能</Label>
                     <Switch 
                       id="redpacket"
-                      checked={settings.redpacket_enabled ?? false}
+                      checked={Boolean(settings?.redpacket_enabled)}
                       onCheckedChange={(checked) => setSettings({...settings, redpacket_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -1319,7 +1327,7 @@ export default function ChatFeaturesPage() {
                     <p className="text-sm text-muted-foreground">當當前 AI 提供商失敗時，自動切換到備用提供商</p>
                   </div>
                   <Switch
-                    checked={aiProvider.autoFailover ?? false}
+                    checked={Boolean(aiProvider?.autoFailover)}
                     onCheckedChange={(checked) => {
                       setAiProvider(prev => ({ ...prev, autoFailover: Boolean(checked) }))
                     }}
@@ -1415,7 +1423,7 @@ export default function ChatFeaturesPage() {
                       </div>
                     </div>
                   <Switch 
-                    checked={schedule.enabled ?? false}
+                    checked={Boolean(schedule?.enabled)}
                     onCheckedChange={(checked) => toggleSchedule(schedule.id, Boolean(checked))}
                   />
                   </div>

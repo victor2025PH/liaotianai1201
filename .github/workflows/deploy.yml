@@ -47,13 +47,10 @@ jobs:
             echo "📦 构建前端..."
             cd saas-demo
             
-            # 1. 先停止服务以释放内存 (替代 pkill)
-            sudo systemctl stop liaotian-frontend || true
-            
-            # 2. 清理锁文件
+            # 1. 清理锁文件（不停止服务，减少中断时间）
             rm -f .next/lock
             
-            # 3. 安装与构建
+            # 2. 安装与构建（在服务运行的情况下构建）
             npm install --prefer-offline --no-audit
             npm run build
             
@@ -72,10 +69,30 @@ jobs:
             pip install -r requirements.txt --quiet
             cd ..
             
-            # 5. 重启服务
+            # 5. 重启服务（使用更优雅的方式）
             echo "🔄 重启服务..."
+            # 先重启后端（通常较快）
             sudo systemctl restart luckyred-api
-            sudo systemctl restart liaotian-frontend
+            sleep 3
+            
+            # 然后重启前端（需要停止旧服务）
+            sudo systemctl stop liaotian-frontend || true
+            sleep 2
+            sudo systemctl start liaotian-frontend
+            sleep 5
+            
+            # 最后重启 Nginx
             sudo systemctl restart nginx
+            sleep 2
+            
+            # 6. 验证服务状态
+            echo "🔍 验证服务状态..."
+            if sudo systemctl is-active --quiet luckyred-api && sudo systemctl is-active --quiet liaotian-frontend; then
+                echo "✅ 所有服务已成功启动"
+            else
+                echo "⚠️  部分服务可能未正常启动，请检查日志"
+                sudo systemctl status luckyred-api --no-pager | head -5
+                sudo systemctl status liaotian-frontend --no-pager | head -5
+            fi
             
             echo "✅ 部署完成！"

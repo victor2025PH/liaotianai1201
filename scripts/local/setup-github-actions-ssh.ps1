@@ -59,13 +59,25 @@ if (-not (Test-Path $privateKeyPath)) {
     }
     
     # 生成密钥（使用 ssh-keygen）
-    ssh-keygen -t rsa -b 4096 -f $privateKeyPath -N '""' -C "github-actions-deploy" 2>&1 | Out-Null
+    # Windows 上的 ssh-keygen 需要使用不同的方式处理空密码
+    $keygenCmd = "ssh-keygen -t rsa -b 4096 -f `"$privateKeyPath`" -C `"github-actions-deploy`""
     
-    if ($LASTEXITCODE -eq 0) {
+    # 创建一个临时的 expect-like 脚本或者直接使用 -N 选项（如果支持）
+    # 对于 Windows，我们可以尝试使用 echo 来提供空密码
+    $process = Start-Process -FilePath "ssh-keygen" -ArgumentList "-t","rsa","-b","4096","-f","`"$privateKeyPath`"","-N","`"`"`"","-C","`"github-actions-deploy`"" -Wait -PassThru -NoNewWindow
+    
+    if ($process.ExitCode -eq 0) {
         Write-Success "SSH 密钥生成成功"
     } else {
-        Write-Error "SSH 密钥生成失败"
-        exit 1
+        # 如果上面的方式失败，尝试交互式生成
+        Write-Info "尝试交互式生成密钥（将提示输入密码，直接按 Enter 两次）..."
+        ssh-keygen -t rsa -b 4096 -f $privateKeyPath -C "github-actions-deploy"
+        if (Test-Path $privateKeyPath) {
+            Write-Success "SSH 密钥生成成功"
+        } else {
+            Write-Error "SSH 密钥生成失败"
+            exit 1
+        }
     }
 } else {
     Write-Success "使用现有 SSH 密钥"
@@ -96,14 +108,12 @@ if ($copyKey -eq "n" -or $copyKey -eq "N") {
     $publicKeyContent = Get-Content $publicKeyPath -Raw
     $remoteCommand = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$($publicKeyContent.Trim())' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
     
-    try {
-        $result = ssh "${ServerUser}@${ServerIP}" $remoteCommand 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Success "公钥已成功添加到服务器"
-        } else {
-            throw "SSH 命令执行失败"
-        }
-    } catch {
+    $sshResult = ssh "${ServerUser}@${ServerIP}" $remoteCommand 2>&1
+    $sshExitCode = $LASTEXITCODE
+    
+    if ($sshExitCode -eq 0) {
+        Write-Success "公钥已成功添加到服务器"
+    } else {
         Write-Error "自动添加公钥失败"
         Write-Host "`n请手动执行以下步骤：" -ForegroundColor Yellow
         Write-Host "1. 复制上面的公钥内容" -ForegroundColor Gray

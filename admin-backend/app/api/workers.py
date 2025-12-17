@@ -858,10 +858,32 @@ def find_excel_file() -> Optional[Path]:
     node_id = NODE_ID
     excel_name = node_id + ".xlsx"
     
+    def check_file_in_dir(directory: Path, filename: str) -> Optional[Path]:
+        """在指定目录中查找文件，支持多种文件名变体"""
+        # 1. 尝试精确匹配
+        file_path = directory / filename
+        if file_path.exists():
+            return file_path
+        
+        # 2. 尝试双重扩展名（Windows 常见问题：.xlsx.xlsx）
+        double_ext_file = directory / (filename + ".xlsx")
+        if double_ext_file.exists():
+            logger.warning(f"[EXCEL] 找到双重扩展名文件: {{double_ext_file}}，使用此文件")
+            return double_ext_file
+        
+        # 3. 列出目录中所有 .xlsx 文件，查找匹配的
+        for xlsx_file in directory.glob("*.xlsx*"):
+            # 检查文件名是否以 node_id 开头
+            if xlsx_file.stem.startswith(node_id) or xlsx_file.name.startswith(node_id):
+                logger.info(f"[EXCEL] 找到匹配的 Excel 文件: {{xlsx_file}}")
+                return xlsx_file
+        
+        return None
+    
     # 1. 当前工作目录
     current_dir = Path.cwd()
-    excel_file = current_dir / excel_name
-    if excel_file.exists():
+    excel_file = check_file_in_dir(current_dir, excel_name)
+    if excel_file:
         logger.info(f"[EXCEL] 在当前目录找到: {{excel_file}}")
         return excel_file
     
@@ -881,29 +903,30 @@ def find_excel_file() -> Optional[Path]:
             script_dir = script_path.resolve().parent
         else:
             script_dir = Path.cwd()
-    excel_file = script_dir / excel_name
-    if excel_file.exists():
+    # 2. 脚本所在目录（使用改进的查找函数）
+    excel_file = check_file_in_dir(script_dir, excel_name)
+    if excel_file:
         logger.info(f"[EXCEL] 在脚本目录找到: {{excel_file}}")
         return excel_file
     
     # 3. sessions 目录的父目录（如果 sessions 是相对路径）
     if not SESSIONS_DIR.is_absolute():
         parent_dir = SESSIONS_DIR.parent
-        excel_file = parent_dir / excel_name
-        if excel_file.exists():
+        excel_file = check_file_in_dir(parent_dir, excel_name)
+        if excel_file:
             logger.info(f"[EXCEL] 在 sessions 父目录找到: {{excel_file}}")
             return excel_file
     else:
         # sessions 是绝对路径，检查父目录
         parent_dir = SESSIONS_DIR.parent
-        excel_file = parent_dir / excel_name
-        if excel_file.exists():
+        excel_file = check_file_in_dir(parent_dir, excel_name)
+        if excel_file:
             logger.info(f"[EXCEL] 在 sessions 父目录找到: {{excel_file}}")
             return excel_file
     
     # 4. sessions 目录本身
-    excel_file = SESSIONS_DIR / excel_name
-    if excel_file.exists():
+    excel_file = check_file_in_dir(SESSIONS_DIR, excel_name)
+    if excel_file:
         logger.info(f"[EXCEL] 在 sessions 目录找到: {{excel_file}}")
         return excel_file
     

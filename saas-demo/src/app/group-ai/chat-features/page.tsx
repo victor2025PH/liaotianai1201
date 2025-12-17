@@ -102,6 +102,12 @@ export default function ChatFeaturesPage() {
     conversion_rate: 0,
   })
   
+  // 節點統計數據
+  const [nodeStats, setNodeStats] = useState({
+    onlineNodes: 0,
+    activeAccounts: 0,
+  })
+  
   // AI 提供商狀態
   const [aiProvider, setAiProvider] = useState({
     current: "openai",
@@ -591,9 +597,77 @@ export default function ChatFeaturesPage() {
     }
   }
 
+  // 獲取節點統計數據
+  const fetchNodeStats = async () => {
+    try {
+      const { fetchWithAuth } = await import("@/lib/api/client")
+      const res = await fetchWithAuth(`${API_BASE}/workers/`)
+      if (res.ok) {
+        const data = await res.json()
+        const workersData = data.workers || {}
+        
+        // 前端双重检查：如果最后一次心跳超过 90 秒，标记为离线
+        const HEARTBEAT_TIMEOUT_MS = 90 * 1000 // 90秒
+        const now = Date.now()
+        
+        const checkedWorkers: Record<string, any> = {}
+        for (const [nodeId, worker] of Object.entries(workersData)) {
+          const w = worker as any
+          if (w.last_heartbeat) {
+            const lastHeartbeatTime = new Date(w.last_heartbeat).getTime()
+            const timeSinceHeartbeat = now - lastHeartbeatTime
+            
+            if (timeSinceHeartbeat > HEARTBEAT_TIMEOUT_MS) {
+              // 心跳超时，标记为离线
+              checkedWorkers[nodeId] = {
+                ...w,
+                status: "offline"
+              }
+            } else {
+              checkedWorkers[nodeId] = w
+            }
+          } else {
+            // 没有心跳时间，标记为离线
+            checkedWorkers[nodeId] = {
+              ...w,
+              status: "offline"
+            }
+          }
+        }
+        
+        // 計算在線節點數（使用檢查後的數據）
+        const onlineNodes = Object.values(checkedWorkers).filter(
+          (w: any) => w.status === "online"
+        ).length
+        
+        // 計算活躍賬號數（只統計在線節點的賬號）
+        const activeAccounts = Object.values(checkedWorkers).reduce((sum: number, w: any) => {
+          if (w.status === "online" && w.accounts) {
+            // 統計所有賬號（因為節點在線，賬號都是活躍的）
+            return sum + (w.accounts.length || 0)
+          }
+          return sum
+        }, 0)
+        
+        setNodeStats({
+          onlineNodes,
+          activeAccounts,
+        })
+      }
+    } catch (error) {
+      console.warn("獲取節點統計失敗:", error)
+      // 失敗時不更新，保持舊數據
+    }
+  }
+
   useEffect(() => {
     fetchSettings()
     fetchAIProviderStatus()
+    fetchNodeStats()
+    
+    // 每30秒刷新一次節點統計
+    const interval = setInterval(fetchNodeStats, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   return (
@@ -610,6 +684,10 @@ export default function ChatFeaturesPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchNodeStats} disabled={loading} size="sm">
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            刷新
+          </Button>
           <Button variant="default" onClick={startAllAccountsChat} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
             一鍵啟動所有賬號
@@ -632,7 +710,7 @@ export default function ChatFeaturesPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">在線節點</p>
-                <p className="text-2xl font-bold">2</p>
+                <p className="text-2xl font-bold">{nodeStats.onlineNodes}</p>
               </div>
               <Bot className="h-8 w-8 text-green-500" />
             </div>
@@ -643,7 +721,7 @@ export default function ChatFeaturesPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">活躍帳號</p>
-                <p className="text-2xl font-bold">6</p>
+                <p className="text-2xl font-bold">{nodeStats.activeAccounts}</p>
               </div>
               <Users className="h-8 w-8 text-blue-500" />
             </div>

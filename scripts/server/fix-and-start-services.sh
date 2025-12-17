@@ -53,7 +53,7 @@ echo "[2/6] 配置前端..."
 cd "$FRONTEND_DIR" || error_exit "无法进入前端目录"
 
 # 检查是否已经构建
-if [ ! -f ".next/standalone/saas-demo/server.js" ]; then
+if [ ! -f ".next/standalone/server.js" ]; then
     info_msg "前端尚未构建，开始构建..."
     info_msg "安装前端依赖（这可能需要几分钟）..."
     npm install --prefer-offline --no-audit --no-fund || error_exit "安装前端依赖失败"

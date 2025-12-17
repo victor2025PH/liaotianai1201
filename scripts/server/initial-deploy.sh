@@ -36,16 +36,30 @@ info_msg() {
 # 步骤 1: 安装基本依赖
 echo "[1/8] 安装基本依赖..."
 sudo apt-get update -qq
-sudo apt-get install -y git curl wget python3 python3-venv python3-pip nodejs npm nginx || error_exit "安装基本依赖失败"
+sudo apt-get install -y git curl wget python3 python3-venv python3-pip nginx || error_exit "安装基本依赖失败"
 
-# 检查 Node.js 版本（如果需要 Node.js 18+）
-NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
-if [ "$NODE_VERSION" -lt 18 ]; then
-    info_msg "Node.js 版本过低，正在安装 Node.js 20..."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-    sudo apt-get install -y nodejs
+# 安装 Node.js 20（Next.js 16 需要 Node.js >= 20.9.0）
+info_msg "安装 Node.js 20..."
+if command -v node &> /dev/null; then
+    CURRENT_NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
+    if [ "$CURRENT_NODE_VERSION" -lt 20 ]; then
+        info_msg "当前 Node.js 版本过低 ($(node --version))，正在升级到 Node.js 20..."
+        # 卸载旧版本
+        sudo apt-get remove -y nodejs npm 2>/dev/null || true
+    fi
 fi
 
+# 使用 NodeSource 安装 Node.js 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - || error_exit "NodeSource 仓库添加失败"
+sudo apt-get install -y nodejs || error_exit "Node.js 20 安装失败"
+
+# 验证 Node.js 版本
+NODE_VERSION=$(node --version)
+NODE_MAJOR=$(echo "$NODE_VERSION" | cut -d'v' -f2 | cut -d'.' -f1)
+if [ "$NODE_MAJOR" -lt 20 ]; then
+    error_exit "Node.js 版本仍然不足 20，当前版本: $NODE_VERSION"
+fi
+success_msg "Node.js 安装成功: $NODE_VERSION"
 success_msg "基本依赖安装完成"
 echo ""
 

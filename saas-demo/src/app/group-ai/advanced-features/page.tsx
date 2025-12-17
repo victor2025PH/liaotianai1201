@@ -958,7 +958,7 @@ export default function AdvancedFeaturesPage() {
                         )}
                       </div>
                     </div>
-                    <Switch checked={webhook.enabled ?? false} />
+                    <Switch checked={Boolean(webhook.enabled ?? false)} />
                   </div>
                 ))}
                 {webhooks.length === 0 && (

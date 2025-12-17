@@ -304,8 +304,8 @@ export default function RedpacketPage() {
                   <p className="text-sm text-muted-foreground">開啟後 AI 帳號將參與紅包互動</p>
                 </div>
                 <Switch 
-                  checked={config.enabled}
-                  onCheckedChange={(v) => setConfig({...config, enabled: v})}
+                  checked={Boolean(config.enabled ?? false)}
+                  onCheckedChange={(v) => setConfig({...config, enabled: Boolean(v)})}
                 />
               </div>
 

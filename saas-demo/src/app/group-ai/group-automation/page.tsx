@@ -323,8 +323,8 @@ export default function GroupAutomationPage() {
           <div className="flex items-center gap-8 p-4 bg-muted/50 rounded-lg">
             <div className="flex items-center space-x-3">
               <Switch
-                checked={config.auto_chat_enabled}
-                onCheckedChange={(v) => setConfig({ ...config, auto_chat_enabled: v })}
+                checked={Boolean(config.auto_chat_enabled ?? false)}
+                onCheckedChange={(v) => setConfig({ ...config, auto_chat_enabled: Boolean(v) })}
               />
               <div>
                 <Label className="font-medium">自動聊天</Label>
@@ -333,8 +333,8 @@ export default function GroupAutomationPage() {
             </div>
             <div className="flex items-center space-x-3">
               <Switch
-                checked={config.redpacket_enabled}
-                onCheckedChange={(v) => setConfig({ ...config, redpacket_enabled: v })}
+                checked={Boolean(config.redpacket_enabled ?? false)}
+                onCheckedChange={(v) => setConfig({ ...config, redpacket_enabled: Boolean(v) })}
               />
               <div>
                 <Label className="font-medium">紅包遊戲</Label>

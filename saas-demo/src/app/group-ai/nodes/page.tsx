@@ -491,16 +491,16 @@ export default function NodesPage() {
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1">
                 <Switch
-                  checked={config.auto_chat_enabled}
-                  onCheckedChange={(v) => setConfig({ ...config, auto_chat_enabled: v })}
+                  checked={Boolean(config.auto_chat_enabled ?? false)}
+                  onCheckedChange={(v) => setConfig({ ...config, auto_chat_enabled: Boolean(v) })}
                   className="scale-75"
                 />
                 <Label className="text-xs">聊天</Label>
               </div>
               <div className="flex items-center gap-1">
                 <Switch
-                  checked={config.redpacket_enabled}
-                  onCheckedChange={(v) => setConfig({ ...config, redpacket_enabled: v })}
+                  checked={Boolean(config.redpacket_enabled ?? false)}
+                  onCheckedChange={(v) => setConfig({ ...config, redpacket_enabled: Boolean(v) })}
                   className="scale-75"
                 />
                 <Label className="text-xs">红包</Label>

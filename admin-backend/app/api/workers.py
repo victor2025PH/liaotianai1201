@@ -713,58 +713,54 @@ async def generate_deploy_package(
     返回包含所有必要脚本的部署包代码
     """
     try:
-        # 生成 Windows 启动脚本
+        # 生成 Windows 启动脚本（使用英文避免编码问题）
         windows_script = f"""@echo off
-chcp 65001 >nul
-echo ========================================
-echo Worker Node Auto Deploy
-echo Node ID: {request.node_id}
-echo ========================================
-echo.
+setlocal enabledelayedexpansion
 
+REM Change to script directory
 cd /d "%~dp0"
 
-REM 检查 Python
+REM Check Python
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo [错误] 未找到 Python，请先安装 Python 3.9+
+    echo [ERROR] Python not found, please install Python 3.9+
     pause
     exit /b 1
 )
 
-REM 检查依赖
-echo [1/3] 检查依赖...
+REM Check dependencies
+echo [1/3] Checking dependencies...
 python -c "import telethon, requests, openpyxl" >nul 2>&1
 if errorlevel 1 (
-    echo [安装] 正在安装依赖包...
+    echo [INSTALL] Installing dependencies...
     python -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple
     if errorlevel 1 (
-        echo [错误] 依赖安装失败
+        echo [ERROR] Failed to install dependencies
         pause
         exit /b 1
     )
 )
 
-REM 设置环境变量
-set NODE_ID={request.node_id}
-set SERVER_URL={request.server_url}
-set HEARTBEAT_INTERVAL={request.heartbeat_interval}
-set SESSIONS_DIR=%~dp0sessions
+REM Set environment variables
+set "NODE_ID={request.node_id}"
+set "SERVER_URL={request.server_url}"
+set "HEARTBEAT_INTERVAL={request.heartbeat_interval}"
+set "SESSIONS_DIR=%~dp0sessions"
 
-REM 确保 sessions 目录存在
-if not exist "%SESSIONS_DIR%" mkdir "%SESSIONS_DIR%"
+REM Create sessions directory if not exists
+if not exist "!SESSIONS_DIR!" mkdir "!SESSIONS_DIR!"
 
-echo [2/3] 启动 Worker 节点...
-echo Node ID: %NODE_ID%
-echo Server: %SERVER_URL%
+echo [2/3] Starting Worker Node...
+echo Node ID: !NODE_ID!
+echo Server: !SERVER_URL!
 echo.
 
-REM 运行 Python 脚本
+REM Run Python script
 python worker_client.py
 
 if errorlevel 1 (
     echo.
-    echo [错误] Worker 节点运行失败
+    echo [ERROR] Worker node failed
     pause
 )
 """

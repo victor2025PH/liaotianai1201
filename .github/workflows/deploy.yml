@@ -50,7 +50,13 @@ jobs:
             # 1. 清理锁文件（不停止服务，减少中断时间）
             rm -f .next/lock
             
-            # 2. 安装与构建（在服务运行的情况下构建）
+            # 2. 检查内存
+            echo "检查可用内存..."
+            free -h || true
+            
+            # 3. 安装与构建（在服务运行的情况下构建）
+            # 使用 NODE_OPTIONS 限制 Node.js 内存使用
+            export NODE_OPTIONS="--max-old-space-size=1024"
             npm install --prefer-offline --no-audit
             npm run build
             

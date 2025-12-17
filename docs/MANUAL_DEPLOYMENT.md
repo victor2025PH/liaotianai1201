@@ -146,6 +146,26 @@ sudo systemctl restart luckyred-api liaotian-frontend nginx
 
 ## 🔧 网站无法访问 - 快速诊断和修复
 
+### ⚡ 紧急修复：Nginx 配置文件缺失
+
+如果诊断显示 **Nginx 配置文件不存在**（`/etc/nginx/sites-available/aikz.usdt2026.cc` 不存在），这是最常见的问题。
+
+**一键修复命令：**
+```bash
+cd /home/ubuntu/telegram-ai-system && \
+git pull origin main && \
+chmod +x scripts/server/create-nginx-config.sh && \
+sudo bash scripts/server/create-nginx-config.sh
+```
+
+这會：
+1. 創建 Nginx 配置文件
+2. 啟用站點
+3. 測試配置
+4. 重載 Nginx
+
+完成後，網站應該可以通過 HTTP 訪問：`http://aikz.usdt2026.cc`
+
 ### 方法一：使用诊断脚本（推荐）
 
 首先上传诊断脚本到服务器，然后执行：
@@ -244,6 +264,43 @@ sudo systemctl restart nginx
 # 4. 验证 443 端口
 sudo ss -tlnp | grep :443
 ```
+
+**如果 Certbot 驗證失敗（"No such authorization"）：**
+
+這通常是因為域名驗證失敗。請檢查：
+
+1. **DNS 解析是否正確：**
+```bash
+nslookup aikz.usdt2026.cc
+# 應該返回您服務器的 IP 地址
+```
+
+2. **域名是否指向正確的 IP：**
+```bash
+# 查看服務器公網 IP
+curl -s ifconfig.me
+# 確保 DNS A 記錄指向這個 IP
+```
+
+3. **端口 80 是否對外開放：**
+```bash
+# 檢查防火牆
+sudo ufw status
+# 確保 80 端口已開放
+```
+
+4. **嘗試使用 HTTP 驗證模式：**
+```bash
+# 如果 --nginx 模式失敗，嘗試 standalone 模式
+sudo certbot certonly --standalone -d aikz.usdt2026.cc
+# 然後手動配置 Nginx 使用證書
+```
+
+**臨時解決方案（僅 HTTP）：**
+如果暫時無法配置 HTTPS，可以：
+- 使用 HTTP 訪問：`http://aikz.usdt2026.cc`
+- 網站功能完全正常，只是沒有加密
+- 稍後再配置 HTTPS
 
 ---
 

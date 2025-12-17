@@ -68,18 +68,32 @@ $addKey = Read-Host "  是否添加到服务器 ${ServerUser}@${ServerIP}？(Y/n
 
 if ($addKey -ne "n" -and $addKey -ne "N") {
     Write-Host "  提示：需要输入服务器密码" -ForegroundColor Yellow
-    ssh-copy-id -i $publicKeyPath "${ServerUser}@${ServerIP}"
+    Write-Host ""
     
-    if ($LASTEXITCODE -eq 0) {
+    # Windows 上使用 PowerShell 方式添加公钥（因为 ssh-copy-id 不可用）
+    $publicKeyContent = Get-Content $publicKeyPath -Raw
+    $remoteCommand = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$($publicKeyContent.Trim())' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo 'KEY_ADDED'"
+    
+    Write-Host "  正在添加公钥到服务器..." -ForegroundColor Yellow
+    $addResult = ssh "${ServerUser}@${ServerIP}" $remoteCommand 2>&1
+    $addExitCode = $LASTEXITCODE
+    
+    if ($addExitCode -eq 0 -or $addResult -match "KEY_ADDED") {
         Write-Host "  [✓] 公钥已添加到服务器" -ForegroundColor Green
+        
+        # 等待一下让服务器处理
+        Start-Sleep -Seconds 2
         
         # 测试连接
         Write-Host "  测试 SSH 连接..." -ForegroundColor Yellow
         $testResult = ssh -i $privateKeyPath -o StrictHostKeyChecking=no -o ConnectTimeout=10 "${ServerUser}@${ServerIP}" "echo '连接成功！'" 2>&1
-        if ($LASTEXITCODE -eq 0) {
+        $testExitCode = $LASTEXITCODE
+        
+        if ($testExitCode -eq 0) {
             Write-Host "  [✓] SSH 连接测试成功！" -ForegroundColor Green
         } else {
-            Write-Host "  [!] 连接测试失败，但公钥已添加" -ForegroundColor Yellow
+            Write-Host "  [!] 连接测试失败（可能需要手动配置）" -ForegroundColor Yellow
+            Write-Host $testResult -ForegroundColor Gray
         }
     } else {
         Write-Host "  [!] 自动添加失败，请手动添加" -ForegroundColor Yellow
@@ -87,7 +101,7 @@ if ($addKey -ne "n" -and $addKey -ne "N") {
         Write-Host "    1. SSH 登录: ssh ${ServerUser}@${ServerIP}" -ForegroundColor Gray
         Write-Host "    2. 执行: mkdir -p ~/.ssh && chmod 700 ~/.ssh" -ForegroundColor Gray
         Write-Host "    3. 执行: nano ~/.ssh/authorized_keys" -ForegroundColor Gray
-        Write-Host "    4. 粘贴上面的公钥内容，保存退出" -ForegroundColor Gray
+        Write-Host "    4. 粘贴上面的公钥内容，保存退出（Ctrl+X, Y, Enter）" -ForegroundColor Gray
         Write-Host "    5. 执行: chmod 600 ~/.ssh/authorized_keys" -ForegroundColor Gray
     }
 }

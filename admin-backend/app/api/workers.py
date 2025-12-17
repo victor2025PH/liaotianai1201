@@ -1141,6 +1141,7 @@ def main():
     
     # 检查 Excel 文件
     excel_file = find_excel_file()
+    excel_name = NODE_ID + ".xlsx"  # 定义 excel_name 用于日志输出
     if excel_file and excel_file.exists():
         logger.info(f"[EXCEL] 找到配置文件: {{excel_file}}")
         logger.info(f"[EXCEL] 文件路径: {{excel_file.absolute()}}")

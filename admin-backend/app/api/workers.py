@@ -735,14 +735,14 @@ if errorlevel 1 (
 
 REM Check dependencies
 echo [1/3] Checking dependencies...
-python -c "import telethon, requests, openpyxl" >nul 2>&1
+python -c "import telethon; import requests; import openpyxl; print('OK')" >nul 2>&1
 if errorlevel 1 (
-    echo [INSTALL] Installing dependencies...
+    echo [INSTALL] Dependencies missing, installing...
     echo [INFO] Installing telethon, requests, openpyxl...
+    python -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple >nul 2>&1
     python -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple
     if errorlevel 1 (
-        echo [ERROR] Failed to install dependencies
-        echo [INFO] Trying alternative installation method...
+        echo [WARN] Mirror source failed, trying default source...
         python -m pip install telethon requests openpyxl --upgrade
         if errorlevel 1 (
             echo [ERROR] Failed to install dependencies
@@ -750,9 +750,22 @@ if errorlevel 1 (
             exit /b 1
         )
     )
+    echo [INFO] Verifying installation...
+    python -c "import telethon; print('Telethon OK')" || (
+        echo [ERROR] Telethon installation verification failed
+        pause
+        exit /b 1
+    )
     echo [SUCCESS] Dependencies installed successfully
 ) else (
-    echo [SUCCESS] All dependencies are already installed
+    echo [INFO] Verifying all dependencies...
+    python -c "import telethon; print('Telethon:', telethon.__version__)" 2>nul || (
+        echo [WARN] Telethon import failed, reinstalling...
+        python -m pip install telethon --upgrade -i https://pypi.tuna.tsinghua.edu.cn/simple || python -m pip install telethon --upgrade
+    )
+    python -c "import requests; print('Requests:', requests.__version__)" 2>nul || python -m pip install requests --upgrade
+    python -c "import openpyxl; print('OpenPyXL:', openpyxl.__version__)" 2>nul || python -m pip install openpyxl --upgrade
+    echo [SUCCESS] All dependencies are available
 )
 
 REM Set environment variables
@@ -799,15 +812,36 @@ fi
 
 # 检查依赖
 echo "[1/3] 检查依赖..."
-python3 -c "import telethon, requests, openpyxl" 2>/dev/null || {{
-    echo "[安装] 正在安装依赖包..."
+python3 -c "import telethon; import requests; import openpyxl; print('OK')" 2>/dev/null
+if [ $? -ne 0 ]; then
+    echo "[安装] 依赖缺失，正在安装依赖包..."
     echo "[INFO] 安装 telethon, requests, openpyxl..."
-    python3 -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple || {{
-        echo "[WARN] 使用镜像源安装失败，尝试使用默认源..."
+    python3 -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple 2>/dev/null
+    python3 -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple
+    if [ $? -ne 0 ]; then
+        echo "[WARN] 镜像源安装失败，尝试使用默认源..."
         python3 -m pip install telethon requests openpyxl --upgrade
+        if [ $? -ne 0 ]; then
+            echo "[ERROR] 依赖安装失败"
+            exit 1
+        fi
+    fi
+    echo "[INFO] 验证安装..."
+    python3 -c "import telethon; print('Telethon OK')" || {{
+        echo "[ERROR] Telethon 安装验证失败"
+        exit 1
     }}
     echo "[SUCCESS] 依赖包安装完成"
-}}
+else
+    echo "[INFO] 验证所有依赖..."
+    python3 -c "import telethon; print('Telethon:', telethon.__version__)" 2>/dev/null || {{
+        echo "[WARN] Telethon 导入失败，重新安装..."
+        python3 -m pip install telethon --upgrade -i https://pypi.tuna.tsinghua.edu.cn/simple || python3 -m pip install telethon --upgrade
+    }}
+    python3 -c "import requests; print('Requests:', requests.__version__)" 2>/dev/null || python3 -m pip install requests --upgrade
+    python3 -c "import openpyxl; print('OpenPyXL:', openpyxl.__version__)" 2>/dev/null || python3 -m pip install openpyxl --upgrade
+    echo "[SUCCESS] 所有依赖可用"
+fi
 
 # 设置环境变量
 export NODE_ID="{request.node_id}"

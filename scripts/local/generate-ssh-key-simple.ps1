@@ -25,9 +25,18 @@ $privateKeyPath = "$sshDir\$KeyName"
 $publicKeyPath = "$sshDir\$KeyName.pub"
 
 # 确保 .ssh 目录存在
+Write-Host "检查 .ssh 目录..." -ForegroundColor Cyan
 if (-not (Test-Path $sshDir)) {
+    Write-Host "创建 .ssh 目录: $sshDir" -ForegroundColor Yellow
     New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
-    Write-Host "[✓] 创建 .ssh 目录" -ForegroundColor Green
+    if (Test-Path $sshDir) {
+        Write-Host "[✓] .ssh 目录创建成功" -ForegroundColor Green
+    } else {
+        Write-Host "[✗] .ssh 目录创建失败" -ForegroundColor Red
+        exit 1
+    }
+} else {
+    Write-Host "[✓] .ssh 目录已存在: $sshDir" -ForegroundColor Green
 }
 
 # 步骤 1: 生成 SSH 密钥

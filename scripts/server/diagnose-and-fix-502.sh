@@ -1,232 +1,176 @@
 #!/bin/bash
-# ============================================================
-# 诊断并修复 502 错误 - 完整版
-# ============================================================
-
-set -e
+# 诊断和修复 502 Bad Gateway 错误
 
 echo "=========================================="
-echo "诊断并修复 502 Bad Gateway 错误"
+echo "🔍 诊断和修复 502 Bad Gateway 错误"
 echo "=========================================="
+echo ""
 
 PROJECT_DIR="/home/ubuntu/telegram-ai-system"
-BACKEND_SERVICE="luckyred-api"
+BACKEND_DIR="$PROJECT_DIR/admin-backend"
+SERVICE_NAME="luckyred-api"
 
-# Step 1: 检查所有占用端口 8000 的进程
-echo ""
-echo "[1/8] 检查端口 8000 占用情况..."
-echo "----------------------------------------"
-PORT_8000_INFO=$(sudo ss -tlnp 2>/dev/null | grep ":8000" || echo "")
-if [ -n "$PORT_8000_INFO" ]; then
-  echo "端口 8000 被占用:"
-  echo "$PORT_8000_INFO"
-  
-  # 提取所有 PID
-  PORT_8000_PIDS=$(echo "$PORT_8000_INFO" | grep -oP 'pid=\K\d+' || echo "")
-  if [ -n "$PORT_8000_PIDS" ]; then
-    echo ""
-    echo "占用端口的进程:"
-    for PID in $PORT_8000_PIDS; do
-      echo "  PID $PID:"
-      ps -p "$PID" -o pid,user,cmd --no-headers 2>/dev/null || echo "    (进程不存在)"
-    done
-  fi
+# 颜色定义
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# 1. 检查后端服务状态
+echo "[1/8] 检查后端服务状态..."
+if systemctl is-active --quiet $SERVICE_NAME; then
+    echo -e "  ${GREEN}✅ 后端服务正在运行${NC}"
+    systemctl status $SERVICE_NAME --no-pager | head -8
 else
-  echo "✅ 端口 8000 未被占用"
+    echo -e "  ${RED}❌ 后端服务未运行${NC}"
+    echo "  尝试启动服务..."
+    sudo systemctl start $SERVICE_NAME
+    sleep 3
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        echo -e "  ${GREEN}✅ 服务已成功启动${NC}"
+    else
+        echo -e "  ${RED}❌ 服务启动失败${NC}"
+    fi
 fi
-
-# Step 2: 检查所有 uvicorn 进程
 echo ""
-echo "[2/8] 检查所有 uvicorn 进程..."
-echo "----------------------------------------"
-UVICORN_PROCESSES=$(ps aux | grep -E "uvicorn|python.*app.main" | grep -v grep || echo "")
-if [ -n "$UVICORN_PROCESSES" ]; then
-  echo "找到 uvicorn 相关进程:"
-  echo "$UVICORN_PROCESSES"
+
+# 2. 检查端口 8000
+echo "[2/8] 检查端口 8000..."
+if ss -tlnp | grep -q ":8000"; then
+    echo -e "  ${GREEN}✅ 端口 8000 正在监听${NC}"
+    ss -tlnp | grep ":8000"
 else
-  echo "✅ 没有找到 uvicorn 进程"
+    echo -e "  ${RED}❌ 端口 8000 未被监听${NC}"
+    echo "  后端服务可能未启动或监听地址不正确"
 fi
-
-# Step 3: 停止 systemd 服务
 echo ""
-echo "[3/8] 停止 systemd 服务..."
-echo "----------------------------------------"
-sudo systemctl stop "$BACKEND_SERVICE" 2>/dev/null || true
-sleep 3
 
-# Step 4: 彻底清理所有相关进程
-echo ""
-echo "[4/8] 彻底清理所有相关进程..."
-echo "----------------------------------------"
-
-# 清理端口 8000
-if [ -n "$PORT_8000_PIDS" ]; then
-  for PID in $PORT_8000_PIDS; do
-    echo "  杀死进程 PID: $PID"
-    sudo kill -9 "$PID" 2>/dev/null || true
-  done
-fi
-
-# 清理所有 uvicorn 进程
-echo "  清理所有 uvicorn 进程..."
-sudo pkill -9 -f "uvicorn.*8000" 2>/dev/null || true
-sudo pkill -9 -f "uvicorn.*app.main" 2>/dev/null || true
-sudo pkill -9 -f "python.*app.main" 2>/dev/null || true
-
-# 使用 fuser
-if command -v fuser >/dev/null 2>&1; then
-  echo "  使用 fuser 清理端口..."
-  sudo fuser -k 8000/tcp 2>/dev/null || true
-fi
-
-# 等待进程完全退出
-sleep 3
-
-# 验证清理结果
-REMAINING=$(sudo ss -tlnp 2>/dev/null | grep ":8000" || echo "")
-if [ -z "$REMAINING" ]; then
-  echo "  ✅ 端口 8000 已完全清理"
+# 3. 测试本地后端健康检查
+echo "[3/8] 测试本地后端健康检查 (http://localhost:8000/health)..."
+HEALTH_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8000/health 2>/dev/null)
+if [ "$HEALTH_RESPONSE" = "200" ]; then
+    echo -e "  ${GREEN}✅ 健康检查通过 (HTTP $HEALTH_RESPONSE)${NC}"
+    curl -s http://localhost:8000/health | head -3
 else
-  echo "  ⚠️  端口 8000 仍有进程占用:"
-  echo "$REMAINING"
+    echo -e "  ${RED}❌ 健康检查失败 (HTTP $HEALTH_RESPONSE)${NC}"
+    if [ -z "$HEALTH_RESPONSE" ]; then
+        echo "  无法连接到后端服务，可能是服务未启动或崩溃"
+    fi
 fi
-
-# Step 5: 检查服务配置
 echo ""
-echo "[5/8] 检查服务配置..."
-echo "----------------------------------------"
-if [ -f "/etc/systemd/system/$BACKEND_SERVICE.service" ]; then
-  echo "✅ 服务配置文件存在"
-  echo ""
-  echo "服务配置内容:"
-  sudo systemctl cat "$BACKEND_SERVICE" | head -30
+
+# 4. 检查 Nginx 配置
+echo "[4/8] 检查 Nginx 配置..."
+if [ -f "/etc/nginx/sites-available/aikz.usdt2026.cc" ]; then
+    echo -e "  ${GREEN}✅ Nginx 配置文件存在${NC}"
+    echo "  检查 proxy_pass 配置..."
+    if grep -q "proxy_pass.*127.0.0.1:8000" /etc/nginx/sites-available/aikz.usdt2026.cc; then
+        echo -e "  ${GREEN}✅ proxy_pass 配置正确${NC}"
+    else
+        echo -e "  ${YELLOW}⚠️  proxy_pass 配置可能不正确${NC}"
+    fi
 else
-  echo "❌ 服务配置文件不存在"
-  echo "  尝试重新部署..."
-  if [ -f "$PROJECT_DIR/scripts/server/deploy-systemd.sh" ]; then
-    cd "$PROJECT_DIR"
-    sudo bash scripts/server/deploy-systemd.sh || echo "  ⚠️  部署失败"
-  fi
+    echo -e "  ${RED}❌ Nginx 配置文件不存在${NC}"
 fi
 
-# Step 6: 检查工作目录和文件
-echo ""
-echo "[6/8] 检查工作目录和关键文件..."
-echo "----------------------------------------"
-WORK_DIR="$PROJECT_DIR/admin-backend"
-if [ -d "$WORK_DIR" ]; then
-  echo "✅ 工作目录存在: $WORK_DIR"
-  
-  # 检查虚拟环境
-  if [ -d "$WORK_DIR/venv" ] && [ -f "$WORK_DIR/venv/bin/uvicorn" ]; then
-    echo "✅ 虚拟环境存在"
-    echo "  uvicorn 路径: $WORK_DIR/venv/bin/uvicorn"
-  else
-    echo "❌ 虚拟环境不存在或损坏"
-    echo "  需要重新创建虚拟环境"
-  fi
-  
-  # 检查主应用文件
-  if [ -f "$WORK_DIR/app/main.py" ]; then
-    echo "✅ 主应用文件存在"
-  else
-    echo "❌ 主应用文件不存在: $WORK_DIR/app/main.py"
-  fi
-  
-  # 检查 .env 文件
-  if [ -f "$WORK_DIR/.env" ]; then
-    echo "✅ .env 文件存在"
-  else
-    echo "⚠️  .env 文件不存在（可能使用环境变量）"
-  fi
+# 检查 Nginx 配置语法
+echo "  检查 Nginx 配置语法..."
+if sudo nginx -t 2>&1 | grep -q "syntax is ok"; then
+    echo -e "  ${GREEN}✅ Nginx 配置语法正确${NC}"
 else
-  echo "❌ 工作目录不存在: $WORK_DIR"
+    echo -e "  ${RED}❌ Nginx 配置语法错误${NC}"
+    sudo nginx -t 2>&1 | tail -5
+fi
+echo ""
+
+# 5. 检查 Nginx 服务状态
+echo "[5/8] 检查 Nginx 服务状态..."
+if systemctl is-active --quiet nginx; then
+    echo -e "  ${GREEN}✅ Nginx 正在运行${NC}"
+else
+    echo -e "  ${RED}❌ Nginx 未运行${NC}"
+    echo "  尝试启动 Nginx..."
+    sudo systemctl start nginx
+fi
+echo ""
+
+# 6. 查看后端日志（最近的错误）
+echo "[6/8] 查看后端日志（最近 30 行）..."
+sudo journalctl -u $SERVICE_NAME -n 30 --no-pager | tail -20
+echo ""
+
+# 7. 检查后端进程
+echo "[7/8] 检查后端进程..."
+BACKEND_PIDS=$(pgrep -f "gunicorn.*app.main:app\|uvicorn.*app.main:app")
+if [ -n "$BACKEND_PIDS" ]; then
+    echo -e "  ${GREEN}✅ 找到后端进程${NC}"
+    ps aux | grep -E "gunicorn|uvicorn" | grep -v grep | head -3
+else
+    echo -e "  ${RED}❌ 未找到后端进程${NC}"
+    echo "  后端服务可能已崩溃"
+fi
+echo ""
+
+# 8. 尝试修复
+echo "[8/8] 尝试修复..."
+FIXED=false
+
+# 如果服务未运行，尝试重启
+if ! systemctl is-active --quiet $SERVICE_NAME; then
+    echo "  重启后端服务..."
+    sudo systemctl restart $SERVICE_NAME
+    sleep 5
+    
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        echo -e "  ${GREEN}✅ 后端服务已重启${NC}"
+        FIXED=true
+    else
+        echo -e "  ${RED}❌ 后端服务重启失败${NC}"
+        echo "  查看详细错误："
+        sudo journalctl -u $SERVICE_NAME -n 20 --no-pager | grep -i error | tail -5
+    fi
 fi
 
-# Step 7: 检查最近的日志
+# 如果后端进程不存在但服务状态显示运行，可能是服务配置问题
+if [ -z "$BACKEND_PIDS" ] && systemctl is-active --quiet $SERVICE_NAME; then
+    echo "  后端服务状态异常，强制重启..."
+    sudo systemctl stop $SERVICE_NAME
+    sleep 2
+    sudo systemctl start $SERVICE_NAME
+    sleep 5
+    FIXED=true
+fi
+
+# 重新加载 Nginx（如果配置更改）
+if sudo nginx -t &>/dev/null; then
+    echo "  重新加载 Nginx 配置..."
+    sudo systemctl reload nginx
+    echo -e "  ${GREEN}✅ Nginx 配置已重新加载${NC}"
+fi
+
 echo ""
-echo "[7/8] 检查最近的错误日志..."
-echo "----------------------------------------"
-echo "最后 30 行日志:"
-sudo journalctl -u "$BACKEND_SERVICE" -n 30 --no-pager | tail -30
-
-# Step 8: 重置并启动服务
-echo ""
-echo "[8/8] 重置并启动服务..."
-echo "----------------------------------------"
-
-# 重置失败状态
-sudo systemctl reset-failed "$BACKEND_SERVICE" 2>/dev/null || true
-sudo systemctl daemon-reload 2>/dev/null || true
-
-# 启动服务
-echo "启动服务..."
-sudo systemctl start "$BACKEND_SERVICE" || {
-  echo "❌ 启动失败"
-  echo ""
-  echo "查看详细错误:"
-  sudo journalctl -u "$BACKEND_SERVICE" -n 50 --no-pager | grep -i "error\|fail\|exception" | tail -20
-  exit 1
-}
-
-# 等待服务启动
-echo "等待服务启动（最多 30 秒）..."
-for i in {1..30}; do
-  sleep 1
-  STATUS=$(systemctl is-active "$BACKEND_SERVICE" 2>/dev/null || echo "inactive")
-  if [ "$STATUS" = "active" ]; then
-    echo "✅ 服务已启动"
-    break
-  fi
-  if [ $((i % 5)) -eq 0 ]; then
-    echo "  等待中... ($i/30) - 状态: $STATUS"
-  fi
-done
 
 # 最终验证
+echo "=========================================="
+echo "📊 最终验证"
+echo "=========================================="
 echo ""
-echo "=========================================="
-echo "最终验证"
-echo "=========================================="
 
-# 检查服务状态
-FINAL_STATUS=$(systemctl is-active "$BACKEND_SERVICE" 2>/dev/null || echo "inactive")
-echo "服务状态: $FINAL_STATUS"
-
-if [ "$FINAL_STATUS" = "active" ]; then
-  # 检查端口监听
-  sleep 2
-  PORT_LISTENING=$(sudo ss -tlnp 2>/dev/null | grep ":8000" || echo "")
-  if [ -n "$PORT_LISTENING" ]; then
-    echo "✅ 端口 8000 正在监听"
-    echo "$PORT_LISTENING"
-  else
-    echo "⚠️  端口 8000 未监听"
-  fi
-  
-  # 健康检查
-  echo ""
-  echo "执行健康检查..."
-  sleep 2
-  HEALTH_RESPONSE=$(curl -s --max-time 5 http://localhost:8000/health 2>/dev/null || echo "ERROR")
-  if [ "$HEALTH_RESPONSE" = '{"status":"ok"}' ] || [ "$HEALTH_RESPONSE" = '{"status": "ok"}' ]; then
-    echo "✅ 健康检查通过: $HEALTH_RESPONSE"
+# 再次检查健康端点
+echo "再次检查后端健康状态..."
+sleep 2
+FINAL_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8000/health 2>/dev/null)
+if [ "$FINAL_HEALTH" = "200" ]; then
+    echo -e "${GREEN}✅ 后端服务正常 (HTTP $FINAL_HEALTH)${NC}"
+    curl -s http://localhost:8000/health | jq . 2>/dev/null || curl -s http://localhost:8000/health
     echo ""
-    echo "=========================================="
-    echo "✅ 修复成功！服务已正常运行"
-    echo "=========================================="
-  else
-    echo "⚠️  健康检查失败: $HEALTH_RESPONSE"
-    echo "  查看日志: sudo journalctl -u $BACKEND_SERVICE -n 50 --no-pager"
-  fi
+    echo -e "${GREEN}✅ 502 错误应该已修复！${NC}"
 else
-  echo "❌ 服务未启动"
-  echo ""
-  echo "查看详细错误日志:"
-  sudo journalctl -u "$BACKEND_SERVICE" -n 50 --no-pager | tail -30
-  echo ""
-  echo "查看服务状态:"
-  sudo systemctl status "$BACKEND_SERVICE" --no-pager | head -30
-  exit 1
+    echo -e "${RED}❌ 后端服务仍然不可用 (HTTP $FINAL_HEALTH)${NC}"
+    echo ""
+    echo "建议执行以下操作："
+    echo "1. 查看详细日志: sudo journalctl -u $SERVICE_NAME -f"
+    echo "2. 检查后端代码: cd $BACKEND_DIR"
+    echo "3. 手动启动测试: cd $BACKEND_DIR && source venv/bin/activate && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
 fi
-
+echo ""

@@ -918,10 +918,11 @@ def load_accounts_from_excel() -> List[Dict[str, Any]]:
     # 重新查找 Excel 文件（每次调用都查找，以防文件移动）
     excel_file = find_excel_file()
     if not excel_file or not excel_file.exists():
+        excel_name = NODE_ID + ".xlsx"  # 使用变量拼接，避免字面量问题
         if EXCEL_FILE:
             logger.warning(f"Excel 配置文件不存在: {{EXCEL_FILE}}")
         else:
-            logger.warning(f"Excel 配置文件不存在: {{{{NODE_ID}}}}.xlsx")
+            logger.warning(f"Excel 配置文件不存在: {{excel_name}}")
         return accounts
     
     # 使用找到的文件

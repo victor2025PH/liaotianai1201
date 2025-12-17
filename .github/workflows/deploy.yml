@@ -67,6 +67,19 @@ jobs:
             echo "[4/5] 构建前端"
             cd saas-demo
             
+            echo "清理构建锁文件..."
+            # 检查并删除 .next/lock 文件（如果存在）
+            if [ -f ".next/lock" ]; then
+              echo "⚠️  发现锁文件，正在删除..."
+              rm -f .next/lock
+              echo "✅ 锁文件已删除"
+            fi
+            
+            # 检查是否有正在运行的 next build 进程并终止
+            pkill -f "next build" || true
+            echo "✅ 已清理可能的构建进程"
+            echo ""
+            
             echo "安装前端依赖..."
             npm install --prefer-offline --no-audit --no-fund
             

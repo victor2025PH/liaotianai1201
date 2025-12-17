@@ -856,7 +856,7 @@ SESSIONS_DIR.mkdir(exist_ok=True)
 def find_excel_file() -> Optional[Path]:
     """查找 Excel 配置文件，支持多个位置"""
     node_id = NODE_ID
-    excel_name = f"{{{{NODE_ID}}}}.xlsx"
+    excel_name = node_id + ".xlsx"
     
     # 1. 当前工作目录
     current_dir = Path.cwd()

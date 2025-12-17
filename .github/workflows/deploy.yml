@@ -89,11 +89,18 @@ jobs:
             fi
             
             # 检查是否有正在运行的 next build 进程并终止（静默执行，不报错）
-            # 使用 pgrep 检查，如果命令失败（找不到进程）返回码是1，这是正常的
-            pgrep_output=$(pgrep -f "next build" 2>&1) || pgrep_exit=$?
-            if [ ${pgrep_exit:-0} -eq 0 ] && [ -n "$pgrep_output" ]; then
-              echo "⚠️  发现正在运行的构建进程，正在终止..."
-              pkill -f "next build" 2>/dev/null || echo "⚠️  终止进程失败，继续执行..."
+            # 使用 pgrep 检查进程，捕获退出码但不让它影响脚本
+            set +e  # 临时禁用错误退出
+            pgrep_output=$(pgrep -f "next build" 2>/dev/null)
+            pgrep_exit=$?
+            set -e  # 恢复错误退出
+            
+            if [ $pgrep_exit -eq 0 ] && [ -n "$pgrep_output" ]; then
+              echo "⚠️  发现正在运行的构建进程 (PID: $pgrep_output)，正在终止..."
+              set +e
+              pkill -f "next build" 2>/dev/null
+              pkill_exit=$?
+              set -e
               sleep 2
               echo "✅ 构建进程已终止"
             else

@@ -28,143 +28,53 @@ jobs:
           debug: true
           envs: GITHUB_REPO=${{ github.repository }},SERVER_HOST=${{ secrets.SERVER_HOST }}
           script: |
+            # 遇到任何命令错误(非逻辑判断)则退出
+            set -e
+            
             PROJECT_DIR="/home/ubuntu/telegram-ai-system"
             
-            echo "=========================================="
-            echo "开始部署 - $(date)"
-            echo "=========================================="
-            echo ""
+            echo "🚀 开始部署..."
             
-            # 错误处理函数
-            handle_error() {
-              echo "❌ 部署过程中发生错误: $1"
-              exit 1
-            }
+            # 1. 进入目录并更新代码
+            cd "$PROJECT_DIR"
+            git fetch origin main
+            git reset --hard origin/main
             
-            # 不在脚本开始时设置 set -e，而是在需要的地方明确处理
+            # 2. 修复权限 (忽略错误)
+            sudo chown -R ubuntu:ubuntu "$PROJECT_DIR" || true
             
-            # ============ 进入项目目录 ============
-            echo "[1/5] 进入项目目录"
-            cd "$PROJECT_DIR" || handle_error "无法进入项目目录: $PROJECT_DIR"
-            echo "✅ 当前目录: $(pwd)"
-            echo ""
+            # 3. 构建前端
+            echo "📦 构建前端..."
+            cd saas-demo
             
-            # ============ 拉取最新代码 ============
-            echo "[2/5] 拉取最新代码"
-            # 检查是否有本地更改，如果有则丢弃（使用远程版本）
-            if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-              echo "⚠️  发现本地更改，自动丢弃以使用远程版本..."
-              git checkout -- . || true
-            fi
-            if ! git pull origin main; then
-              echo "⚠️  git pull 失败，尝试强制重置..."
-              git fetch origin main || handle_error "git fetch 失败"
-              git reset --hard origin/main || handle_error "git reset 失败"
-            fi
-            echo "✅ 代码已更新"
-            echo "最新提交: $(git log -1 --oneline)"
-            echo ""
+            # 暴力清理 (不管有没有，删了再说)
+            rm -f .next/lock
+            # 暴力杀进程 (如果杀不到，忽略错误)
+            pkill -f "next build" || true
             
-            # ============ 修复文件权限 ============
-            echo "[3/5] 修复文件权限"
-            sudo chown -R ubuntu:ubuntu "$PROJECT_DIR" || {
-              echo "⚠️  文件权限修复失败，继续执行..."
-            }
-            echo "✅ 文件权限处理完成"
-            echo ""
+            # 安装与构建
+            npm install --prefer-offline --no-audit
+            npm run build
             
-            # ============ 构建前端 ============
-            echo "[4/5] 构建前端"
-            cd saas-demo || handle_error "无法进入 saas-demo 目录"
-            echo "✅ 当前目录: $(pwd)"
-            
-            echo "清理构建锁文件和残留进程..."
-            
-            # 检查并删除 .next/lock 文件（如果存在）
-            echo "[清理] 检查锁文件..."
-            if [ -f ".next/lock" ]; then
-              echo "⚠️  发现锁文件，正在删除..."
-              rm -f .next/lock || echo "⚠️  删除锁文件失败，继续执行..."
-              echo "✅ 锁文件已删除"
-            else
-              echo "✅ 无锁文件"
-            fi
-            echo "[清理] 锁文件检查完成"
-            
-            # 检查是否有正在运行的 next build 进程并终止（静默执行，不报错）
-            echo "[清理] 检查构建进程..."
-            # 完全禁用错误退出，确保不会意外退出
-            set +e
-            pgrep_output=$(pgrep -f "next build" 2>/dev/null)
-            pgrep_exit=$?
-            set +e  # 保持 set +e，避免后续命令导致退出
-            
-            if [ "$pgrep_exit" = "0" ] && [ -n "$pgrep_output" ]; then
-              echo "⚠️  发现正在运行的构建进程 (PID: $pgrep_output)，正在终止..."
-              pkill -f "next build" 2>/dev/null || true
-              sleep 2
-              echo "✅ 构建进程已终止"
-            else
-              echo "✅ 无运行中的构建进程 (退出码: $pgrep_exit)"
-            fi
-            set -e  # 现在恢复错误退出
-            echo "[清理] 进程检查完成"
-            echo ""
-            
-            echo "安装前端依赖..."
-            npm install --prefer-offline --no-audit --no-fund || handle_error "npm install 失败"
-            
-            echo "构建前端项目..."
-            export NODE_ENV=production
-            export NODE_OPTIONS="--max-old-space-size=4096"
-            npm run build || handle_error "npm run build 失败"
-            
-            echo "正在处理 Standalone 静态资源..."
-            
-            # 1. 确保目标目录结构存在（关键：必须创建 .next/static）
+            # 暴力复制静态资源 (Standalone 补丁)
+            echo "📂 处理静态资源..."
             mkdir -p .next/standalone/.next/static
-            
-            # 2. 复制 static 文件夹的所有内容到 standalone 对应位置
-            # 使用 cp -r 递归复制
-            if [ -d ".next/static" ]; then
-              cp -r .next/static/* .next/standalone/.next/static/
-              echo "✅ .next/static 已复制到 standalone 目录"
-            else
-              echo "⚠️  .next/static 目录不存在，跳过复制"
-            fi
-            
-            # 3. 复制 public 文件夹到 standalone 根目录
-            if [ -d "public" ]; then
-              cp -r public .next/standalone/
-              echo "✅ public 文件夹已复制到 standalone 目录"
-            else
-              echo "⚠️  public 目录不存在，跳过复制"
-            fi
-            
-            echo "✅ 静态资源已成功复制到 standalone 目录"
-            echo "✅ 前端构建完成"
+            # 使用 || true 防止某些文件不存在导致报错
+            cp -r .next/static/* .next/standalone/.next/static/ || true
+            cp -r public .next/standalone/ || true
             cd ..
-            echo ""
             
-            # ============ 安装后端依赖 ============
-            echo "[4.5/5] 安装后端依赖"
-            cd admin-backend || handle_error "无法进入 admin-backend 目录"
-            source venv/bin/activate || handle_error "无法激活虚拟环境"
-            pip install -r requirements.txt --quiet || handle_error "pip install 失败"
-            cd .. || handle_error "无法返回项目根目录"
-            echo "✅ 后端依赖安装完成"
-            echo ""
+            # 4. 后端依赖
+            echo "🐍 安装后端依赖..."
+            cd admin-backend
+            source venv/bin/activate
+            pip install -r requirements.txt --quiet
+            cd ..
             
-            # ============ 重启服务 ============
-            echo "[5/5] 重启服务"
-            sudo systemctl restart luckyred-api || echo "⚠️  luckyred-api 重启失败，继续执行..."
-            sudo systemctl restart liaotian-frontend || handle_error "liaotian-frontend 重启失败"
-            sudo systemctl restart nginx || handle_error "nginx 重启失败"
+            # 5. 重启服务
+            echo "🔄 重启服务..."
+            sudo systemctl restart luckyred-api
+            sudo systemctl restart liaotian-frontend
+            sudo systemctl restart nginx
             
-            echo ""
-            echo "等待服务启动 (20秒)..."
-            sleep 20
-            
-            echo ""
             echo "✅ 部署完成！"
-            echo "完成时间: $(date)"

@@ -10,8 +10,8 @@ WorkingDirectory=/home/ubuntu/telegram-ai-system/saas-demo
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=NODE_OPTIONS=--max-old-space-size=1024
-# Next.js 16 standalone 输出在 .next/standalone/saas-demo/ 目录下
-ExecStart=/usr/bin/node .next/standalone/saas-demo/server.js
+# Next.js 16 standalone 输出在 .next/standalone/ 目录下
+ExecStart=/usr/bin/node .next/standalone/server.js
 Restart=always
 RestartSec=5
 LimitNOFILE=65535

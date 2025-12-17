@@ -175,7 +175,7 @@ WorkingDirectory=$PROJECT_DIR/saas-demo
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=NODE_OPTIONS=--max-old-space-size=1024
-ExecStart=/usr/bin/node .next/standalone/saas-demo/server.js
+ExecStart=/usr/bin/node .next/standalone/server.js
 Restart=always
 RestartSec=5
 LimitNOFILE=65535

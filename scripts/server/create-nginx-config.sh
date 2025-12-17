@@ -34,7 +34,15 @@ server {
         proxy_buffering off;
     }
 
-    # Next.js 靜態文件（優先處理，在 location / 之前）
+    # Next.js 靜態文件 - 直接從文件系統提供（優先級最高）
+    location /next/static/ {
+        alias /home/ubuntu/telegram-ai-system/saas-demo/.next/static/;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # Next.js 其他 /next/ 路徑（通過代理）
     location /next/ {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;

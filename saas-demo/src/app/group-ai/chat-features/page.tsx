@@ -171,6 +171,26 @@ export default function ChatFeaturesPage() {
   const updateSettings = async () => {
     try {
       setLoading(true)
+      
+      // 檢查活躍賬號數（僅警告，不阻止執行）
+      try {
+        const { fetchWithAuth } = await import("@/lib/api/client")
+        const statusRes = await fetchWithAuth(`${API_BASE}/group-ai/servers/status`)
+        if (statusRes.ok) {
+          const statusData = await statusRes.json()
+          const totalAccounts = statusData.servers?.reduce((sum: number, s: any) => sum + (s.accounts_count || 0), 0) || 0
+          if (totalAccounts === 0) {
+            toast({ 
+              title: "警告：檢測到 0 個活躍賬號，但強制執行指令...", 
+              variant: "default"
+            })
+          }
+        }
+      } catch (statusError) {
+        // 獲取狀態失敗不影響保存操作
+        console.warn("無法獲取賬號狀態:", statusError)
+      }
+      
       const { fetchWithAuth } = await import("@/lib/api/client")
       const res = await fetchWithAuth(`${API_BASE}/group-ai/chat-features/settings`, {
         method: "PUT",
@@ -331,6 +351,25 @@ export default function ChatFeaturesPage() {
   // 切換排程任務
   const toggleSchedule = async (taskId: string, enabled: boolean) => {
     try {
+      // 檢查活躍賬號數（僅警告，不阻止執行）
+      try {
+        const { fetchWithAuth } = await import("@/lib/api/client")
+        const statusRes = await fetchWithAuth(`${API_BASE}/group-ai/servers/status`)
+        if (statusRes.ok) {
+          const statusData = await statusRes.json()
+          const totalAccounts = statusData.servers?.reduce((sum: number, s: any) => sum + (s.accounts_count || 0), 0) || 0
+          if (totalAccounts === 0) {
+            toast({ 
+              title: "警告：檢測到 0 個活躍賬號，但強制執行指令...", 
+              variant: "default"
+            })
+          }
+        }
+      } catch (statusError) {
+        // 獲取狀態失敗不影響切換操作
+        console.warn("無法獲取賬號狀態:", statusError)
+      }
+      
       const { fetchWithAuth } = await import("@/lib/api/client")
       await fetchWithAuth(`${API_BASE}/group-ai/chat-features/schedules/${taskId}/toggle?enabled=${enabled}`, {
         method: "PUT",
@@ -679,7 +718,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="auto_chat" className="min-w-[100px]">自動聊天</Label>
                     <Switch 
                       id="auto_chat"
-                      checked={Boolean(settings?.auto_chat_enabled)}
+                      checked={Boolean(settings?.auto_chat_enabled ?? false)}
                       onCheckedChange={(checked) => setSettings({...settings, auto_chat_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -687,7 +726,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="games" className="min-w-[100px]">遊戲功能</Label>
                     <Switch 
                       id="games"
-                      checked={Boolean(settings?.games_enabled)}
+                      checked={Boolean(settings?.games_enabled ?? false)}
                       onCheckedChange={(checked) => setSettings({...settings, games_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -695,7 +734,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="scripts" className="min-w-[100px]">劇本功能</Label>
                     <Switch 
                       id="scripts"
-                      checked={Boolean(settings?.scripts_enabled)}
+                      checked={Boolean(settings?.scripts_enabled ?? false)}
                       onCheckedChange={(checked) => setSettings({...settings, scripts_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -703,7 +742,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="scheduler" className="min-w-[100px]">排程功能</Label>
                     <Switch 
                       id="scheduler"
-                      checked={Boolean(settings?.scheduler_enabled)}
+                      checked={Boolean(settings?.scheduler_enabled ?? false)}
                       onCheckedChange={(checked) => setSettings({...settings, scheduler_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -711,7 +750,7 @@ export default function ChatFeaturesPage() {
                     <Label htmlFor="redpacket" className="min-w-[100px]">紅包功能</Label>
                     <Switch 
                       id="redpacket"
-                      checked={Boolean(settings?.redpacket_enabled)}
+                      checked={Boolean(settings?.redpacket_enabled ?? false)}
                       onCheckedChange={(checked) => setSettings({...settings, redpacket_enabled: Boolean(checked)})}
                     />
                   </div>
@@ -1327,7 +1366,7 @@ export default function ChatFeaturesPage() {
                     <p className="text-sm text-muted-foreground">當當前 AI 提供商失敗時，自動切換到備用提供商</p>
                   </div>
                   <Switch
-                    checked={Boolean(aiProvider?.autoFailover)}
+                    checked={Boolean(aiProvider?.autoFailover ?? false)}
                     onCheckedChange={(checked) => {
                       setAiProvider(prev => ({ ...prev, autoFailover: Boolean(checked) }))
                     }}
@@ -1423,7 +1462,7 @@ export default function ChatFeaturesPage() {
                       </div>
                     </div>
                   <Switch 
-                    checked={Boolean(schedule?.enabled)}
+                    checked={Boolean(schedule?.enabled ?? false)}
                     onCheckedChange={(checked) => toggleSchedule(schedule.id, Boolean(checked))}
                   />
                   </div>

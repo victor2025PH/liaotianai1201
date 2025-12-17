@@ -98,7 +98,38 @@ export default function NodesPage() {
         throw new Error(`HTTP ${res.status}`)
       }
       const data = await res.json()
-      setWorkers(data.workers || {})
+      const workersData = data.workers || {}
+      
+      // 前端双重检查：如果最后一次心跳超过 90 秒，标记为离线
+      const HEARTBEAT_TIMEOUT_MS = 90 * 1000 // 90秒
+      const now = Date.now()
+      
+      const checkedWorkers: Record<string, Worker> = {}
+      for (const [nodeId, worker] of Object.entries(workersData)) {
+        const w = worker as Worker
+        if (w.last_heartbeat) {
+          const lastHeartbeatTime = new Date(w.last_heartbeat).getTime()
+          const timeSinceHeartbeat = now - lastHeartbeatTime
+          
+          if (timeSinceHeartbeat > HEARTBEAT_TIMEOUT_MS) {
+            // 心跳超时，标记为离线
+            checkedWorkers[nodeId] = {
+              ...w,
+              status: "offline"
+            }
+          } else {
+            checkedWorkers[nodeId] = w
+          }
+        } else {
+          // 没有心跳时间，标记为离线
+          checkedWorkers[nodeId] = {
+            ...w,
+            status: "offline"
+          }
+        }
+      }
+      
+      setWorkers(checkedWorkers)
     } catch (error) {
       console.warn("獲取节点失败（端点可能未实现）:", error)
       setWorkers({})
@@ -263,7 +294,13 @@ export default function NodesPage() {
   const onlineNodes = workerList.filter(([, w]) => w.status === "online").length
   const onlineLocalNodes = localNodes.filter(([, w]) => w.status === "online").length
   const onlineServerNodes = serverNodes.filter(([, w]) => w.status === "online").length
-  const totalAccounts = workerList.reduce((sum, [, w]) => sum + (w.accounts?.length || 0), 0)
+  // 只统计在线节点的账号数（离线节点不应该计入）
+  const totalAccounts = workerList.reduce((sum, [, w]) => {
+    if (w.status === "online") {
+      return sum + (w.accounts?.length || 0)
+    }
+    return sum
+  }, 0)
   const onlineAccounts = workerList.reduce((sum, [, w]) => {
     if (w.status === "online" && w.accounts) {
       return sum + w.accounts.filter((acc: any) => acc.status === "online").length
@@ -518,7 +555,9 @@ export default function NodesPage() {
                         {worker.status === "online" ? <Wifi className="mr-1 h-3 w-3" /> : <WifiOff className="mr-1 h-3 w-3" />}
                         {worker.status === "online" ? "在線" : "离线"}
                       </Badge>
-                      <Badge variant="outline" className="text-xs">{worker.accounts?.length || 0} 账号</Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {worker.status === "offline" ? "0" : (worker.accounts?.length || 0)} 账号
+                      </Badge>
                     </div>
                   </div>
                   {/* 節點統計摘要 */}
@@ -532,8 +571,8 @@ export default function NodesPage() {
                     </div>
                   )}
                   
-                  {/* 帳號列表 */}
-                  {worker.accounts && worker.accounts.length > 0 && (
+                  {/* 帳號列表 - 仅在节点在线时显示 */}
+                  {worker.status === "online" && worker.accounts && worker.accounts.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {worker.accounts.map((acc: any, idx: number) => (
                         <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg text-xs border hover:border-blue-500/50 transition-colors">

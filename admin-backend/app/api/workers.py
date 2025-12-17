@@ -203,8 +203,9 @@ def _get_worker_status(node_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _get_all_workers() -> Dict[str, Dict[str, Any]]:
-    """获取所有 Worker 节点状态"""
+    """获取所有 Worker 节点状态，并检查心跳超时"""
     workers = {}
+    HEARTBEAT_TIMEOUT_SECONDS = 90  # 心跳超时时间：90秒
     
     if _redis_client:
         try:
@@ -212,14 +213,62 @@ def _get_all_workers() -> Dict[str, Dict[str, Any]]:
             for node_id in node_ids:
                 status_data = _get_worker_status(node_id)
                 if status_data:
+                    # 检查心跳是否超时
+                    last_heartbeat_str = status_data.get("last_heartbeat")
+                    if last_heartbeat_str:
+                        try:
+                            last_heartbeat = datetime.fromisoformat(last_heartbeat_str.replace('Z', '+00:00'))
+                            # 处理时区
+                            if last_heartbeat.tzinfo is None:
+                                last_heartbeat = last_heartbeat.replace(tzinfo=datetime.now().astimezone().tzinfo)
+                            
+                            time_since_heartbeat = (datetime.now().astimezone() - last_heartbeat).total_seconds()
+                            
+                            # 如果心跳超时，标记为离线
+                            if time_since_heartbeat > HEARTBEAT_TIMEOUT_SECONDS:
+                                status_data["status"] = "offline"
+                                logger.debug(f"节点 {node_id} 心跳超时 ({time_since_heartbeat:.0f}秒)，标记为离线")
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"解析节点 {node_id} 心跳时间失败: {e}")
+                            status_data["status"] = "offline"
+                    else:
+                        # 没有心跳时间，标记为离线
+                        status_data["status"] = "offline"
+                    
                     workers[node_id] = status_data
         except Exception as e:
             logger.error(f"从 Redis 获取所有 Workers 失败: {e}")
             workers = _workers_memory_store.copy()
+            # 对内存存储也进行超时检测
+            _check_heartbeat_timeout(workers, HEARTBEAT_TIMEOUT_SECONDS)
     else:
         workers = _workers_memory_store.copy()
+        # 对内存存储也进行超时检测
+        _check_heartbeat_timeout(workers, HEARTBEAT_TIMEOUT_SECONDS)
     
     return workers
+
+
+def _check_heartbeat_timeout(workers: Dict[str, Dict[str, Any]], timeout_seconds: int) -> None:
+    """检查心跳超时并更新状态（辅助函数）"""
+    for node_id, status_data in workers.items():
+        last_heartbeat_str = status_data.get("last_heartbeat")
+        if last_heartbeat_str:
+            try:
+                last_heartbeat = datetime.fromisoformat(last_heartbeat_str.replace('Z', '+00:00'))
+                if last_heartbeat.tzinfo is None:
+                    last_heartbeat = last_heartbeat.replace(tzinfo=datetime.now().astimezone().tzinfo)
+                
+                time_since_heartbeat = (datetime.now().astimezone() - last_heartbeat).total_seconds()
+                
+                if time_since_heartbeat > timeout_seconds:
+                    status_data["status"] = "offline"
+                    logger.debug(f"节点 {node_id} 心跳超时 ({time_since_heartbeat:.0f}秒)，标记为离线")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"解析节点 {node_id} 心跳时间失败: {e}")
+                status_data["status"] = "offline"
+        else:
+            status_data["status"] = "offline"
 
 
 def _add_command(node_id: str, command: Dict[str, Any]) -> None:
@@ -395,12 +444,15 @@ async def list_workers(
     try:
         workers_data = _get_all_workers()
         
-        # 转换为响应格式
+        # 转换为响应格式，并确保状态正确（基于心跳超时）
         workers = {}
         for node_id, data in workers_data.items():
+            # _get_all_workers() 已经检查了心跳超时，直接使用其返回的状态
+            status = data.get("status", "offline")
+            
             workers[node_id] = WorkerStatus(
                 node_id=node_id,
-                status=data.get("status", "offline"),
+                status=status,  # 使用经过心跳超时检测的状态
                 account_count=data.get("account_count", 0),
                 last_heartbeat=data.get("last_heartbeat", datetime.now().isoformat()),
                 accounts=data.get("accounts", []),

@@ -852,22 +852,80 @@ DEFAULT_API_HASH = os.getenv("TELEGRAM_API_HASH", "{request.telegram_api_hash}")
 # 确保 sessions 目录存在
 SESSIONS_DIR.mkdir(exist_ok=True)
 
+# Excel 配置文件 - 在多个位置查找
+def find_excel_file() -> Optional[Path]:
+    """查找 Excel 配置文件，支持多个位置"""
+    node_id = NODE_ID
+    excel_name = f"{{node_id}}.xlsx"
+    
+    # 1. 当前工作目录
+    current_dir = Path.cwd()
+    excel_file = current_dir / excel_name
+    if excel_file.exists():
+        logger.info(f"[EXCEL] 在当前目录找到: {{excel_file}}")
+        return excel_file
+    
+    # 2. 脚本所在目录
+    script_dir = Path(__file__).parent if '__file__' in globals() else Path.cwd()
+    excel_file = script_dir / excel_name
+    if excel_file.exists():
+        logger.info(f"[EXCEL] 在脚本目录找到: {{excel_file}}")
+        return excel_file
+    
+    # 3. sessions 目录的父目录（如果 sessions 是相对路径）
+    if not SESSIONS_DIR.is_absolute():
+        parent_dir = SESSIONS_DIR.parent
+        excel_file = parent_dir / excel_name
+        if excel_file.exists():
+            logger.info(f"[EXCEL] 在 sessions 父目录找到: {{excel_file}}")
+            return excel_file
+    else:
+        # sessions 是绝对路径，检查父目录
+        parent_dir = SESSIONS_DIR.parent
+        excel_file = parent_dir / excel_name
+        if excel_file.exists():
+            logger.info(f"[EXCEL] 在 sessions 父目录找到: {{excel_file}}")
+            return excel_file
+    
+    # 4. sessions 目录本身
+    excel_file = SESSIONS_DIR / excel_name
+    if excel_file.exists():
+        logger.info(f"[EXCEL] 在 sessions 目录找到: {{excel_file}}")
+        return excel_file
+    
+    # 未找到
+    logger.warning(f"[EXCEL] 未找到配置文件，查找了以下位置：")
+    logger.warning(f"  - {{current_dir / excel_name}}")
+    logger.warning(f"  - {{script_dir / excel_name}}")
+    logger.warning(f"  - {{SESSIONS_DIR.parent / excel_name}}")
+    logger.warning(f"  - {{SESSIONS_DIR / excel_name}}")
+    return None
+
 # Excel 配置文件
-EXCEL_FILE = Path(f"{{NODE_ID}}.xlsx")
+EXCEL_FILE = find_excel_file()
 
 
 def load_accounts_from_excel() -> List[Dict[str, Any]]:
     """从 Excel 文件加载账号配置"""
     accounts = []
     
-    if not EXCEL_FILE.exists():
-        logger.warning(f"Excel 配置文件不存在: {{EXCEL_FILE}}")
+    # 重新查找 Excel 文件（每次调用都查找，以防文件移动）
+    excel_file = find_excel_file()
+    if not excel_file or not excel_file.exists():
+        if EXCEL_FILE:
+            logger.warning(f"Excel 配置文件不存在: {{EXCEL_FILE}}")
+        else:
+            logger.warning(f"Excel 配置文件不存在: {{{{NODE_ID}}}}.xlsx")
         return accounts
+    
+    # 使用找到的文件
+    excel_file_to_use = excel_file
     
     try:
         import openpyxl
-        wb = openpyxl.load_workbook(EXCEL_FILE)
+        wb = openpyxl.load_workbook(excel_file_to_use)
         ws = wb.active
+        logger.info(f"[EXCEL] 正在读取文件: {{excel_file_to_use}}")
         
         # 读取表头
         headers = [str(cell.value).strip().lower() if cell.value else "" for cell in ws[1]]
@@ -1076,11 +1134,16 @@ def main():
     logger.info("[INIT] 初始化 Worker 节点...")
     
     # 检查 Excel 文件
-    if EXCEL_FILE.exists():
-        logger.info(f"[EXCEL] 找到配置文件: {{EXCEL_FILE}}")
+    excel_file = find_excel_file()
+    if excel_file and excel_file.exists():
+        logger.info(f"[EXCEL] 找到配置文件: {{excel_file}}")
+        logger.info(f"[EXCEL] 文件路径: {{excel_file.absolute()}}")
     else:
-        logger.warning(f"[EXCEL] 配置文件不存在: {{EXCEL_FILE}}")
+        logger.warning(f"[EXCEL] 配置文件不存在: {{{{NODE_ID}}}}.xlsx")
         logger.info("请创建 Excel 配置文件，包含以下列：api_id, api_hash, phone, enabled")
+        logger.info(f"[EXCEL] 建议放置在以下位置之一：")
+        logger.info(f"  - {{Path.cwd() / f'{{{{NODE_ID}}}}.xlsx'}}")
+        logger.info(f"  - {{SESSIONS_DIR.parent / f'{{{{NODE_ID}}}}.xlsx'}}")
     
     # 扫描 Session 文件
     session_files = scan_session_files()

@@ -856,7 +856,7 @@ SESSIONS_DIR.mkdir(exist_ok=True)
 def find_excel_file() -> Optional[Path]:
     """查找 Excel 配置文件，支持多个位置"""
     node_id = NODE_ID
-    excel_name = f"{{NODE_ID}}.xlsx"
+    excel_name = f"{{{{NODE_ID}}}}.xlsx"
     
     # 1. 当前工作目录
     current_dir = Path.cwd()
@@ -1145,11 +1145,11 @@ def main():
         logger.info(f"[EXCEL] 找到配置文件: {{excel_file}}")
         logger.info(f"[EXCEL] 文件路径: {{excel_file.absolute()}}")
     else:
-        logger.warning(f"[EXCEL] 配置文件不存在: {{{{NODE_ID}}}}.xlsx")
+        logger.warning(f"[EXCEL] 配置文件不存在: {{excel_name}}")
         logger.info("请创建 Excel 配置文件，包含以下列：api_id, api_hash, phone, enabled")
         logger.info(f"[EXCEL] 建议放置在以下位置之一：")
-        logger.info(f"  - {{Path.cwd() / f'{{{{NODE_ID}}}}.xlsx'}}")
-        logger.info(f"  - {{SESSIONS_DIR.parent / f'{{{{NODE_ID}}}}.xlsx'}}")
+        logger.info(f"  - {{Path.cwd() / excel_name}}")
+        logger.info(f"  - {{SESSIONS_DIR.parent / excel_name}}")
     
     # 扫描 Session 文件
     session_files = scan_session_files()

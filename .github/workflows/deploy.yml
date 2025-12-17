@@ -69,16 +69,22 @@ jobs:
             pip install -r requirements.txt --quiet
             cd ..
             
-            # 5. 重启服务（使用更优雅的方式）
+            # 5. 重启服务（使用 PM2）
             echo "🔄 重启服务..."
-            # 先重启后端（通常较快）
-            sudo systemctl restart luckyred-api
-            sleep 3
             
-            # 然后重启前端（需要停止旧服务）
-            sudo systemctl stop liaotian-frontend || true
-            sleep 2
-            sudo systemctl start liaotian-frontend
+            # 切换到 ubuntu 用户执行 PM2 命令
+            # 注意：PM2 需要以运行服务的用户身份执行
+            sudo -u ubuntu bash << 'PM2_RESTART'
+            cd /home/ubuntu/telegram-ai-system
+            
+            # 重新加载 PM2 配置（如果 ecosystem.config.js 有变化）
+            pm2 reload ecosystem.config.js || pm2 restart ecosystem.config.js
+            
+            # 保存 PM2 进程列表
+            pm2 save
+PM2_RESTART
+            
+            # 等待服务启动
             sleep 5
             
             # 最后重启 Nginx
@@ -87,12 +93,27 @@ jobs:
             
             # 6. 验证服务状态
             echo "🔍 验证服务状态..."
-            if sudo systemctl is-active --quiet luckyred-api && sudo systemctl is-active --quiet liaotian-frontend; then
+            
+            # 使用 PM2 检查服务状态
+            BACKEND_STATUS=$(sudo -u ubuntu pm2 jlist 2>/dev/null | grep -o '"name":"backend"[^}]*"status":"[^"]*"' | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+            FRONTEND_STATUS=$(sudo -u ubuntu pm2 jlist 2>/dev/null | grep -o '"name":"frontend"[^}]*"status":"[^"]*"' | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+            
+            if [ "$BACKEND_STATUS" = "online" ] && [ "$FRONTEND_STATUS" = "online" ]; then
                 echo "✅ 所有服务已成功启动"
+                sudo -u ubuntu pm2 status
             else
-                echo "⚠️  部分服务可能未正常启动，请检查日志"
-                sudo systemctl status luckyred-api --no-pager | head -5
-                sudo systemctl status liaotian-frontend --no-pager | head -5
+                echo "⚠️  部分服务可能未正常启动"
+                echo "后端状态: $BACKEND_STATUS"
+                echo "前端状态: $FRONTEND_STATUS"
+                echo ""
+                echo "查看 PM2 日志："
+                sudo -u ubuntu pm2 logs --lines 10 --nostream
+                
+                # 尝试重新启动失败的服务
+                echo ""
+                echo "尝试重新启动服务..."
+                sudo -u ubuntu pm2 restart ecosystem.config.js
+                sudo -u ubuntu pm2 save
             fi
             
             echo "✅ 部署完成！"

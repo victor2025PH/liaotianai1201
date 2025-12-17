@@ -75,6 +75,29 @@ jobs:
             export NODE_OPTIONS="--max-old-space-size=4096"
             npm run build
             
+            echo "正在处理 Standalone 静态资源..."
+            
+            # 1. 确保目标目录结构存在（关键：必须创建 .next/static）
+            mkdir -p .next/standalone/.next/static
+            
+            # 2. 复制 static 文件夹的所有内容到 standalone 对应位置
+            # 使用 cp -r 递归复制
+            if [ -d ".next/static" ]; then
+              cp -r .next/static/* .next/standalone/.next/static/
+              echo "✅ .next/static 已复制到 standalone 目录"
+            else
+              echo "⚠️  .next/static 目录不存在，跳过复制"
+            fi
+            
+            # 3. 复制 public 文件夹到 standalone 根目录
+            if [ -d "public" ]; then
+              cp -r public .next/standalone/
+              echo "✅ public 文件夹已复制到 standalone 目录"
+            else
+              echo "⚠️  public 目录不存在，跳过复制"
+            fi
+            
+            echo "✅ 静态资源已成功复制到 standalone 目录"
             echo "✅ 前端构建完成"
             cd ..
             echo ""

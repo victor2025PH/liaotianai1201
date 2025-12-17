@@ -35,7 +35,17 @@ server {
     }
 
     # Next.js 靜態文件 - 直接從文件系統提供（優先級最高）
+    # 優先使用 standalone 目錄中的靜態文件，如果不存在則使用標準目錄
     location /next/static/ {
+        alias /home/ubuntu/telegram-ai-system/saas-demo/.next/standalone/.next/static/;
+        try_files $uri $uri/ @next_static_fallback;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+    
+    # Fallback: 如果 standalone 目錄中沒有，嘗試標準目錄
+    location @next_static_fallback {
         alias /home/ubuntu/telegram-ai-system/saas-demo/.next/static/;
         expires 1y;
         add_header Cache-Control "public, immutable";

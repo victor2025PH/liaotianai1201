@@ -689,6 +689,568 @@ async def check_duplicate_accounts(
         )
 
 
+# ============ 部署包生成 API ============
+
+class DeployPackageRequest(BaseModel):
+    """部署包生成请求"""
+    node_id: str = Field(..., description="节点ID")
+    server_url: str = Field(..., description="服务器URL")
+    api_key: str = Field(default="", description="API密钥（可选）")
+    heartbeat_interval: int = Field(default=30, description="心跳间隔（秒）")
+    telegram_api_id: str = Field(default="", description="Telegram API ID（可选，全局默认）")
+    telegram_api_hash: str = Field(default="", description="Telegram API Hash（可选，全局默认）")
+
+
+@router.post("/deploy-package", status_code=status.HTTP_200_OK)
+async def generate_deploy_package(
+    request: DeployPackageRequest,
+    current_user: Optional[User] = Depends(get_current_active_user),
+    db: Session = Depends(get_db_session)
+):
+    """
+    生成 Worker 节点部署包
+    
+    返回包含所有必要脚本的部署包代码
+    """
+    try:
+        # 生成 Windows 启动脚本
+        windows_script = f"""@echo off
+chcp 65001 >nul
+echo ========================================
+echo Worker Node Auto Deploy
+echo Node ID: {request.node_id}
+echo ========================================
+echo.
+
+cd /d "%~dp0"
+
+REM 检查 Python
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo [错误] 未找到 Python，请先安装 Python 3.9+
+    pause
+    exit /b 1
+)
+
+REM 检查依赖
+echo [1/3] 检查依赖...
+python -c "import telethon, requests, openpyxl" >nul 2>&1
+if errorlevel 1 (
+    echo [安装] 正在安装依赖包...
+    python -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple
+    if errorlevel 1 (
+        echo [错误] 依赖安装失败
+        pause
+        exit /b 1
+    )
+)
+
+REM 设置环境变量
+set NODE_ID={request.node_id}
+set SERVER_URL={request.server_url}
+set HEARTBEAT_INTERVAL={request.heartbeat_interval}
+set SESSIONS_DIR=%~dp0sessions
+
+REM 确保 sessions 目录存在
+if not exist "%SESSIONS_DIR%" mkdir "%SESSIONS_DIR%"
+
+echo [2/3] 启动 Worker 节点...
+echo Node ID: %NODE_ID%
+echo Server: %SERVER_URL%
+echo.
+
+REM 运行 Python 脚本
+python worker_client.py
+
+if errorlevel 1 (
+    echo.
+    echo [错误] Worker 节点运行失败
+    pause
+)
+"""
+
+        # 生成 Linux 启动脚本
+        linux_script = f"""#!/bin/bash
+set -e
+
+cd "$(dirname "$0")"
+
+echo "========================================"
+echo "Worker Node Auto Deploy"
+echo "Node ID: {request.node_id}"
+echo "========================================"
+echo ""
+
+# 检查 Python
+if ! command -v python3 &> /dev/null; then
+    echo "[错误] 未找到 Python3，请先安装 Python 3.9+"
+    exit 1
+fi
+
+# 检查依赖
+echo "[1/3] 检查依赖..."
+python3 -c "import telethon, requests, openpyxl" 2>/dev/null || {{
+    echo "[安装] 正在安装依赖包..."
+    python3 -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple
+}}
+
+# 设置环境变量
+export NODE_ID="{request.node_id}"
+export SERVER_URL="{request.server_url}"
+export HEARTBEAT_INTERVAL="{request.heartbeat_interval}"
+export SESSIONS_DIR="$(pwd)/sessions"
+
+# 确保 sessions 目录存在
+mkdir -p "$SESSIONS_DIR"
+
+echo "[2/3] 启动 Worker 节点..."
+echo "Node ID: $NODE_ID"
+echo "Server: $SERVER_URL"
+echo ""
+
+# 运行 Python 脚本
+python3 worker_client.py
+"""
+
+        # 生成 Worker 客户端 Python 代码
+        worker_client_code = f'''#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Worker 节点客户端
+Node ID: {request.node_id}
+Server: {request.server_url}
+"""
+
+import os
+import sys
+import time
+import json
+import logging
+import requests
+import sqlite3
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+# 配置
+NODE_ID = os.getenv("NODE_ID", "{request.node_id}")
+SERVER_URL = os.getenv("SERVER_URL", "{request.server_url}").rstrip('/')
+HEARTBEAT_INTERVAL = int(os.getenv("HEARTBEAT_INTERVAL", "{request.heartbeat_interval}"))
+SESSIONS_DIR = Path(os.getenv("SESSIONS_DIR", "./sessions")).resolve()
+DEFAULT_API_ID = os.getenv("TELEGRAM_API_ID", "{request.telegram_api_id}")
+DEFAULT_API_HASH = os.getenv("TELEGRAM_API_HASH", "{request.telegram_api_hash}")
+
+# 确保 sessions 目录存在
+SESSIONS_DIR.mkdir(exist_ok=True)
+
+# Excel 配置文件
+EXCEL_FILE = Path(f"{{NODE_ID}}.xlsx")
+
+
+def load_accounts_from_excel() -> List[Dict[str, Any]]:
+    """从 Excel 文件加载账号配置"""
+    accounts = []
+    
+    if not EXCEL_FILE.exists():
+        logger.warning(f"Excel 配置文件不存在: {{EXCEL_FILE}}")
+        return accounts
+    
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(EXCEL_FILE)
+        ws = wb.active
+        
+        # 读取表头
+        headers = [str(cell.value).strip().lower() if cell.value else "" for cell in ws[1]]
+        
+        # 查找列索引
+        api_id_idx = next((i for i, h in enumerate(headers) if 'api_id' in h), None)
+        api_hash_idx = next((i for i, h in enumerate(headers) if 'api_hash' in h), None)
+        phone_idx = next((i for i, h in enumerate(headers) if 'phone' in h), None)
+        enabled_idx = next((i for i, h in enumerate(headers) if 'enabled' in h), None)
+        
+        if api_id_idx is None or api_hash_idx is None or phone_idx is None:
+            logger.error(f"Excel 文件缺少必需的列：需要 api_id, api_hash, phone")
+            return accounts
+        
+        # 读取数据行
+        for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
+            if not any(row):
+                continue
+            
+            phone = str(row[phone_idx]).strip() if row[phone_idx] else None
+            api_id = str(row[api_id_idx]).strip() if row[api_id_idx] else DEFAULT_API_ID
+            api_hash = str(row[api_hash_idx]).strip() if row[api_hash_idx] else DEFAULT_API_HASH
+            enabled = True
+            if enabled_idx is not None and row[enabled_idx] is not None:
+                enabled = bool(int(row[enabled_idx])) if str(row[enabled_idx]).isdigit() else bool(row[enabled_idx])
+            
+            if phone and api_id and api_hash and enabled:
+                accounts.append({{
+                    "phone": phone,
+                    "api_id": int(api_id) if api_id.isdigit() else None,
+                    "api_hash": api_hash,
+                    "enabled": enabled
+                }})
+        
+        logger.info(f"从 Excel 加载了 {{len(accounts)}} 个账号")
+        return accounts
+        
+    except ImportError:
+        logger.error("openpyxl 未安装，无法读取 Excel 文件")
+        logger.info("安装命令: pip install openpyxl")
+        return accounts
+    except Exception as e:
+        logger.error(f"读取 Excel 文件失败: {{e}}", exc_info=True)
+        return accounts
+
+
+def scan_session_files() -> List[str]:
+    """扫描 sessions 目录中的 .session 文件"""
+    session_files = []
+    
+    if not SESSIONS_DIR.exists():
+        return session_files
+    
+    for file_path in SESSIONS_DIR.glob("*.session"):
+        session_files.append(file_path.name)
+    
+    logger.info(f"扫描到 {{len(session_files)}} 个 session 文件")
+    return session_files
+
+
+def get_account_info_via_telethon(phone: str, api_id: Optional[int], api_hash: Optional[str]) -> Dict[str, Any]:
+    """通过 Telethon 获取账号信息"""
+    try:
+        from telethon import TelegramClient
+        from telethon.errors import SessionPasswordNeeded, PhoneCodeInvalid
+        
+        session_file = SESSIONS_DIR / f"{{phone}}.session"
+        if not session_file.exists():
+            return {{"phone": phone, "user_id": None, "username": None, "name": None}}
+        
+        # 使用 Excel 中的 API ID/Hash，如果没有则使用默认值
+        effective_api_id = api_id or (int(DEFAULT_API_ID) if DEFAULT_API_ID.isdigit() else None)
+        effective_api_hash = api_hash or DEFAULT_API_HASH
+        
+        if not effective_api_id or not effective_api_hash:
+            logger.warning(f"账号 {{phone}} 缺少 API_ID 或 API_HASH，跳过 Telethon 查询")
+            return {{"phone": phone, "user_id": None, "username": None, "name": None}}
+        
+        client = TelegramClient(str(session_file), effective_api_id, effective_api_hash)
+        
+        try:
+            client.connect()
+            
+            if not client.is_connected():
+                return {{"phone": phone, "user_id": None, "username": None, "name": None}}
+            
+            me = client.get_me()
+            if me:
+                return {{
+                    "phone": phone,
+                    "user_id": me.id,
+                    "username": me.username or "",
+                    "name": f"{{me.first_name or ''}} {{me.last_name or ''}}".strip() or "",
+                    "status": "online"
+                }}
+        finally:
+            client.disconnect()
+            
+    except ImportError:
+        logger.warning("Telethon 未安装，无法获取账号详细信息")
+    except Exception as e:
+        logger.debug(f"获取账号 {{phone}} 信息失败: {{e}}")
+    
+    return {{"phone": phone, "user_id": None, "username": None, "name": None, "status": "offline"}}
+
+
+def prepare_accounts_for_heartbeat() -> List[Dict[str, Any]]:
+    """准备发送给服务器的账号列表"""
+    accounts_data = []
+    
+    # 从 Excel 加载账号配置
+    excel_accounts = load_accounts_from_excel()
+    
+    # 扫描 session 文件
+    session_files = scan_session_files()
+    
+    # 匹配 Excel 配置和 Session 文件
+    for excel_acc in excel_accounts:
+        phone = excel_acc["phone"]
+        session_file = SESSIONS_DIR / f"{{phone}}.session"
+        
+        if session_file.exists():
+            # 尝试通过 Telethon 获取详细信息
+            account_info = get_account_info_via_telethon(
+                phone,
+                excel_acc.get("api_id"),
+                excel_acc.get("api_hash")
+            )
+            
+            # 合并 Excel 配置和 Telethon 信息
+            account_data = {{
+                "account_id": phone,
+                "phone": phone,
+                "user_id": account_info.get("user_id"),
+                "username": account_info.get("username"),
+                "name": account_info.get("name"),
+                "status": account_info.get("status", "offline"),
+                "api_id": excel_acc.get("api_id"),
+                "api_hash": excel_acc.get("api_hash")[:10] + "..." if excel_acc.get("api_hash") else None,  # 只显示部分
+            }}
+            accounts_data.append(account_data)
+        else:
+            # Session 文件不存在，但仍然添加到列表中（状态为 offline）
+            accounts_data.append({{
+                "account_id": phone,
+                "phone": phone,
+                "status": "offline",
+                "api_id": excel_acc.get("api_id"),
+            }})
+    
+    return accounts_data
+
+
+def send_heartbeat() -> bool:
+    """发送心跳到服务器"""
+    try:
+        accounts = prepare_accounts_for_heartbeat()
+        
+        heartbeat_data = {{
+            "node_id": NODE_ID,
+            "status": "online",
+            "account_count": len(accounts),
+            "accounts": accounts,
+            "metadata": {{
+                "heartbeat_interval": HEARTBEAT_INTERVAL,
+                "sessions_dir": str(SESSIONS_DIR),
+                "timestamp": datetime.now().isoformat()
+            }}
+        }}
+        
+        response = requests.post(
+            f"{{SERVER_URL}}/api/v1/workers/heartbeat",
+            json=heartbeat_data,
+            timeout=10,
+            headers={{'Content-Type': 'application/json'}}
+        )
+        
+        if response.ok:
+            data = response.json()
+            commands = data.get("pending_commands", [])
+            if commands:
+                logger.info(f"收到 {{len(commands)}} 个待执行命令")
+            return True
+        else:
+            logger.warning(f"心跳失败: HTTP {{response.status_code}}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        logger.error(f"发送心跳异常: {{e}}")
+        return False
+    except Exception as e:
+        logger.error(f"准备心跳数据失败: {{e}}", exc_info=True)
+        return False
+
+
+def main():
+    """主函数"""
+    logger.info("=" * 60)
+    logger.info(f"Worker Node: {{NODE_ID}}")
+    logger.info(f"Server: {{SERVER_URL}}")
+    logger.info(f"Sessions Dir: {{SESSIONS_DIR}}")
+    logger.info(f"Heartbeat Interval: {{HEARTBEAT_INTERVAL}}s")
+    logger.info("=" * 60)
+    logger.info("")
+    
+    logger.info("[INIT] 初始化 Worker 节点...")
+    
+    # 检查 Excel 文件
+    if EXCEL_FILE.exists():
+        logger.info(f"[EXCEL] 找到配置文件: {{EXCEL_FILE}}")
+    else:
+        logger.warning(f"[EXCEL] 配置文件不存在: {{EXCEL_FILE}}")
+        logger.info("请创建 Excel 配置文件，包含以下列：api_id, api_hash, phone, enabled")
+    
+    # 扫描 Session 文件
+    session_files = scan_session_files()
+    logger.info(f"[SESSION] 找到 {{len(session_files)}} 个 session 文件")
+    
+    # 心跳循环
+    logger.info("[WORKER] 开始心跳循环...")
+    try:
+        while True:
+            send_heartbeat()
+            time.sleep(HEARTBEAT_INTERVAL)
+    except KeyboardInterrupt:
+        logger.info("[WORKER] 收到中断信号，正在停止...")
+        send_heartbeat()  # 发送最后一次心跳
+    except Exception as e:
+        logger.error(f"[WORKER] 心跳循环异常: {{e}}", exc_info=True)
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+        # 生成 fix_session 脚本
+        fix_session_code = '''#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+修复 Telethon Session 文件版本问题
+使用方法: python fix_session.py [sessions_directory]
+"""
+
+import sys
+import sqlite3
+from pathlib import Path
+
+def fix_session_version(session_file: Path):
+    """修复 session 文件的 version 列问题"""
+    try:
+        conn = sqlite3.connect(str(session_file))
+        cursor = conn.cursor()
+        
+        # 检查表结构
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
+        if not cursor.fetchone():
+            print(f"  {session_file.name}: sessions 表不存在，跳过")
+            conn.close()
+            return False
+        
+        # 检查是否有 version 列
+        cursor.execute("PRAGMA table_info(sessions)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'version' not in columns:
+            print(f"  {session_file.name}: 添加 version 列...")
+            cursor.execute("ALTER TABLE sessions ADD COLUMN version INTEGER DEFAULT 1")
+            conn.commit()
+            print(f"  {session_file.name}: ✅ 已修复")
+        else:
+            print(f"  {session_file.name}: version 列已存在，跳过")
+        
+        conn.close()
+        return True
+        
+    except Exception as e:
+        print(f"  {session_file.name}: ❌ 修复失败: {e}")
+        return False
+
+def main():
+    sessions_dir = Path(sys.argv[1] if len(sys.argv) > 1 else "./sessions")
+    
+    if not sessions_dir.exists():
+        print(f"错误: 目录不存在: {sessions_dir}")
+        sys.exit(1)
+    
+    print(f"扫描目录: {sessions_dir}")
+    session_files = list(sessions_dir.glob("*.session"))
+    
+    if not session_files:
+        print("未找到 .session 文件")
+        sys.exit(0)
+    
+    print(f"找到 {len(session_files)} 个 session 文件")
+    print("")
+    
+    fixed = 0
+    for session_file in session_files:
+        if fix_session_version(session_file):
+            fixed += 1
+    
+    print("")
+    print(f"修复完成: {fixed}/{len(session_files)} 个文件")
+
+if __name__ == "__main__":
+    main()
+'''
+
+        # 生成 create_excel_template 脚本
+        create_excel_template_code = f'''#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+创建 Excel 配置文件模板
+使用方法: python create_excel_template.py
+"""
+
+import sys
+from pathlib import Path
+
+try:
+    import openpyxl
+    from openpyxl import Workbook
+except ImportError:
+    print("错误: openpyxl 未安装")
+    print("安装命令: pip install openpyxl")
+    sys.exit(1)
+
+def main():
+    node_id = "{request.node_id}"
+    excel_file = Path(f"{{node_id}}.xlsx")
+    
+    if excel_file.exists():
+        response = input(f"文件 {{excel_file}} 已存在，是否覆盖？(y/N): ")
+        if response.lower() != 'y':
+            print("已取消")
+            sys.exit(0)
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Accounts"
+    
+    # 写入表头
+    headers = ["api_id", "api_hash", "phone", "enabled"]
+    ws.append(headers)
+    
+    # 写入示例数据（将被用户替换）
+    ws.append(["YOUR_API_ID", "YOUR_API_HASH", "639123456789", "1"])
+    
+    # 保存文件
+    wb.save(excel_file)
+    print(f"✅ Excel 模板已创建: {{excel_file}}")
+    print("")
+    print("请编辑此文件，添加您的账号信息：")
+    print("  - api_id: Telegram API ID（从 my.telegram.org 获取）")
+    print("  - api_hash: Telegram API Hash（从 my.telegram.org 获取）")
+    print("  - phone: 电话号码（必须与 session 文件名匹配）")
+    print("  - enabled: 1=启用，0=禁用")
+    print("")
+    print("注意：Session 文件名必须是 {{phone}}.session 格式")
+
+if __name__ == "__main__":
+    main()
+'''
+
+        return {
+            "success": True,
+            "scripts": {
+                "windows": windows_script,
+                "linux": linux_script,
+                "worker_client": worker_client_code,
+                "fix_session": fix_session_code,
+                "create_excel_template": create_excel_template_code
+            },
+            "message": "部署包生成成功"
+        }
+        
+    except Exception as e:
+        logger.error(f"生成部署包失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"生成部署包失败: {str(e)}"
+        )
+
+
 # ============ Session 管理 API ============
 
 @router.get("/{worker_id}/sessions", response_model=SessionListResponse, status_code=status.HTTP_200_OK)

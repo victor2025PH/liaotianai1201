@@ -28,7 +28,6 @@ jobs:
           debug: true
           envs: GITHUB_REPO=${{ github.repository }},SERVER_HOST=${{ secrets.SERVER_HOST }}
           script: |
-            set -e  # 遇到错误立即退出，但后续会处理
             PROJECT_DIR="/home/ubuntu/telegram-ai-system"
             
             echo "=========================================="
@@ -42,38 +41,35 @@ jobs:
               exit 1
             }
             
-            # 设置 trap 来捕获错误（但不立即退出）
-            trap 'handle_error "脚本执行失败，行号: $LINENO"' ERR
+            # 不在脚本开始时设置 set -e，而是在需要的地方明确处理
             
             # ============ 进入项目目录 ============
             echo "[1/5] 进入项目目录"
-            cd "$PROJECT_DIR"
+            cd "$PROJECT_DIR" || handle_error "无法进入项目目录: $PROJECT_DIR"
             echo "✅ 当前目录: $(pwd)"
             echo ""
             
             # ============ 拉取最新代码 ============
             echo "[2/5] 拉取最新代码"
             # 检查是否有本地更改，如果有则丢弃（使用远程版本）
-            if [ -n "$(git status --porcelain)" ]; then
+            if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
               echo "⚠️  发现本地更改，自动丢弃以使用远程版本..."
-              git checkout -- .
+              git checkout -- . || true
             fi
-            git pull origin main || {
+            if ! git pull origin main; then
               echo "⚠️  git pull 失败，尝试强制重置..."
-              git fetch origin main
-              git reset --hard origin/main
-            }
+              git fetch origin main || handle_error "git fetch 失败"
+              git reset --hard origin/main || handle_error "git reset 失败"
+            fi
             echo "✅ 代码已更新"
             echo "最新提交: $(git log -1 --oneline)"
             echo ""
             
             # ============ 修复文件权限 ============
             echo "[3/5] 修复文件权限"
-            set +e  # 允许命令失败
             sudo chown -R ubuntu:ubuntu "$PROJECT_DIR" || {
               echo "⚠️  文件权限修复失败，继续执行..."
             }
-            set -e  # 恢复错误处理
             echo "✅ 文件权限处理完成"
             echo ""
             
@@ -85,14 +81,13 @@ jobs:
             # 检查并删除 .next/lock 文件（如果存在）
             if [ -f ".next/lock" ]; then
               echo "⚠️  发现锁文件，正在删除..."
-              rm -f .next/lock
+              rm -f .next/lock || true
               echo "✅ 锁文件已删除"
             else
               echo "✅ 无锁文件"
             fi
             
             # 检查是否有正在运行的 next build 进程并终止（静默执行，不报错）
-            set +e  # 允许 pgrep/pkill 失败
             if pgrep -f "next build" > /dev/null 2>&1; then
               echo "⚠️  发现正在运行的构建进程，正在终止..."
               pkill -f "next build" 2>/dev/null || true
@@ -101,16 +96,15 @@ jobs:
             else
               echo "✅ 无运行中的构建进程"
             fi
-            set -e  # 恢复错误处理
             echo ""
             
             echo "安装前端依赖..."
-            npm install --prefer-offline --no-audit --no-fund
+            npm install --prefer-offline --no-audit --no-fund || handle_error "npm install 失败"
             
             echo "构建前端项目..."
             export NODE_ENV=production
             export NODE_OPTIONS="--max-old-space-size=4096"
-            npm run build
+            npm run build || handle_error "npm run build 失败"
             
             echo "正在处理 Standalone 静态资源..."
             
@@ -141,18 +135,18 @@ jobs:
             
             # ============ 安装后端依赖 ============
             echo "[4.5/5] 安装后端依赖"
-            cd admin-backend
-            source venv/bin/activate
-            pip install -r requirements.txt --quiet
-            cd ..
+            cd admin-backend || handle_error "无法进入 admin-backend 目录"
+            source venv/bin/activate || handle_error "无法激活虚拟环境"
+            pip install -r requirements.txt --quiet || handle_error "pip install 失败"
+            cd .. || handle_error "无法返回项目根目录"
             echo "✅ 后端依赖安装完成"
             echo ""
             
             # ============ 重启服务 ============
             echo "[5/5] 重启服务"
-            sudo systemctl restart luckyred-api
-            sudo systemctl restart liaotian-frontend
-            sudo systemctl restart nginx
+            sudo systemctl restart luckyred-api || echo "⚠️  luckyred-api 重启失败，继续执行..."
+            sudo systemctl restart liaotian-frontend || handle_error "liaotian-frontend 重启失败"
+            sudo systemctl restart nginx || handle_error "nginx 重启失败"
             
             echo ""
             echo "等待服务启动 (20秒)..."

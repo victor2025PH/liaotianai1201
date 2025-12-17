@@ -75,22 +75,25 @@ jobs:
             
             # ============ 构建前端 ============
             echo "[4/5] 构建前端"
-            cd saas-demo
+            cd saas-demo || handle_error "无法进入 saas-demo 目录"
+            echo "✅ 当前目录: $(pwd)"
             
             echo "清理构建锁文件和残留进程..."
             # 检查并删除 .next/lock 文件（如果存在）
             if [ -f ".next/lock" ]; then
               echo "⚠️  发现锁文件，正在删除..."
-              rm -f .next/lock || true
+              rm -f .next/lock || echo "⚠️  删除锁文件失败，继续执行..."
               echo "✅ 锁文件已删除"
             else
               echo "✅ 无锁文件"
             fi
             
             # 检查是否有正在运行的 next build 进程并终止（静默执行，不报错）
-            if pgrep -f "next build" > /dev/null 2>&1; then
+            # 使用 pgrep 检查，如果命令失败（找不到进程）返回码是1，这是正常的
+            pgrep_output=$(pgrep -f "next build" 2>&1) || pgrep_exit=$?
+            if [ ${pgrep_exit:-0} -eq 0 ] && [ -n "$pgrep_output" ]; then
               echo "⚠️  发现正在运行的构建进程，正在终止..."
-              pkill -f "next build" 2>/dev/null || true
+              pkill -f "next build" 2>/dev/null || echo "⚠️  终止进程失败，继续执行..."
               sleep 2
               echo "✅ 构建进程已终止"
             else

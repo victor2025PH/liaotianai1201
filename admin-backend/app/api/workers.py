@@ -215,6 +215,8 @@ def _get_all_workers() -> Dict[str, Dict[str, Any]]:
                 if status_data:
                     # 检查心跳是否超时
                     last_heartbeat_str = status_data.get("last_heartbeat")
+                    original_status = status_data.get("status", "offline")  # 保存原始状态
+                    
                     if last_heartbeat_str:
                         try:
                             last_heartbeat = datetime.fromisoformat(last_heartbeat_str.replace('Z', '+00:00'))
@@ -224,10 +226,13 @@ def _get_all_workers() -> Dict[str, Dict[str, Any]]:
                             
                             time_since_heartbeat = (datetime.now().astimezone() - last_heartbeat).total_seconds()
                             
-                            # 如果心跳超时，标记为离线
+                            # 如果心跳超时，标记为离线（覆盖原始状态）
                             if time_since_heartbeat > HEARTBEAT_TIMEOUT_SECONDS:
                                 status_data["status"] = "offline"
                                 logger.debug(f"节点 {node_id} 心跳超时 ({time_since_heartbeat:.0f}秒)，标记为离线")
+                            else:
+                                # 心跳未超时，使用原始状态（可能是 "online"）
+                                status_data["status"] = original_status if original_status else "online"
                         except (ValueError, TypeError) as e:
                             logger.warning(f"解析节点 {node_id} 心跳时间失败: {e}")
                             status_data["status"] = "offline"
@@ -381,7 +386,7 @@ async def worker_heartbeat(
     try:
         worker_data = {
             "node_id": request.node_id,
-            "status": request.status,
+            "status": request.status or "online",  # 如果未提供状态，默认为 online
             "account_count": request.account_count,
             "accounts": request.accounts,
             "metadata": request.metadata or {},

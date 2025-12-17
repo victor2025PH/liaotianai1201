@@ -74,15 +74,8 @@ jobs:
             
             # 切换到 ubuntu 用户执行 PM2 命令
             # 注意：PM2 需要以运行服务的用户身份执行
-            sudo -u ubuntu bash << 'PM2_RESTART'
-            cd /home/ubuntu/telegram-ai-system
-            
-            # 重新加载 PM2 配置（如果 ecosystem.config.js 有变化）
-            pm2 reload ecosystem.config.js || pm2 restart ecosystem.config.js
-            
-            # 保存 PM2 进程列表
-            pm2 save
-PM2_RESTART
+            sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 reload ecosystem.config.js || pm2 restart ecosystem.config.js"
+            sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 save"
             
             # 等待服务启动
             sleep 5

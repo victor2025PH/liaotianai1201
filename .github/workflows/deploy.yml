@@ -47,12 +47,13 @@ jobs:
             echo "📦 构建前端..."
             cd saas-demo
             
-            # 暴力清理 (不管有没有，删了再说)
-            rm -f .next/lock
-            # 暴力杀进程 (如果杀不到，忽略错误)
-            pkill -f "next build" || true
+            # 1. 先停止服务以释放内存 (替代 pkill)
+            sudo systemctl stop liaotian-frontend || true
             
-            # 安装与构建
+            # 2. 清理锁文件
+            rm -f .next/lock
+            
+            # 3. 安装与构建
             npm install --prefer-offline --no-audit
             npm run build
             

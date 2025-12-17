@@ -722,52 +722,130 @@ async def generate_deploy_package(
         windows_script = f"""@echo off
 setlocal enabledelayedexpansion
 
+REM ========================================
+REM Worker Node Auto Deployment Script
+REM Node ID: {request.node_id}
+REM ========================================
+
 REM Change to script directory
 cd /d "%~dp0"
 
-REM Check Python
+echo.
+echo ========================================
+echo Environment Check and Setup
+echo ========================================
+echo.
+
+REM Step 1: Check Python
+echo [1/4] Checking Python installation...
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Python not found, please install Python 3.9+
+    echo [ERROR] Python not found!
+    echo.
+    echo Please install Python 3.9 or higher:
+    echo   1. Download from https://www.python.org/downloads/
+    echo   2. During installation, check "Add Python to PATH"
+    echo   3. Restart this script after installation
+    echo.
     pause
     exit /b 1
 )
 
-REM Check dependencies
-echo [1/3] Checking dependencies...
-python -c "import telethon; import requests; import openpyxl; print('OK')" >nul 2>&1
+for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
+echo [OK] Python found: %%PYTHON_VERSION%%
+
+REM Step 2: Check and upgrade pip
+echo.
+echo [2/4] Checking pip...
+python -m pip --version >nul 2>&1
 if errorlevel 1 (
-    echo [INSTALL] Dependencies missing, installing...
-    echo [INFO] Installing telethon, requests, openpyxl...
-    python -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple >nul 2>&1
+    echo [WARN] pip not found, installing...
+    python -m ensurepip --upgrade
+    if errorlevel 1 (
+        echo [ERROR] Failed to install pip
+        pause
+        exit /b 1
+    )
+)
+
+echo [OK] pip is available
+echo [INFO] Upgrading pip to latest version...
+python -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple >nul 2>&1
+if errorlevel 1 (
+    python -m pip install --upgrade pip >nul 2>&1
+)
+
+REM Step 3: Check and install dependencies
+echo.
+echo [3/4] Checking Python dependencies...
+set MISSING_DEPS=0
+
+python -c "import telethon" >nul 2>&1
+if errorlevel 1 (
+    echo [MISSING] telethon
+    set MISSING_DEPS=1
+) else (
+    for /f "tokens=*" %%v in ('python -c "import telethon; print(telethon.__version__)" 2^>nul') do echo [OK] telethon: %%v
+)
+
+python -c "import requests" >nul 2>&1
+if errorlevel 1 (
+    echo [MISSING] requests
+    set MISSING_DEPS=1
+) else (
+    for /f "tokens=*" %%v in ('python -c "import requests; print(requests.__version__)" 2^>nul') do echo [OK] requests: %%v
+)
+
+python -c "import openpyxl" >nul 2>&1
+if errorlevel 1 (
+    echo [MISSING] openpyxl
+    set MISSING_DEPS=1
+) else (
+    for /f "tokens=*" %%v in ('python -c "import openpyxl; print(openpyxl.__version__)" 2^>nul') do echo [OK] openpyxl: %%v
+)
+
+if !MISSING_DEPS!==1 (
+    echo.
+    echo [INSTALL] Installing missing dependencies...
+    echo [INFO] Using Tsinghua mirror source (faster in China)...
     python -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple
     if errorlevel 1 (
         echo [WARN] Mirror source failed, trying default source...
         python -m pip install telethon requests openpyxl --upgrade
         if errorlevel 1 (
             echo [ERROR] Failed to install dependencies
+            echo.
+            echo Troubleshooting:
+            echo   1. Check your internet connection
+            echo   2. Try: python -m pip install telethon requests openpyxl --upgrade
+            echo   3. Check firewall/antivirus settings
+            echo.
             pause
             exit /b 1
         )
     )
-    echo [INFO] Verifying installation...
-    python -c "import telethon; print('Telethon OK')" || (
-        echo [ERROR] Telethon installation verification failed
+    
+    echo.
+    echo [VERIFY] Verifying installation...
+    python -c "import telethon; import requests; import openpyxl; print('All dependencies OK')" || (
+        echo [ERROR] Dependency verification failed
         pause
         exit /b 1
     )
-    echo [SUCCESS] Dependencies installed successfully
+    echo [SUCCESS] All dependencies installed successfully
 ) else (
-    echo [INFO] Verifying all dependencies...
-    python -c "import telethon; print('Telethon:', telethon.__version__)" 2>nul || (
-        echo [WARN] Telethon import failed, reinstalling...
-        python -m pip install telethon --upgrade -i https://pypi.tuna.tsinghua.edu.cn/simple || python -m pip install telethon --upgrade
+    REM Verify all dependencies can be imported
+    python -c "import telethon; import requests; import openpyxl; print('OK')" >nul 2>&1
+    if errorlevel 1 (
+        echo [WARN] Some dependencies cannot be imported, reinstalling...
+        python -m pip install telethon requests openpyxl --upgrade --force-reinstall
     )
-    python -c "import requests; print('Requests:', requests.__version__)" 2>nul || python -m pip install requests --upgrade
-    python -c "import openpyxl; print('OpenPyXL:', openpyxl.__version__)" 2>nul || python -m pip install openpyxl --upgrade
-    echo [SUCCESS] All dependencies are available
+    echo [OK] All dependencies are available
 )
 
+REM Step 4: Setup environment
+echo.
+echo [4/4] Setting up environment...
 REM Set environment variables
 set "NODE_ID={request.node_id}"
 set "SERVER_URL={request.server_url}"
@@ -775,15 +853,43 @@ set "HEARTBEAT_INTERVAL={request.heartbeat_interval}"
 set "SESSIONS_DIR=%~dp0sessions"
 
 REM Create sessions directory if not exists
-if not exist "!SESSIONS_DIR!" mkdir "!SESSIONS_DIR!"
+if not exist "!SESSIONS_DIR!" (
+    mkdir "!SESSIONS_DIR!"
+    echo [OK] Created sessions directory
+) else (
+    echo [OK] Sessions directory exists
+)
 
-echo [2/3] Starting Worker Node...
+echo.
+echo ========================================
+echo Starting Worker Node
+echo ========================================
 echo Node ID: !NODE_ID!
 echo Server: !SERVER_URL!
+echo Sessions Dir: !SESSIONS_DIR!
 echo.
 
-REM Run Python script
-python worker_client.py
+# Set environment variables
+export NODE_ID="{request.node_id}"
+export SERVER_URL="{request.server_url}"
+export HEARTBEAT_INTERVAL="{request.heartbeat_interval}"
+export SESSIONS_DIR="$(pwd)/sessions"
+
+# Ensure sessions directory exists
+mkdir -p "$SESSIONS_DIR"
+echo "[OK] Sessions directory ready: $SESSIONS_DIR"
+
+echo ""
+echo "========================================"
+echo "Starting Worker Node"
+echo "========================================"
+echo "Node ID: $NODE_ID"
+echo "Server: $SERVER_URL"
+echo "Sessions Dir: $SESSIONS_DIR"
+echo ""
+
+# Run Python script
+python3 worker_client.py
 
 if errorlevel 1 (
     echo.
@@ -798,50 +904,115 @@ set -e
 
 cd "$(dirname "$0")"
 
+echo ""
 echo "========================================"
 echo "Worker Node Auto Deploy"
 echo "Node ID: {request.node_id}"
 echo "========================================"
 echo ""
 
-# 检查 Python
+# Step 1: Check Python
+echo "[1/4] Checking Python installation..."
 if ! command -v python3 &> /dev/null; then
-    echo "[错误] 未找到 Python3，请先安装 Python 3.9+"
+    echo "[ERROR] Python3 not found!"
+    echo ""
+    echo "Please install Python 3.9 or higher:"
+    echo "  Ubuntu/Debian: sudo apt-get install python3 python3-pip"
+    echo "  CentOS/RHEL: sudo yum install python3 python3-pip"
+    echo "  macOS: brew install python3"
+    echo ""
     exit 1
 fi
 
-# 检查依赖
-echo "[1/3] 检查依赖..."
-python3 -c "import telethon; import requests; import openpyxl; print('OK')" 2>/dev/null
-if [ $? -ne 0 ]; then
-    echo "[安装] 依赖缺失，正在安装依赖包..."
-    echo "[INFO] 安装 telethon, requests, openpyxl..."
-    python3 -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple 2>/dev/null
+PYTHON_VERSION=$(python3 --version 2>&1 | awk '{{print $2}}')
+echo "[OK] Python found: $PYTHON_VERSION"
+
+# Check Python version (need 3.9+)
+PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
+PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
+if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 9 ]); then
+    echo "[ERROR] Python 3.9+ required, found: $PYTHON_VERSION"
+    exit 1
+fi
+
+# Step 2: Check and upgrade pip
+echo ""
+echo "[2/4] Checking pip..."
+if ! command -v pip3 &> /dev/null && ! python3 -m pip --version &> /dev/null; then
+    echo "[WARN] pip not found, installing..."
+    python3 -m ensurepip --upgrade
+    if [ $? -ne 0 ]; then
+        echo "[ERROR] Failed to install pip"
+        echo "Please install pip manually: sudo apt-get install python3-pip"
+        exit 1
+    fi
+fi
+
+echo "[OK] pip is available"
+echo "[INFO] Upgrading pip to latest version..."
+python3 -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple &>/dev/null || python3 -m pip install --upgrade pip &>/dev/null
+
+# Step 3: Check and install dependencies
+echo ""
+echo "[3/4] Checking Python dependencies..."
+MISSING_DEPS=0
+
+check_dependency() {{
+    local pkg=$1
+    if python3 -c "import $pkg" &>/dev/null; then
+        local version=$(python3 -c "import $pkg; print($pkg.__version__)" 2>/dev/null || echo "unknown")
+        echo "[OK] $pkg: $version"
+        return 0
+    else
+        echo "[MISSING] $pkg"
+        MISSING_DEPS=1
+        return 1
+    fi
+}}
+
+check_dependency telethon
+check_dependency requests
+check_dependency openpyxl
+
+if [ $MISSING_DEPS -eq 1 ]; then
+    echo ""
+    echo "[INSTALL] Installing missing dependencies..."
+    echo "[INFO] Using Tsinghua mirror source (faster in China)..."
     python3 -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple
     if [ $? -ne 0 ]; then
-        echo "[WARN] 镜像源安装失败，尝试使用默认源..."
+        echo "[WARN] Mirror source failed, trying default source..."
         python3 -m pip install telethon requests openpyxl --upgrade
         if [ $? -ne 0 ]; then
-            echo "[ERROR] 依赖安装失败"
+            echo "[ERROR] Failed to install dependencies"
+            echo ""
+            echo "Troubleshooting:"
+            echo "  1. Check your internet connection"
+            echo "  2. Try: python3 -m pip install telethon requests openpyxl --upgrade"
+            echo "  3. Check firewall/proxy settings"
             exit 1
         fi
     fi
-    echo "[INFO] 验证安装..."
-    python3 -c "import telethon; print('Telethon OK')" || {{
-        echo "[ERROR] Telethon 安装验证失败"
+    
+    echo ""
+    echo "[VERIFY] Verifying installation..."
+    python3 -c "import telethon; import requests; import openpyxl; print('All dependencies OK')" || {{
+        echo "[ERROR] Dependency verification failed"
         exit 1
     }}
-    echo "[SUCCESS] 依赖包安装完成"
+    echo "[SUCCESS] All dependencies installed successfully"
 else
-    echo "[INFO] 验证所有依赖..."
-    python3 -c "import telethon; print('Telethon:', telethon.__version__)" 2>/dev/null || {{
-        echo "[WARN] Telethon 导入失败，重新安装..."
-        python3 -m pip install telethon --upgrade -i https://pypi.tuna.tsinghua.edu.cn/simple || python3 -m pip install telethon --upgrade
-    }}
-    python3 -c "import requests; print('Requests:', requests.__version__)" 2>/dev/null || python3 -m pip install requests --upgrade
-    python3 -c "import openpyxl; print('OpenPyXL:', openpyxl.__version__)" 2>/dev/null || python3 -m pip install openpyxl --upgrade
-    echo "[SUCCESS] 所有依赖可用"
+    # Verify all dependencies can be imported
+    python3 -c "import telethon; import requests; import openpyxl; print('OK')" &>/dev/null
+    if [ $? -ne 0 ]; then
+        echo "[WARN] Some dependencies cannot be imported, reinstalling..."
+        python3 -m pip install telethon requests openpyxl --upgrade --force-reinstall
+    fi
+    echo "[OK] All dependencies are available"
 fi
+
+# Step 4: Setup environment
+echo ""
+echo "[4/4] Setting up environment..."
 
 # 设置环境变量
 export NODE_ID="{request.node_id}"

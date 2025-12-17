@@ -738,12 +738,21 @@ echo [1/3] Checking dependencies...
 python -c "import telethon, requests, openpyxl" >nul 2>&1
 if errorlevel 1 (
     echo [INSTALL] Installing dependencies...
+    echo [INFO] Installing telethon, requests, openpyxl...
     python -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple
     if errorlevel 1 (
         echo [ERROR] Failed to install dependencies
-        pause
-        exit /b 1
+        echo [INFO] Trying alternative installation method...
+        python -m pip install telethon requests openpyxl --upgrade
+        if errorlevel 1 (
+            echo [ERROR] Failed to install dependencies
+            pause
+            exit /b 1
+        )
     )
+    echo [SUCCESS] Dependencies installed successfully
+) else (
+    echo [SUCCESS] All dependencies are already installed
 )
 
 REM Set environment variables
@@ -792,7 +801,12 @@ fi
 echo "[1/3] 检查依赖..."
 python3 -c "import telethon, requests, openpyxl" 2>/dev/null || {{
     echo "[安装] 正在安装依赖包..."
-    python3 -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple
+    echo "[INFO] 安装 telethon, requests, openpyxl..."
+    python3 -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple || {{
+        echo "[WARN] 使用镜像源安装失败，尝试使用默认源..."
+        python3 -m pip install telethon requests openpyxl --upgrade
+    }}
+    echo "[SUCCESS] 依赖包安装完成"
 }}
 
 # 设置环境变量

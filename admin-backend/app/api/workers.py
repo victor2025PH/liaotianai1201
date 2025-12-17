@@ -865,8 +865,14 @@ def find_excel_file() -> Optional[Path]:
         logger.info(f"[EXCEL] 在当前目录找到: {{excel_file}}")
         return excel_file
     
-    # 2. 脚本所在目录
-    script_dir = Path(__file__).parent if '__file__' in globals() else Path.cwd()
+    # 2. 脚本所在目录（worker_client.py 所在目录）
+    # 使用 sys.argv[0] 获取脚本路径
+    import sys
+    if len(sys.argv) > 0 and sys.argv[0]:
+        script_path = Path(sys.argv[0]).resolve()
+        script_dir = script_path.parent
+    else:
+        script_dir = Path.cwd()
     excel_file = script_dir / excel_name
     if excel_file.exists():
         logger.info(f"[EXCEL] 在脚本目录找到: {{excel_file}}")

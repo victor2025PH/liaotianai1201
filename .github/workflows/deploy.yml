@@ -43,7 +43,16 @@ jobs:
             
             # ============ 拉取最新代码 ============
             echo "[2/5] 拉取最新代码"
-            git pull origin main
+            # 检查是否有本地更改，如果有则丢弃（使用远程版本）
+            if [ -n "$(git status --porcelain)" ]; then
+              echo "⚠️  发现本地更改，自动丢弃以使用远程版本..."
+              git checkout -- .
+            fi
+            git pull origin main || {
+              echo "⚠️  git pull 失败，尝试强制重置..."
+              git fetch origin main
+              git reset --hard origin/main
+            }
             echo "✅ 代码已更新"
             echo "最新提交: $(git log -1 --oneline)"
             echo ""

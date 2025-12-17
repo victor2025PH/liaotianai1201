@@ -97,6 +97,30 @@ server {
     # 客户端最大请求体大小
     client_max_body_size 100M;
 
+    # WebSocket 支持 - 通知服务（必须在 /api/ 之前，优先级更高）
+    location /api/v1/notifications/ws {
+        proxy_pass http://backend/api/v1/notifications/ws;
+        proxy_http_version 1.1;
+        
+        # WebSocket 升级头（必需）
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # 标准请求头
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        # WebSocket 需要更长的超时时间
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 86400s;
+        proxy_read_timeout 86400s;
+        
+        # 禁用缓冲（WebSocket 必需）
+        proxy_buffering off;
+    }
+
     # 后端 API
     location /api/ {
         proxy_pass http://backend;

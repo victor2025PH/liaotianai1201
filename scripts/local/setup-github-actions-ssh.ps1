@@ -59,7 +59,7 @@ if (-not (Test-Path $privateKeyPath)) {
     }
     
     # 生成密钥（使用 ssh-keygen）
-    ssh-keygen -t rsa -b 4096 -f $privateKeyPath -N '""' -C "github-actions-deploy"
+    ssh-keygen -t rsa -b 4096 -f $privateKeyPath -N '""' -C "github-actions-deploy" 2>&1 | Out-Null
     
     if ($LASTEXITCODE -eq 0) {
         Write-Success "SSH 密钥生成成功"
@@ -92,14 +92,18 @@ if ($copyKey -eq "n" -or $copyKey -eq "N") {
     Write-Info "正在尝试将公钥添加到服务器..."
     Write-Info "可能需要输入服务器密码..."
     
-    # 尝试使用 ssh-copy-id
-    $sshCopyCmd = "type $publicKeyPath | ssh ${ServerUser}@${ServerIP} `"mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`""
+    # 尝试使用 PowerShell 方式添加公钥
+    $publicKeyContent = Get-Content $publicKeyPath -Raw
+    $remoteCommand = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$($publicKeyContent.Trim())' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
     
-    Invoke-Expression $sshCopyCmd
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-Success "公钥已成功添加到服务器"
-    } else {
+    try {
+        $result = ssh "${ServerUser}@${ServerIP}" $remoteCommand 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Success "公钥已成功添加到服务器"
+        } else {
+            throw "SSH 命令执行失败"
+        }
+    } catch {
         Write-Error "自动添加公钥失败"
         Write-Host "`n请手动执行以下步骤：" -ForegroundColor Yellow
         Write-Host "1. 复制上面的公钥内容" -ForegroundColor Gray
@@ -117,8 +121,8 @@ if ($copyKey -eq "n" -or $copyKey -eq "N") {
 Write-Step "步骤 5: 测试 SSH 连接"
 Write-Info "测试 SSH 密钥认证..."
 
-$testCmd = "ssh -i $privateKeyPath -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${ServerUser}@${ServerIP} `"echo 'SSH 连接成功！'`""
-$testResult = Invoke-Expression $testCmd 2>&1
+$testCmd = "echo 'SSH 连接成功！'"
+$testResult = ssh -i $privateKeyPath -o StrictHostKeyChecking=no -o ConnectTimeout=10 "${ServerUser}@${ServerIP}" $testCmd 2>&1
 
 if ($LASTEXITCODE -eq 0) {
     Write-Success "SSH 连接测试成功！"

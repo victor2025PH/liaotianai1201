@@ -26,10 +26,6 @@ jobs:
           command_timeout: 55m
           script_stop: true
           debug: true
-          # SSH 连接选项（增加超时和重试）
-          ssh_options: StrictHostKeyChecking=no,ConnectTimeout=60,ServerAliveInterval=30,ServerAliveCountMax=3
-          retry: 3
-          retry_interval: 10s
           envs: GITHUB_REPO=${{ github.repository }},SERVER_HOST=${{ secrets.SERVER_HOST }}
           script: |
             # 遇到任何命令错误(非逻辑判断)则退出
@@ -54,15 +50,22 @@ jobs:
             # 1. 清理锁文件（不停止服务，减少中断时间）
             rm -f .next/lock
             
-            # 2. 检查内存
-            echo "检查可用内存..."
+            # 2. 检查内存和 Swap
+            echo "检查系统资源..."
             free -h || true
+            echo ""
+            echo "启用 Swap（如果未启用）..."
+            sudo swapon /swapfile 2>/dev/null || echo "Swap 已启用或文件不存在"
+            free -h || true
+            echo ""
             
             # 3. 安装与构建（在服务运行的情况下构建）
-            # 使用 NODE_OPTIONS 限制 Node.js 内存使用
-            export NODE_OPTIONS="--max-old-space-size=1024"
+            # 使用 NODE_OPTIONS 限制 Node.js 内存使用（512MB，更保守）
+            export NODE_OPTIONS="--max-old-space-size=512"
             npm install --prefer-offline --no-audit
-            npm run build
+            
+            # 构建时也限制内存
+            NODE_OPTIONS="--max-old-space-size=512" npm run build
             
             # 暴力复制静态资源 (Standalone 补丁)
             echo "📂 处理静态资源..."

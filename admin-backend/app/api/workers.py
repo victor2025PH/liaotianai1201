@@ -785,7 +785,10 @@ if errorlevel 1 (
     echo [MISSING] telethon
     set MISSING_DEPS=1
 ) else (
-    for /f "tokens=*" %%v in ('python -c "import telethon; print(telethon.__version__)" 2^>nul') do echo [OK] telethon: %%v
+    python -c "import telethon; print('telethon:', telethon.__version__)" 2>nul
+    if errorlevel 1 (
+        echo [OK] telethon: installed
+    )
 )
 
 python -c "import requests" >nul 2>&1
@@ -793,7 +796,10 @@ if errorlevel 1 (
     echo [MISSING] requests
     set MISSING_DEPS=1
 ) else (
-    for /f "tokens=*" %%v in ('python -c "import requests; print(requests.__version__)" 2^>nul') do echo [OK] requests: %%v
+    python -c "import requests; print('requests:', requests.__version__)" 2>nul
+    if errorlevel 1 (
+        echo [OK] requests: installed
+    )
 )
 
 python -c "import openpyxl" >nul 2>&1
@@ -801,7 +807,10 @@ if errorlevel 1 (
     echo [MISSING] openpyxl
     set MISSING_DEPS=1
 ) else (
-    for /f "tokens=*" %%v in ('python -c "import openpyxl; print(openpyxl.__version__)" 2^>nul') do echo [OK] openpyxl: %%v
+    python -c "import openpyxl; print('openpyxl:', openpyxl.__version__)" 2>nul
+    if errorlevel 1 (
+        echo [OK] openpyxl: installed
+    )
 )
 
 if !MISSING_DEPS!==1 (
@@ -827,18 +836,30 @@ if !MISSING_DEPS!==1 (
     
     echo.
     echo [VERIFY] Verifying installation...
-    python -c "import telethon; import requests; import openpyxl; print('All dependencies OK')" || (
+    python -c "import telethon; import requests; import openpyxl; print('All dependencies OK')" 2>nul
+    if errorlevel 1 (
         echo [ERROR] Dependency verification failed
-        pause
-        exit /b 1
+        echo [INFO] Trying to reinstall...
+        python -m pip install telethon requests openpyxl --upgrade --force-reinstall
+        if errorlevel 1 (
+            echo [ERROR] Reinstallation failed
+            pause
+            exit /b 1
+        )
+    ) else (
+        echo [SUCCESS] All dependencies installed successfully
     )
-    echo [SUCCESS] All dependencies installed successfully
 ) else (
     REM Verify all dependencies can be imported
     python -c "import telethon; import requests; import openpyxl; print('OK')" >nul 2>&1
     if errorlevel 1 (
         echo [WARN] Some dependencies cannot be imported, reinstalling...
         python -m pip install telethon requests openpyxl --upgrade --force-reinstall
+        if errorlevel 1 (
+            echo [ERROR] Reinstallation failed
+            pause
+            exit /b 1
+        )
     )
     echo [OK] All dependencies are available
 )
@@ -869,27 +890,8 @@ echo Server: !SERVER_URL!
 echo Sessions Dir: !SESSIONS_DIR!
 echo.
 
-# Set environment variables
-export NODE_ID="{request.node_id}"
-export SERVER_URL="{request.server_url}"
-export HEARTBEAT_INTERVAL="{request.heartbeat_interval}"
-export SESSIONS_DIR="$(pwd)/sessions"
-
-# Ensure sessions directory exists
-mkdir -p "$SESSIONS_DIR"
-echo "[OK] Sessions directory ready: $SESSIONS_DIR"
-
-echo ""
-echo "========================================"
-echo "Starting Worker Node"
-echo "========================================"
-echo "Node ID: $NODE_ID"
-echo "Server: $SERVER_URL"
-echo "Sessions Dir: $SESSIONS_DIR"
-echo ""
-
-# Run Python script
-python3 worker_client.py
+REM Run Python script
+python worker_client.py
 
 if errorlevel 1 (
     echo.

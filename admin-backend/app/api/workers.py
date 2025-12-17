@@ -866,13 +866,21 @@ def find_excel_file() -> Optional[Path]:
         return excel_file
     
     # 2. 脚本所在目录（worker_client.py 所在目录）
-    # 使用 sys.argv[0] 获取脚本路径
-    import sys
-    if len(sys.argv) > 0 and sys.argv[0]:
-        script_path = Path(sys.argv[0]).resolve()
-        script_dir = script_path.parent
-    else:
-        script_dir = Path.cwd()
+    # 使用 __file__ 获取脚本路径（更可靠）
+    try:
+        # 尝试使用 __file__（如果在 worker_client.py 中运行）
+        script_dir = Path(__file__).resolve().parent
+    except NameError:
+        # 如果 __file__ 不存在，使用 sys.argv[0]
+        import sys
+        if len(sys.argv) > 0 and sys.argv[0]:
+            script_path = Path(sys.argv[0])
+            # 如果路径不是绝对路径，转换为绝对路径
+            if not script_path.is_absolute():
+                script_path = Path.cwd() / script_path
+            script_dir = script_path.resolve().parent
+        else:
+            script_dir = Path.cwd()
     excel_file = script_dir / excel_name
     if excel_file.exists():
         logger.info(f"[EXCEL] 在脚本目录找到: {{excel_file}}")
@@ -899,12 +907,26 @@ def find_excel_file() -> Optional[Path]:
         logger.info(f"[EXCEL] 在 sessions 目录找到: {{excel_file}}")
         return excel_file
     
-    # 未找到
+    # 未找到 - 输出详细的调试信息
     logger.warning(f"[EXCEL] 未找到配置文件，查找了以下位置：")
-    logger.warning(f"  - {{current_dir / excel_name}}")
-    logger.warning(f"  - {{script_dir / excel_name}}")
-    logger.warning(f"  - {{SESSIONS_DIR.parent / excel_name}}")
-    logger.warning(f"  - {{SESSIONS_DIR / excel_name}}")
+    logger.warning(f"  1. 当前工作目录: {{current_dir / excel_name}}")
+    logger.warning(f"  2. 脚本所在目录: {{script_dir / excel_name}}")
+    logger.warning(f"  3. sessions 父目录: {{SESSIONS_DIR.parent / excel_name}}")
+    logger.warning(f"  4. sessions 目录: {{SESSIONS_DIR / excel_name}}")
+    logger.warning(f"[DEBUG] 当前工作目录: {{Path.cwd()}}")
+    logger.warning(f"[DEBUG] 脚本目录: {{script_dir}}")
+    logger.warning(f"[DEBUG] sessions 目录: {{SESSIONS_DIR}}")
+    logger.warning(f"[DEBUG] Excel 文件名: {{excel_name}}")
+    logger.warning(f"[DEBUG] NODE_ID: {{NODE_ID}}")
+    
+    # 额外尝试：列出脚本目录中的所有 .xlsx 文件
+    try:
+        xlsx_files = list(script_dir.glob("*.xlsx"))
+        if xlsx_files:
+            logger.info(f"[DEBUG] 脚本目录中的 Excel 文件: {{[f.name for f in xlsx_files]}}")
+    except Exception:
+        pass
+    
     return None
 
 # Excel 配置文件

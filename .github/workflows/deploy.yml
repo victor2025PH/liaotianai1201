@@ -365,8 +365,9 @@ jobs:
             for i in 1 2 3; do
                 echo "  第 $i 次检查..."
                 if [ "$PORT_3000_CLEAN" = "false" ]; then
-                    # 检查端口是否被占用（使用 || true 防止命令失败）
-                    PORT_3000_CHECK=$(sudo lsof -i:3000 >/dev/null 2>&1; echo $?)
+                    # 检查端口是否被占用（使用更安全的方式）
+                    PORT_3000_CHECK=1
+                    sudo lsof -i:3000 >/dev/null 2>&1 && PORT_3000_CHECK=0 || PORT_3000_CHECK=1
                     if [ "$PORT_3000_CHECK" = "0" ]; then
                         echo "⚠️  端口 3000 仍被占用（重试 $i/3），再次清理..."
                         sudo lsof -i:3000 | head -5 || true

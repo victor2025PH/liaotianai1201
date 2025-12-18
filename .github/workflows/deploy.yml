@@ -520,16 +520,20 @@ jobs:
                     return 1
                 fi
                 
-                # 提取该服务的完整 JSON 对象（简化方法：查找包含 name 和 status 的片段）
-                # 使用更宽松的匹配模式，因为 JSON 可能有空格和换行
-                SERVICE_JSON_FRAGMENT=$(echo "$PM2_JSON" | grep -o "{[^}]*\"name\":\"$service_name\"[^}]*\"status\":\"[^\"]*\"[^}]*}" | head -1 || echo "")
+                # 提取 status 字段值
+                # PM2 JSON 格式：{"name":"service_name",...,"pm2_env":{"status":"online",...},...}
+                # 使用 sed 提取 status 值（查找 name 后的第一个 status 字段）
+                SERVICE_STATUS=$(echo "$PM2_JSON" | sed -n "s/.*\"name\":\"$service_name\"[^}]*\"pm2_env\":{[^}]*\"status\":\"\([^\"]*\)\".*/\1/p" | head -1)
                 
-                # 从片段中提取 status 值
-                if [ -n "$SERVICE_JSON_FRAGMENT" ]; then
-                    SERVICE_STATUS=$(echo "$SERVICE_JSON_FRAGMENT" | grep -o "\"status\":\"[^\"]*\"" | cut -d'"' -f4 || echo "未知")
-                else
-                    # 备用方法：直接在整个 JSON 中查找
-                    SERVICE_STATUS=$(echo "$PM2_JSON" | sed -n "s/.*\"name\":\"$service_name\"[^}]*\"status\":\"\([^\"]*\)\".*/\1/p" | head -1 || echo "未知")
+                # 如果上面的方法失败，尝试更宽松的匹配（不依赖 pm2_env 结构）
+                if [ -z "$SERVICE_STATUS" ]; then
+                    # 查找 name 后的任何 status 字段
+                    SERVICE_STATUS=$(echo "$PM2_JSON" | sed -n "s/.*\"name\":\"$service_name\"[^{]*{[^}]*\"status\":\"\([^\"]*\)\".*/\1/p" | head -1)
+                fi
+                
+                # 如果还是找不到，设为未知
+                if [ -z "$SERVICE_STATUS" ]; then
+                    SERVICE_STATUS="未知"
                 fi
                 
                 # 检查状态是否为 online

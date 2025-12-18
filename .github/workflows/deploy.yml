@@ -174,12 +174,41 @@ jobs:
             
             # 切换到 ubuntu 用户执行 PM2 命令
             # 注意：PM2 需要以运行服务的用户身份执行
-            echo "🔄 重新加载 PM2 服务..."
-            sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 reload ecosystem.config.js" || {
-                echo "⚠️  PM2 reload 失败，尝试删除后重新启动..."
-                sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 delete all || true"
-                sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 start ecosystem.config.js"
-            }
+            
+            # 先停止所有服务，确保端口被释放
+            echo "🛑 停止所有 PM2 服务..."
+            sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 stop all || true"
+            
+            # 等待一下确保端口释放
+            sleep 2
+            
+            # 检查并杀掉占用端口 3000 的进程（如果有）
+            echo "🔍 检查端口 3000 占用情况..."
+            PORT_3000_PID=$(sudo lsof -ti:3000 2>/dev/null || echo "")
+            if [ -n "$PORT_3000_PID" ]; then
+                echo "⚠️  发现端口 3000 被占用 (PID: $PORT_3000_PID)，正在终止..."
+                sudo kill -9 $PORT_3000_PID 2>/dev/null || true
+                sleep 1
+            fi
+            
+            # 检查并杀掉占用端口 8000 的进程（如果有）
+            PORT_8000_PID=$(sudo lsof -ti:8000 2>/dev/null || echo "")
+            if [ -n "$PORT_8000_PID" ]; then
+                echo "⚠️  发现端口 8000 被占用 (PID: $PORT_8000_PID)，正在终止..."
+                sudo kill -9 $PORT_8000_PID 2>/dev/null || true
+                sleep 1
+            fi
+            
+            # 删除所有 PM2 进程，确保干净启动
+            echo "🗑️  清理所有 PM2 进程..."
+            sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 delete all || true"
+            
+            # 等待一下确保清理完成
+            sleep 1
+            
+            # 重新启动所有服务
+            echo "🚀 启动 PM2 服务..."
+            sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 start ecosystem.config.js"
             
             # 等待服务启动
             echo "⏳ 等待服务启动..."

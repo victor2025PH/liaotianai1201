@@ -213,9 +213,18 @@ else
     sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' "${SSH_CONFIG}"
 fi
 
-# 重启 SSH 服务
-systemctl restart sshd
-success_msg "SSH 配置优化完成并已重启服务"
+# 重启 SSH 服务（Ubuntu 22.04 使用 ssh.service，不是 sshd.service）
+if systemctl restart ssh 2>/dev/null; then
+    success_msg "SSH 配置优化完成并已重启服务"
+else
+    # 如果 ssh.service 不存在，尝试 sshd.service（兼容性）
+    if systemctl restart sshd 2>/dev/null; then
+        success_msg "SSH 配置优化完成并已重启服务（使用 sshd.service）"
+    else
+        error_msg "无法重启 SSH 服务，请手动运行: sudo systemctl restart ssh"
+        info_msg "SSH 配置已修改，但需要手动重启服务才能生效"
+    fi
+fi
 
 # ============================================================
 # 第五部分：Swap 文件（防止 OOM）
@@ -394,7 +403,7 @@ echo ""
 echo "5. 安全建议（项目部署完成后）："
 echo -e "   ${CYAN}# 关闭密码登录，仅使用 Key 认证${NC}"
 echo -e "   ${CYAN}# 编辑 /etc/ssh/sshd_config，设置 PasswordAuthentication no${NC}"
-echo -e "   ${CYAN}# 然后运行：sudo systemctl restart sshd${NC}"
+echo -e "   ${CYAN}# 然后运行：sudo systemctl restart ssh${NC}"
 echo ""
 echo "6. 查看 SSH 公钥（用于添加到 GitHub Actions）："
 echo -e "   ${CYAN}cat ${SSH_DIR}/id_rsa.pub${NC}"

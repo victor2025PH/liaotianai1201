@@ -155,55 +155,100 @@ jobs:
             # 5. 重启服务（使用 PM2）
             echo "🔄 重启服务..."
             
+            # 检查前端构建产物是否存在（Next.js standalone 模式要求）
+            echo "🔍 检查前端构建产物..."
+            if [ ! -f "saas-demo/.next/standalone/server.js" ]; then
+                echo "❌ 错误：前端 standalone 构建产物不存在"
+                echo "   路径: saas-demo/.next/standalone/server.js"
+                echo "   请检查前端构建是否成功完成"
+                echo "   当前目录: $(pwd)"
+                echo "   saas-demo/.next 目录内容:"
+                ls -la saas-demo/.next/ 2>/dev/null | head -20 || echo "   .next 目录不存在"
+                exit 1
+            fi
+            echo "✅ 前端构建产物检查通过"
+            
+            # 确保日志目录存在
+            mkdir -p logs || true
+            sudo chown -R ubuntu:ubuntu logs || true
+            
             # 切换到 ubuntu 用户执行 PM2 命令
             # 注意：PM2 需要以运行服务的用户身份执行
-            sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 reload ecosystem.config.js || pm2 restart ecosystem.config.js"
-            sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 save"
+            echo "🔄 重新加载 PM2 服务..."
+            sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 reload ecosystem.config.js" || {
+                echo "⚠️  PM2 reload 失败，尝试删除后重新启动..."
+                sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 delete all || true"
+                sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 start ecosystem.config.js"
+            }
             
             # 等待服务启动
+            echo "⏳ 等待服务启动..."
             sleep 5
             
+            # 显示 PM2 状态
+            echo ""
+            echo "📊 PM2 进程列表："
+            sudo -u ubuntu pm2 list
+            
+            # 检查前端服务是否成功启动
+            if sudo -u ubuntu pm2 list 2>/dev/null | grep -q "frontend.*errored"; then
+                echo ""
+                echo "❌ 前端服务启动失败，查看错误日志："
+                sudo -u ubuntu pm2 logs frontend --lines 30 --nostream 2>&1 || true
+                echo ""
+                echo "⚠️  前端服务启动失败，部署将继续但需要手动检查"
+            fi
+            
+            # 保存 PM2 配置
+            sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 save"
+            
             # 最后重启 Nginx
+            echo ""
+            echo "🔄 重启 Nginx..."
             sudo systemctl restart nginx
             sleep 2
             
             # 6. 验证服务状态
+            echo ""
             echo "🔍 验证服务状态..."
             
             # 完全禁用 set -e 进行验证（避免任何命令失败导致脚本退出）
             set +e
             
-            # 显示 PM2 状态（简单检查）
-            echo "PM2 进程列表："
-            sudo -u ubuntu pm2 status 2>&1 || echo "无法获取 PM2 状态"
-
-            # 简单的服务检查
+            # 详细的服务检查
             echo ""
-            echo "服务检查："
-            if sudo -u ubuntu pm2 list 2>/dev/null | grep -q "backend.*online"; then
+            echo "📊 服务状态检查："
+            
+            BACKEND_STATUS=$(sudo -u ubuntu pm2 list 2>/dev/null | grep "backend" | awk '{print $10}' || echo "unknown")
+            FRONTEND_STATUS=$(sudo -u ubuntu pm2 list 2>/dev/null | grep "frontend" | awk '{print $10}' || echo "unknown")
+            
+            if [ "$BACKEND_STATUS" = "online" ]; then
                 echo "  ✅ 后端服务: online"
             else
-                echo "  ⚠️  后端服务: 状态未知"
+                echo "  ❌ 后端服务: $BACKEND_STATUS"
+                echo "     查看后端日志:"
+                sudo -u ubuntu pm2 logs backend --lines 10 --nostream 2>&1 || true
             fi
-
-            if sudo -u ubuntu pm2 list 2>/dev/null | grep -q "frontend.*online"; then
+            
+            if [ "$FRONTEND_STATUS" = "online" ]; then
                 echo "  ✅ 前端服务: online"
             else
-                echo "  ⚠️  前端服务: 状态未知"
+                echo "  ❌ 前端服务: $FRONTEND_STATUS"
+                echo "     检查前端构建产物:"
+                ls -la saas-demo/.next/standalone/server.js 2>/dev/null || echo "     ❌ server.js 不存在"
+                echo "     查看前端日志:"
+                sudo -u ubuntu pm2 logs frontend --lines 20 --nostream 2>&1 || true
             fi
-
-            # 确保脚本以成功状态退出
+            
+            # 根据服务状态决定退出码
             EXIT_CODE=0
-
-            # 检查 PM2 reload 是否成功（最重要的检查）
-            if sudo -u ubuntu pm2 list 2>/dev/null | grep -q -E "backend|frontend"; then
+            if [ "$BACKEND_STATUS" != "online" ] || [ "$FRONTEND_STATUS" != "online" ]; then
                 echo ""
-                echo "✅ PM2 服务已重新加载"
-                EXIT_CODE=0
+                echo "⚠️  警告：有服务未正常启动，但部署步骤已完成"
+                EXIT_CODE=1  # 如果有服务失败，返回错误码
             else
                 echo ""
-                echo "⚠️  PM2 服务状态未知，但部署步骤已完成"
-                EXIT_CODE=0  # 即使检查失败，也认为部署成功
+                echo "✅ 所有服务运行正常"
             fi
             
             # 退出脚本（确保有明确的退出码）

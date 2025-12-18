@@ -442,12 +442,32 @@ ENVEOF
             echo "🔄 重启 Nginx..."
             sudo systemctl restart nginx
             
-            # 配置 Nginx
+            # 配置 Nginx 和 SSL 证书
             echo ""
-            echo "🌐 配置 Nginx 反向代理..."
+            echo "🌐 配置 Nginx 和 SSL 证书..."
 
             # 创建 Nginx 配置文件（从仓库中的配置文件复制）
             NGINX_CONFIG_FILE="/etc/nginx/sites-available/aikz.usdt2026.cc"
+            DOMAIN="aikz.usdt2026.cc"
+            
+            # 安装 Certbot（如果未安装）
+            if ! command -v certbot &> /dev/null; then
+                echo "🔧 安装 Certbot..."
+                sudo DEBIAN_FRONTEND=noninteractive apt-get update -q
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y certbot python3-certbot-nginx
+            fi
+            
+            # 检查 SSL 证书是否存在
+            SSL_CERT_PATH="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+            SSL_KEY_PATH="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+            
+            HAS_SSL=false
+            if [ -f "$SSL_CERT_PATH" ] && [ -f "$SSL_KEY_PATH" ]; then
+                HAS_SSL=true
+                echo "✅ 检测到现有的 SSL 证书"
+            else
+                echo "ℹ️  未找到 SSL 证书，将使用 HTTP 配置"
+            fi
             
             # 确定实际的 standalone 目录路径（用于静态资源 alias）
             # 从之前构建步骤中，我们知道 STANDALONE_DIR 是在 saas-demo 目录下
@@ -471,10 +491,13 @@ ENVEOF
             echo "📂 静态资源路径: $STATIC_PATH"
             echo "📂 公共资源路径: $PUBLIC_PATH"
 
-            # 优先使用 deploy/nginx/aikz.conf（现在使用 proxy_pass，不需要替换路径）
-            if [ -f "deploy/nginx/aikz.conf" ]; then
+            # 优先使用 HTTPS 配置（如果证书存在）或 HTTP 配置
+            if [ "$HAS_SSL" = true ] && [ -f "deploy/nginx/aikz-https.conf" ]; then
+                sudo cp deploy/nginx/aikz-https.conf "$NGINX_CONFIG_FILE"
+                echo "✅ 从 deploy/nginx/aikz-https.conf 复制 HTTPS Nginx 配置"
+            elif [ -f "deploy/nginx/aikz.conf" ]; then
                 sudo cp deploy/nginx/aikz.conf "$NGINX_CONFIG_FILE"
-                echo "✅ 从 deploy/nginx/aikz.conf 复制 Nginx 配置"
+                echo "✅ 从 deploy/nginx/aikz.conf 复制 HTTP Nginx 配置"
             elif [ -f "deploy/nginx_websocket_config.conf" ]; then
                 sudo cp deploy/nginx_websocket_config.conf "$NGINX_CONFIG_FILE"
                 echo "✅ 从 deploy/nginx_websocket_config.conf 复制 Nginx 配置"

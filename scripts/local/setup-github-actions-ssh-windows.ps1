@@ -84,20 +84,37 @@ if (-not (Test-Path $privateKeyPath)) {
     Write-Info "密钥文件: $privateKeyPath"
     
     # 使用 ssh-keygen 生成密钥（无密码）
-    $keygenArgs = "-t", "rsa", "-b", "4096", "-f", $privateKeyPath, "-N", '""', "-C", "github-actions-deploy"
-    
+    # 使用 -q 参数安静模式，-f 指定文件路径，-N 指定空密码
     try {
-        $process = Start-Process -FilePath "ssh-keygen" -ArgumentList $keygenArgs -Wait -NoNewWindow -PassThru
+        # 方法1：尝试使用 -N "" 参数（空字符串）
+        $process = Start-Process -FilePath "ssh-keygen" `
+            -ArgumentList @("-t", "rsa", "-b", "4096", "-f", $privateKeyPath, "-N", '""', "-C", "github-actions-deploy", "-q") `
+            -Wait -NoNewWindow -PassThru -RedirectStandardOutput "nul" -RedirectStandardError "nul"
         
-        if ($process.ExitCode -eq 0) {
+        if ($process.ExitCode -eq 0 -and (Test-Path $privateKeyPath)) {
             Write-Success "SSH 密钥对生成成功"
         } else {
-            Write-Error "SSH 密钥生成失败，退出码: $($process.ExitCode)"
-            exit 1
+            # 方法2：如果失败，尝试交互式生成（但会自动处理）
+            Write-Info "尝试使用交互式方式生成密钥..."
+            $keygenProcess = Start-Process -FilePath "ssh-keygen" `
+                -ArgumentList @("-t", "rsa", "-b", "4096", "-f", $privateKeyPath, "-C", "github-actions-deploy") `
+                -NoNewWindow -PassThru
+            
+            # 等待进程完成
+            $keygenProcess.WaitForExit()
+            
+            if ($keygenProcess.ExitCode -eq 0 -and (Test-Path $privateKeyPath)) {
+                Write-Success "SSH 密钥对生成成功"
+            } else {
+                Write-Error "SSH 密钥生成失败，退出码: $($keygenProcess.ExitCode)"
+                Write-Info "请手动运行: ssh-keygen -t rsa -b 4096 -f `"$privateKeyPath`" -N `"`" -C `"github-actions-deploy`""
+                exit 1
+            }
         }
     } catch {
         Write-Error "无法执行 ssh-keygen: $_"
         Write-Info "请确保 OpenSSH 已安装（Windows 10 1809+ 自带）"
+        Write-Info "或手动运行: ssh-keygen -t rsa -b 4096 -f `"$privateKeyPath`" -N `"`""
         exit 1
     }
 } else {

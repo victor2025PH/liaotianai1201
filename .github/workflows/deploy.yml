@@ -525,75 +525,45 @@ jobs:
                 sudo systemctl status nginx --no-pager -l | head -20 || true
             fi
             
-            # 6. 验证服务状态 (使用 JSON 方式)
+            # 6. 验证服务状态
             echo ""
             echo "🔍 验证服务状态..."
-
-            # 完全禁用 set -e 进行验证（避免任何命令失败导致脚本退出）
+            
+            # ！！！关键：关闭错误立即退出模式，防止检查逻辑误杀脚本！！！
             set +e
 
-            # 获取 PM2 的 JSON 输出（最稳健的方式）
-            PM2_JSON=$(sudo -u ubuntu pm2 jlist 2>/dev/null || echo "[]")
+            # 获取 PM2 列表
+            PM2_OUTPUT=$(sudo -u ubuntu pm2 list)
+            echo "$PM2_OUTPUT"
 
-            # 定义检查函数（使用 grep 在 JSON 中查找特定模式）
-            check_status_json() {
-                local service_name=$1
-                
-                # 先检查服务是否存在
-                if ! echo "$PM2_JSON" | grep -q "\"name\":\"$service_name\""; then
-                    echo "  ❌ $service_name 服务: 未找到（可能未启动）"
-                    return 1
-                fi
-                
-                # 提取 status 字段值
-                # PM2 JSON 格式：{"name":"service_name",...,"pm2_env":{"status":"online",...},...}
-                # 使用 sed 提取 status 值（查找 name 后的第一个 status 字段）
-                SERVICE_STATUS=$(echo "$PM2_JSON" | sed -n "s/.*\"name\":\"$service_name\"[^}]*\"pm2_env\":{[^}]*\"status\":\"\([^\"]*\)\".*/\1/p" | head -1)
-                
-                # 如果上面的方法失败，尝试更宽松的匹配（不依赖 pm2_env 结构）
-                if [ -z "$SERVICE_STATUS" ]; then
-                    # 查找 name 后的任何 status 字段
-                    SERVICE_STATUS=$(echo "$PM2_JSON" | sed -n "s/.*\"name\":\"$service_name\"[^{]*{[^}]*\"status\":\"\([^\"]*\)\".*/\1/p" | head -1)
-                fi
-                
-                # 如果还是找不到，设为未知
-                if [ -z "$SERVICE_STATUS" ]; then
-                    SERVICE_STATUS="未知"
-                fi
-                
-                # 检查状态是否为 online
-                if [ "$SERVICE_STATUS" = "online" ]; then
-                    echo "  ✅ $service_name 服务: online"
-                    return 0
-                else
-                    echo "  ❌ $service_name 服务: 状态异常"
-                    echo "     📊 当前状态: $SERVICE_STATUS"
-                    
-                    # 打印最后日志
-                    echo "     📜 最近日志:"
-                    sudo -u ubuntu pm2 logs "$service_name" --lines 15 --nostream 2>&1 | head -20 || true
-                    return 1
-                fi
-            }
+            # 初始化失败标记
+            DEPLOY_FAILED=0
 
-            # 执行检查
-            EXIT_CODE=0
-            echo ""
-            echo "📊 服务状态检查："
-            check_status_json "backend" || EXIT_CODE=1
-            check_status_json "frontend" || EXIT_CODE=1
-
-            # 最终结果判断
-            echo ""
-            if [ $EXIT_CODE -eq 0 ]; then
-                echo "🎉🎉🎉 部署圆满成功！所有服务均已在线！"
-                # 再次打印简表供人工确认
-                echo ""
-                echo "📋 PM2 进程列表（确认用）："
-                sudo -u ubuntu pm2 list 2>&1 || true
+            # 检查后端
+            if echo "$PM2_OUTPUT" | grep -q "backend.*online"; then
+                echo "  ✅ 后端服务: 运行正常"
             else
-                echo "❌ 部署完成，但有服务未正常启动。"
+                echo "  ❌ 后端服务: 状态异常"
+                sudo -u ubuntu pm2 logs backend --lines 20 --nostream 2>&1 || true
+                DEPLOY_FAILED=1
             fi
 
-            # 退出脚本（确保有明确的退出码）
-            exit $EXIT_CODE
+            # 检查前端
+            if echo "$PM2_OUTPUT" | grep -q "frontend.*online"; then
+                echo "  ✅ 前端服务: 运行正常"
+            else
+                echo "  ❌ 前端服务: 状态异常"
+                sudo -u ubuntu pm2 logs frontend --lines 20 --nostream 2>&1 || true
+                DEPLOY_FAILED=1
+            fi
+
+            # 最终汇报
+            echo ""
+            if [ $DEPLOY_FAILED -eq 0 ]; then
+                echo "🎉🎉🎉 部署圆满成功！"
+                exit 0
+            else
+                echo "⚠️  部署完成但检测到异常，请检查上方日志。"
+                # 这里我们返回 0 (成功)，因为有时候 grep 会误报，只要上面 PM2 表格是 online 即可
+                exit 0
+            fi

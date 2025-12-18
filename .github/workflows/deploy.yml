@@ -348,18 +348,23 @@ jobs:
             sudo fuser -k -9 3000/tcp 2>/dev/null || true
             sudo fuser -k -9 8000/tcp 2>/dev/null || true
 
-            # 4. 等待释放（多次重试）
+            # 4. 等待释放
             echo "⏳ 等待端口释放..."
             sleep 5
 
             # 5. 最终检查（带重试机制）
+            # 使用 set +e 防止检查命令失败导致脚本退出
+            set +e
+            
             PORT_3000_CLEAN=false
             PORT_8000_CLEAN=false
-            
+
             # 最多重试 3 次
             for i in 1 2 3; do
                 if [ "$PORT_3000_CLEAN" = "false" ]; then
-                    if sudo lsof -i:3000 >/dev/null 2>&1; then
+                    # 检查端口是否被占用（使用 || true 防止命令失败）
+                    PORT_3000_CHECK=$(sudo lsof -i:3000 >/dev/null 2>&1; echo $?)
+                    if [ "$PORT_3000_CHECK" = "0" ]; then
                         echo "⚠️  端口 3000 仍被占用（重试 $i/3），再次清理..."
                         sudo lsof -i:3000 | head -5 || true
                         PID=$(sudo lsof -t -i:3000 2>/dev/null | head -1 || echo "")

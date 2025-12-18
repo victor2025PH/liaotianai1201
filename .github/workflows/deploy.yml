@@ -500,63 +500,56 @@ jobs:
                 sudo systemctl status nginx --no-pager -l | head -20 || true
             fi
             
-            # 6. 验证服务状态
+            # 6. 验证服务状态 (使用 JSON 方式)
             echo ""
             echo "🔍 验证服务状态..."
-            
+
             # 完全禁用 set -e 进行验证（避免任何命令失败导致脚本退出）
             set +e
-            
-            # 详细的服务检查
+
+            # 获取 PM2 的 JSON 输出（最稳健的方式）
+            PM2_JSON=$(sudo -u ubuntu pm2 jlist 2>/dev/null || echo "[]")
+
+            # 定义检查函数（使用 grep 在 JSON 中查找特定模式）
+            check_status_json() {
+                local service_name=$1
+                
+                # 查找 "name":"service_name" 后紧跟着的 status 字段是否为 online
+                # 注意：JSON 是一行输出，这里使用 grep 模糊匹配
+                if echo "$PM2_JSON" | grep -q "\"name\":\"$service_name\".*\"pm2_env\":{\"status\":\"online\""; then
+                    echo "  ✅ $service_name 服务: online"
+                    return 0
+                else
+                    echo "  ❌ $service_name 服务: 状态异常"
+                    # 如果不是 online，尝试打印出当前状态以便调试
+                    SERVICE_STATUS=$(echo "$PM2_JSON" | grep -o "\"name\":\"$service_name\"[^}]*\"pm2_env\":{\"status\":\"[^\"]*\"" | grep -o "\"status\":\"[^\"]*\"" | cut -d'"' -f4 || echo "未知")
+                    echo "     📊 当前状态: $SERVICE_STATUS"
+                    
+                    # 打印最后日志
+                    echo "     📜 最近日志:"
+                    sudo -u ubuntu pm2 logs "$service_name" --lines 15 --nostream 2>&1 | head -20 || true
+                    return 1
+                fi
+            }
+
+            # 执行检查
+            EXIT_CODE=0
             echo ""
             echo "📊 服务状态检查："
-            
-            # 使用更可靠的方式检查服务状态（直接 grep PM2 list 输出）
-            PM2_LIST_OUTPUT=$(sudo -u ubuntu pm2 list 2>/dev/null || echo "")
-            
-            if echo "$PM2_LIST_OUTPUT" | grep -q "backend.*online"; then
-                BACKEND_STATUS="online"
-                echo "  ✅ 后端服务: online"
-            elif echo "$PM2_LIST_OUTPUT" | grep -q "backend.*errored"; then
-                BACKEND_STATUS="errored"
-                echo "  ❌ 后端服务: errored"
-                echo "     查看后端日志:"
-                sudo -u ubuntu pm2 logs backend --lines 10 --nostream 2>&1 || true
-            else
-                BACKEND_STATUS="unknown"
-                echo "  ⚠️  后端服务: 状态未知"
-            fi
-            
-            if echo "$PM2_LIST_OUTPUT" | grep -q "frontend.*online"; then
-                FRONTEND_STATUS="online"
-                echo "  ✅ 前端服务: online"
-            elif echo "$PM2_LIST_OUTPUT" | grep -q "frontend.*errored"; then
-                FRONTEND_STATUS="errored"
-                echo "  ❌ 前端服务: errored"
-                echo "     检查前端构建产物:"
-                ls -la saas-demo/.next/standalone/server.js 2>/dev/null || echo "     ❌ server.js 不存在"
-                echo "     查看前端日志:"
-                sudo -u ubuntu pm2 logs frontend --lines 20 --nostream 2>&1 || true
-            else
-                FRONTEND_STATUS="unknown"
-                echo "  ⚠️  前端服务: 状态未知"
-            fi
-            
-            # 根据服务状态决定退出码（只有 errored 状态才返回错误码）
-            EXIT_CODE=0
-            if [ "$BACKEND_STATUS" = "errored" ] || [ "$FRONTEND_STATUS" = "errored" ]; then
+            check_status_json "backend" || EXIT_CODE=1
+            check_status_json "frontend" || EXIT_CODE=1
+
+            # 最终结果判断
+            echo ""
+            if [ $EXIT_CODE -eq 0 ]; then
+                echo "🎉🎉🎉 部署圆满成功！所有服务均已在线！"
+                # 再次打印简表供人工确认
                 echo ""
-                echo "❌ 有服务处于 errored 状态，部署失败"
-                EXIT_CODE=1
-            elif [ "$BACKEND_STATUS" = "online" ] && [ "$FRONTEND_STATUS" = "online" ]; then
-                echo ""
-                echo "✅ 所有服务运行正常，部署成功"
-                EXIT_CODE=0
+                echo "📋 PM2 进程列表（确认用）："
+                sudo -u ubuntu pm2 list 2>&1 || true
             else
-                echo ""
-                echo "⚠️  服务状态未知，但部署步骤已完成"
-                EXIT_CODE=0  # 状态未知时也认为成功（避免误判）
+                echo "❌ 部署完成，但有服务未正常启动。"
             fi
-            
+
             # 退出脚本（确保有明确的退出码）
             exit $EXIT_CODE

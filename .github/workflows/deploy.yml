@@ -111,36 +111,66 @@ jobs:
             # 构建时也限制内存
             NODE_OPTIONS="--max-old-space-size=512" npm run build
             
-            # 暴力复制静态资源 (Standalone 补丁)
+            # 处理静态资源 (Next.js standalone 模式要求)
             echo "📂 处理静态资源..."
-            # 确保 standalone 目录结构正确
-            mkdir -p .next/standalone/.next/static
-            mkdir -p .next/standalone/public
+            
+            # 查找 standalone 目录的实际位置（可能是 .next/standalone 或 .next/standalone/saas-demo）
+            STANDALONE_DIR=""
+            if [ -d ".next/standalone" ]; then
+                # 检查是否有嵌套的项目目录
+                if [ -d ".next/standalone/saas-demo" ]; then
+                    STANDALONE_DIR=".next/standalone/saas-demo"
+                elif [ -f ".next/standalone/server.js" ]; then
+                    STANDALONE_DIR=".next/standalone"
+                else
+                    # 查找包含 server.js 的目录
+                    STANDALONE_DIR=$(find .next/standalone -type f -name "server.js" 2>/dev/null | head -1 | xargs dirname 2>/dev/null || echo ".next/standalone")
+                fi
+            fi
+            
+            if [ -z "$STANDALONE_DIR" ] || [ ! -d "$STANDALONE_DIR" ]; then
+                echo "❌ standalone 目录不存在，构建可能失败"
+                exit 1
+            fi
+            
+            echo "✅ 找到 standalone 目录: $STANDALONE_DIR"
+            
+            # 确保 .next 目录存在
+            mkdir -p "$STANDALONE_DIR/.next/static"
+            mkdir -p "$STANDALONE_DIR/.next/server"
             
             # 复制静态资源
             if [ -d ".next/static" ]; then
-                cp -r .next/static/* .next/standalone/.next/static/ || true
-                echo "✅ 静态资源已复制到 standalone/.next/static"
+                cp -r .next/static/* "$STANDALONE_DIR/.next/static/" 2>/dev/null || true
+                echo "✅ 静态资源已复制"
             else
                 echo "⚠️  .next/static 目录不存在"
             fi
             
-            # 复制 public 目录
-            if [ -d "public" ]; then
-                cp -r public/* .next/standalone/public/ || true
+            # 复制 public 目录（如果不存在）
+            if [ -d "public" ] && [ ! -d "$STANDALONE_DIR/public" ]; then
+                cp -r public "$STANDALONE_DIR/" 2>/dev/null || true
                 echo "✅ public 目录已复制"
-            else
-                echo "⚠️  public 目录不存在"
             fi
             
-            # 复制 BUILD_ID 和其他必要的文件
+            # 复制 BUILD_ID
             if [ -f ".next/BUILD_ID" ]; then
-                cp .next/BUILD_ID .next/standalone/.next/BUILD_ID || true
+                mkdir -p "$STANDALONE_DIR/.next"
+                cp .next/BUILD_ID "$STANDALONE_DIR/.next/BUILD_ID" 2>/dev/null || true
             fi
             
-            if [ -f ".next/routes-manifest.json" ]; then
-                mkdir -p .next/standalone/.next
-                cp .next/routes-manifest.json .next/standalone/.next/ || true
+            # 复制 JSON 配置文件
+            for json_file in .next/*.json; do
+                if [ -f "$json_file" ]; then
+                    mkdir -p "$STANDALONE_DIR/.next"
+                    cp "$json_file" "$STANDALONE_DIR/.next/" 2>/dev/null || true
+                fi
+            done
+            
+            # 复制 server 目录（如果存在）
+            if [ -d ".next/server" ]; then
+                cp -r .next/server/* "$STANDALONE_DIR/.next/server/" 2>/dev/null || true
+                echo "✅ server 目录已复制"
             fi
             
             echo "✅ 静态资源处理完成"

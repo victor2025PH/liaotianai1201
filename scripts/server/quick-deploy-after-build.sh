@@ -56,9 +56,28 @@ cd "$PROJECT_DIR" || {
 # ============================================================
 step_msg "步骤 1/4: 检查 ecosystem.config.js..."
 
+# 检查文件是否存在，以及是否包含正确的路径
+NEED_RECREATE=false
+
 if [ -f "$ECOSYSTEM_FILE" ]; then
-    info_msg "ecosystem.config.js 已存在"
+    # 检查是否包含错误的路径（/home/ubuntu）
+    if grep -q "/home/ubuntu" "$ECOSYSTEM_FILE"; then
+        info_msg "ecosystem.config.js 存在但包含错误的路径 (/home/ubuntu)，需要重新创建"
+        NEED_RECREATE=true
+        # 备份旧文件
+        mv "$ECOSYSTEM_FILE" "${ECOSYSTEM_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
+    elif grep -q "/home/deployer" "$ECOSYSTEM_FILE"; then
+        info_msg "ecosystem.config.js 已存在且路径正确"
+    else
+        info_msg "ecosystem.config.js 存在但路径不明确，重新创建以确保正确"
+        NEED_RECREATE=true
+        mv "$ECOSYSTEM_FILE" "${ECOSYSTEM_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
+    fi
 else
+    NEED_RECREATE=true
+fi
+
+if [ "$NEED_RECREATE" = true ]; then
     info_msg "创建 ecosystem.config.js..."
     cat > "$ECOSYSTEM_FILE" << 'EOF'
 module.exports = {

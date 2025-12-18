@@ -45,16 +45,27 @@ jobs:
             free -h || true
             echo ""
             
-            # 1. 检查并创建项目目录（如果不存在）
-            if [ ! -d "$PROJECT_DIR" ]; then
-                echo "项目目录不存在，正在创建..."
-                sudo mkdir -p "$PROJECT_DIR"
+            # 1. 检查并创建项目目录（如果不存在或不是 git 仓库）
+            if [ ! -d "$PROJECT_DIR" ] || [ ! -d "$PROJECT_DIR/.git" ]; then
+                if [ ! -d "$PROJECT_DIR" ]; then
+                    echo "项目目录不存在，正在创建..."
+                    sudo mkdir -p "$PROJECT_DIR"
+                else
+                    echo "项目目录存在但不是 git 仓库，准备重新克隆..."
+                    # 备份现有目录（如果有内容）
+                    if [ "$(ls -A $PROJECT_DIR 2>/dev/null)" ]; then
+                        echo "备份现有目录内容..."
+                        sudo mv "$PROJECT_DIR" "${PROJECT_DIR}.backup.$(date +%Y%m%d_%H%M%S)" || true
+                        sudo mkdir -p "$PROJECT_DIR"
+                    fi
+                fi
                 sudo chown -R ubuntu:ubuntu "$PROJECT_DIR"
                 # 克隆代码
+                echo "正在克隆代码..."
                 sudo -u ubuntu git clone https://github.com/victor2025PH/liaotianai1201.git "$PROJECT_DIR"
             fi
             
-            # 确保目录权限正确（无论目录是否存在）
+            # 确保目录权限正确
             sudo chown -R ubuntu:ubuntu "$PROJECT_DIR" || true
             sudo chmod 755 "$PROJECT_DIR" || true
             
@@ -64,10 +75,18 @@ jobs:
                 ls -la "$PROJECT_DIR" || true
                 exit 1
             }
+            
+            # 验证是 git 仓库
+            if [ ! -d ".git" ]; then
+                echo "错误：目录不是 git 仓库"
+                exit 1
+            fi
+            
+            echo "更新代码..."
             sudo -u ubuntu git fetch origin main
             sudo -u ubuntu git reset --hard origin/main
             
-            # 2. 修复权限 (忽略错误)
+            # 2. 确保权限正确（再次确认）
             sudo chown -R ubuntu:ubuntu "$PROJECT_DIR" || true
             
             # 3. 构建前端

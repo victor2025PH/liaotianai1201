@@ -137,19 +137,40 @@ jobs:
             }
             
             echo "✅ 已进入 admin-backend 目录: $(pwd)"
+            echo "   当前目录内容:"
+            ls -la | head -20 || true
+            echo ""
             
             # 检查并创建虚拟环境（如果不存在）
             if [ ! -d "venv" ]; then
                 echo "📦 创建 Python 虚拟环境..."
+                echo "   检查 Python3..."
                 # 检查 python3 是否可用
                 if ! command -v python3 &> /dev/null; then
                     echo "❌ Python3 未安装，请先安装 Python3"
                     exit 1
                 fi
-                echo "   使用 Python: $(python3 --version)"
-                # 尝试创建虚拟环境（显示输出以便调试）
-                if python3 -m venv venv; then
+                echo "   ✅ Python3 已安装: $(python3 --version 2>&1)"
+                
+                # 检查 python3-venv 模块是否可用
+                echo "   检查 python3-venv 模块..."
+                if python3 -m venv --help > /dev/null 2>&1; then
+                    echo "   ✅ python3-venv 模块可用"
+                else
+                    echo "   ⚠️  python3-venv 模块可能不可用，尝试创建虚拟环境..."
+                fi
+                
+                # 尝试创建虚拟环境
+                echo "   正在创建虚拟环境..."
+                if python3 -m venv venv 2>&1; then
                     echo "✅ 虚拟环境创建完成"
+                    # 验证虚拟环境是否真的创建成功
+                    if [ -d "venv" ] && [ -f "venv/bin/activate" ]; then
+                        echo "   ✅ 虚拟环境验证成功"
+                    else
+                        echo "   ❌ 虚拟环境创建后验证失败"
+                        exit 1
+                    fi
                 else
                     echo "❌ 创建虚拟环境失败"
                     echo "   可能原因：缺少 python3-venv 模块"
@@ -158,6 +179,17 @@ jobs:
                 fi
             else
                 echo "✅ 虚拟环境已存在"
+                # 验证现有虚拟环境是否完整
+                if [ ! -f "venv/bin/activate" ]; then
+                    echo "   ⚠️  虚拟环境目录存在但激活脚本缺失，将重新创建..."
+                    rm -rf venv
+                    echo "   重新创建虚拟环境..."
+                    python3 -m venv venv || {
+                        echo "❌ 重新创建虚拟环境失败"
+                        exit 1
+                    }
+                    echo "   ✅ 虚拟环境重新创建完成"
+                fi
             fi
             
             # 检查虚拟环境目录结构

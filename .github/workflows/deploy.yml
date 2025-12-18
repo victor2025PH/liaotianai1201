@@ -245,40 +245,48 @@ jobs:
             # 切换到 ubuntu 用户执行 PM2 命令
             # 注意：PM2 需要以运行服务的用户身份执行
             
-            # 先停止所有服务，确保端口被释放
-            echo "🛑 停止所有 PM2 服务..."
+            # 确保安装了 fuser（再次检查，防止前面安装失败）
+            if ! command -v fuser &> /dev/null; then
+                echo "🔧 安装 psmisc (fuser)..."
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y psmisc
+            fi
+            
+            # 1. 停止所有 PM2 进程
+            echo "🛑 停止 PM2 服务..."
             sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 stop all || true"
-            
-            # 等待一下确保端口释放
-            sleep 2
-            
-            # 检查并杀掉占用端口 3000 的进程（如果有）
-            echo "🔍 检查端口 3000 占用情况..."
-            PORT_3000_PID=$(sudo lsof -ti:3000 2>/dev/null || echo "")
-            if [ -n "$PORT_3000_PID" ]; then
-                echo "⚠️  发现端口 3000 被占用 (PID: $PORT_3000_PID)，正在终止..."
-                sudo kill -9 $PORT_3000_PID 2>/dev/null || true
-                sleep 1
-            fi
-            
-            # 检查并杀掉占用端口 8000 的进程（如果有）
-            PORT_8000_PID=$(sudo lsof -ti:8000 2>/dev/null || echo "")
-            if [ -n "$PORT_8000_PID" ]; then
-                echo "⚠️  发现端口 8000 被占用 (PID: $PORT_8000_PID)，正在终止..."
-                sudo kill -9 $PORT_8000_PID 2>/dev/null || true
-                sleep 1
-            fi
-            
-            # 删除所有 PM2 进程，确保干净启动
-            echo "🗑️  清理所有 PM2 进程..."
             sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 delete all || true"
             
-            # 等待一下确保清理完成
-            sleep 1
+            # 2. 核弹级端口清理（fuser）
+            echo "🧹 强制清理端口占用..."
+            # -k: kill, -v: verbose, -n tcp: 指定协议
+            echo "  正在清理端口 3000..."
+            sudo fuser -k -v -n tcp 3000 2>/dev/null || echo "  端口 3000 很干净"
             
-            # 重新启动所有服务
+            echo "  正在清理端口 8000..."
+            sudo fuser -k -v -n tcp 8000 2>/dev/null || echo "  端口 8000 很干净"
+            
+            # 等待系统释放资源
+            sleep 3
+            
+            # 3. 再次检查端口（双重保险）
+            if sudo lsof -i:3000 -t >/dev/null 2>&1; then
+                echo "❌ 警告：端口 3000 依然被占用！尝试最后一次强制清理..."
+                sudo kill -9 $(sudo lsof -t -i:3000) 2>/dev/null || true
+            fi
+            
+            if sudo lsof -i:8000 -t >/dev/null 2>&1; then
+                echo "❌ 警告：端口 8000 依然被占用！尝试最后一次强制清理..."
+                sudo kill -9 $(sudo lsof -t -i:8000) 2>/dev/null || true
+            fi
+            
+            # 4. 启动服务
             echo "🚀 启动 PM2 服务..."
             sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 start ecosystem.config.js"
+            sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 save"
+            
+            # 等待启动
+            echo "⏳ 等待服务初始化 (10秒)..."
+            sleep 10
             
             # 等待服务启动
             echo "⏳ 等待服务启动..."

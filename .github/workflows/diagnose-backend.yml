@@ -57,6 +57,24 @@ jobs:
             fi
             echo ""
             
+            # 2.5. 安装并启动 Redis（如果需要）
+            echo "2.5️⃣ 检查 Redis 服务..."
+            echo "----------------------------------------"
+            if ! command -v redis-server &> /dev/null; then
+                echo "🔧 安装 Redis..."
+                sudo DEBIAN_FRONTEND=noninteractive apt-get update -q
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y redis-server
+            fi
+            sudo systemctl start redis-server || true
+            sudo systemctl enable redis-server || true
+            if sudo systemctl is-active --quiet redis-server; then
+                echo "✅ Redis 服务已启动"
+            else
+                echo "⚠️  Redis 服务启动失败"
+                sudo systemctl status redis-server --no-pager -l | head -10 || true
+            fi
+            echo ""
+            
             # 3. 重启后端
             echo "3️⃣ 重启后端服务..."
             echo "----------------------------------------"

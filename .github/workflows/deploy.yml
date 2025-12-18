@@ -185,6 +185,22 @@ jobs:
             sudo DEBIAN_FRONTEND=noninteractive apt-get update -q
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip psmisc
             
+            # 1.5. 安装并启动 Redis
+            echo "🔧 安装并启动 Redis..."
+            if ! command -v redis-server &> /dev/null; then
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y redis-server
+            fi
+            # 启动 Redis 服务
+            sudo systemctl start redis-server || true
+            sudo systemctl enable redis-server || true
+            # 检查 Redis 状态
+            if sudo systemctl is-active --quiet redis-server; then
+                echo "✅ Redis 服务已启动并设置为开机自启"
+            else
+                echo "⚠️  Redis 服务启动失败，但继续部署流程"
+                sudo systemctl status redis-server --no-pager -l | head -10 || true
+            fi
+            
             cd admin-backend || exit 1
             
             # 2. 重建虚拟环境（先删后建，防止环境损坏）

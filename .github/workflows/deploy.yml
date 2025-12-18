@@ -255,112 +255,103 @@ jobs:
             echo "🛑 停止 PM2 服务..."
             sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 stop all || true"
             sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 delete all || true"
-            
-            # 2. 核弹级端口清理（fuser + kill -9 双重保险）
-            echo "🧹 强制清理端口占用..."
-            
-            # 清理端口 3000
-            echo "  正在清理端口 3000..."
-            # 方法 1: 先使用 fuser 尝试终止
-            sudo fuser -k -n tcp 3000 2>&1 || true
-            sleep 1
-            # 方法 2: 使用 lsof 查找所有占用端口的进程并强制终止
-            PORT_3000_PIDS=$(sudo lsof -ti:3000 2>/dev/null || echo "")
-            if [ -n "$PORT_3000_PIDS" ]; then
-                echo "  发现端口 3000 仍有进程占用: $PORT_3000_PIDS"
-                for pid in $PORT_3000_PIDS; do
-                    echo "    强制终止进程 $pid..."
-                    sudo kill -9 $pid 2>/dev/null || true
-                done
+
+            # 2. 智能查杀逻辑（查找并处理守护进程）
+            # 安装必要工具
+            if ! command -v netstat &> /dev/null; then
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y net-tools
             fi
-            # 方法 3: 使用 ss 作为备用检查（某些情况下 lsof 可能检测不到）
-            PORT_3000_PIDS_SS=$(sudo ss -ltnp 2>/dev/null | grep ':3000' | awk '{print $6}' | cut -d',' -f2 | cut -d'=' -f2 | sort -u | grep -v 'PID' || echo "")
-            if [ -n "$PORT_3000_PIDS_SS" ]; then
-                for pid in $PORT_3000_PIDS_SS; do
-                    if [ -n "$pid" ] && [ "$pid" != "PID" ]; then
-                        echo "    通过 ss 发现进程 $pid，强制终止..."
-                        sudo kill -9 $pid 2>/dev/null || true
+
+            echo "🔍 深度诊断端口 3000..."
+
+            # 查找占用端口的进程及其父进程
+            PID=$(sudo lsof -t -i:3000 2>/dev/null | head -1 || echo "")
+            if [ -n "$PID" ]; then
+                echo "⚠️  发现端口 3000 被 PID $PID 占用"
+
+                # 获取父进程 ID
+                PPID=$(ps -o ppid= -p $PID 2>/dev/null | tr -d ' ' || echo "")
+                if [ -n "$PPID" ]; then
+                    echo "   该进程由父进程 PID $PPID 管理"
+                    # 打印父进程详情
+                    ps -f -p $PPID 2>/dev/null || echo "   无法获取父进程详情"
+
+                    # 策略 A: 如果父进程是 Systemd (PID 1)，说明是系统服务
+                    if [ "$PPID" -eq "1" ]; then
+                        echo "🚨 发现 Systemd 服务在运行！正在尝试定位并停止..."
+                        # 尝试通过 systemctl status 查找服务名
+                        SERVICE_NAME=$(sudo systemctl status $PID 2>/dev/null | grep -o "Loaded: loaded (/.*" | awk '{print $3}' | xargs basename 2>/dev/null | cut -d';' -f1 || echo "")
+                        if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_NAME" != "" ]; then
+                            echo "   🛑 停止 Systemd 服务: $SERVICE_NAME"
+                            sudo systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+                            sudo systemctl disable "$SERVICE_NAME" 2>/dev/null || true
+                        else
+                            echo "   ⚠️  无法自动识别服务名，尝试暴力停止常见服务名..."
+                            sudo systemctl stop telegram-ai 2>/dev/null || true
+                            sudo systemctl stop next-server 2>/dev/null || true
+                            sudo systemctl stop node-app 2>/dev/null || true
+                            sudo systemctl stop frontend 2>/dev/null || true
+                        fi
+                    else
+                        # 策略 B: 普通父进程 (如 PM2 God Daemon)，直接杀掉父进程
+                        echo "🔪 杀掉父进程 (PID $PPID)..."
+                        sudo kill -9 $PPID 2>/dev/null || true
                     fi
-                done
+                fi
+                # 杀掉子进程
+                sudo kill -9 $PID 2>/dev/null || true
             fi
-            
-            # 清理端口 8000
-            echo "  正在清理端口 8000..."
-            sudo fuser -k -n tcp 8000 2>&1 || true
-            sleep 1
-            PORT_8000_PIDS=$(sudo lsof -ti:8000 2>/dev/null || echo "")
-            if [ -n "$PORT_8000_PIDS" ]; then
-                echo "  发现端口 8000 仍有进程占用: $PORT_8000_PIDS"
-                for pid in $PORT_8000_PIDS; do
-                    echo "    强制终止进程 $pid..."
-                    sudo kill -9 $pid 2>/dev/null || true
-                done
+
+            # 同样处理端口 8000
+            echo "🔍 深度诊断端口 8000..."
+            PID_8000=$(sudo lsof -t -i:8000 2>/dev/null | head -1 || echo "")
+            if [ -n "$PID_8000" ]; then
+                echo "⚠️  发现端口 8000 被 PID $PID_8000 占用"
+                PPID_8000=$(ps -o ppid= -p $PID_8000 2>/dev/null | tr -d ' ' || echo "")
+                if [ -n "$PPID_8000" ] && [ "$PPID_8000" -ne "1" ]; then
+                    echo "   杀掉父进程 (PID $PPID_8000)..."
+                    sudo kill -9 $PPID_8000 2>/dev/null || true
+                fi
+                sudo kill -9 $PID_8000 2>/dev/null || true
             fi
-            PORT_8000_PIDS_SS=$(sudo ss -ltnp 2>/dev/null | grep ':8000' | awk '{print $6}' | cut -d',' -f2 | cut -d'=' -f2 | sort -u | grep -v 'PID' || echo "")
-            if [ -n "$PORT_8000_PIDS_SS" ]; then
-                for pid in $PORT_8000_PIDS_SS; do
-                    if [ -n "$pid" ] && [ "$pid" != "PID" ]; then
-                        echo "    通过 ss 发现进程 $pid，强制终止..."
-                        sudo kill -9 $pid 2>/dev/null || true
-                    fi
-                done
-            fi
-            
-            # 等待系统释放资源
-            echo "  等待端口释放..."
+
+            # 3. 执行常规清理（双重保险）
+            echo "🧹 执行常规清理..."
+            sudo -u ubuntu pm2 kill 2>/dev/null || true
+            sudo pm2 kill 2>/dev/null || true
+            sudo killall -9 node 2>/dev/null || true
+            sudo fuser -k -9 3000/tcp 2>/dev/null || true
+            sudo fuser -k -9 8000/tcp 2>/dev/null || true
+
+            # 4. 等待释放
+            echo "⏳ 等待端口释放..."
             sleep 5
-            
-            # 3. 最终验证端口是否释放（使用 lsof 和 ss 双重检查）
-            PORT_3000_STILL_BUSY=false
-            if sudo lsof -i:3000 >/dev/null 2>&1 || sudo ss -ltn 2>/dev/null | grep -q ':3000'; then
-                PORT_3000_STILL_BUSY=true
-            fi
-            
-            if [ "$PORT_3000_STILL_BUSY" = "true" ]; then
-                echo "❌ 严重警告：端口 3000 依然被占用！"
-                echo "  占用端口的进程 (lsof):"
-                sudo lsof -i:3000 2>&1 || true
-                echo "  占用端口的进程 (ss):"
-                sudo ss -ltnp 2>/dev/null | grep ':3000' || true
-                echo "  最后一次强制清理..."
-                sudo lsof -ti:3000 2>/dev/null | xargs -r sudo kill -9 2>/dev/null || true
-                sudo ss -ltnp 2>/dev/null | grep ':3000' | awk '{print $6}' | cut -d',' -f2 | cut -d'=' -f2 | grep -v 'PID' | xargs -r sudo kill -9 2>/dev/null || true
-                sleep 3
+
+            # 5. 最终检查
+            if sudo lsof -i:3000 >/dev/null 2>&1; then
+                echo "❌ 严重错误：端口 3000 仍被占用，无法继续！"
+                sudo lsof -i:3000
+                exit 1
             else
-                echo "  ✅ 端口 3000 已释放"
+                echo "✅ 端口 3000 已彻底释放"
             fi
-            
-            PORT_8000_STILL_BUSY=false
-            if sudo lsof -i:8000 >/dev/null 2>&1 || sudo ss -ltn 2>/dev/null | grep -q ':8000'; then
-                PORT_8000_STILL_BUSY=true
-            fi
-            
-            if [ "$PORT_8000_STILL_BUSY" = "true" ]; then
-                echo "❌ 严重警告：端口 8000 依然被占用！"
-                echo "  占用端口的进程 (lsof):"
-                sudo lsof -i:8000 2>&1 || true
-                echo "  占用端口的进程 (ss):"
-                sudo ss -ltnp 2>/dev/null | grep ':8000' || true
-                echo "  最后一次强制清理..."
-                sudo lsof -ti:8000 2>/dev/null | xargs -r sudo kill -9 2>/dev/null || true
-                sudo ss -ltnp 2>/dev/null | grep ':8000' | awk '{print $6}' | cut -d',' -f2 | cut -d'=' -f2 | grep -v 'PID' | xargs -r sudo kill -9 2>/dev/null || true
-                sleep 3
+
+            if sudo lsof -i:8000 >/dev/null 2>&1; then
+                echo "❌ 严重错误：端口 8000 仍被占用，无法继续！"
+                sudo lsof -i:8000
+                exit 1
             else
-                echo "  ✅ 端口 8000 已释放"
+                echo "✅ 端口 8000 已彻底释放"
             fi
-            
-            # 4. 启动服务
+
+            # 6. 启动服务
             echo "🚀 启动 PM2 服务..."
             sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 start ecosystem.config.js"
             sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 save"
-            
+
             # 等待启动
             echo "⏳ 等待服务初始化 (10秒)..."
             sleep 10
-            
-            # 等待服务启动
-            echo "⏳ 等待服务启动..."
-            sleep 5
             
             # 显示 PM2 状态
             echo ""
@@ -427,18 +418,27 @@ jobs:
                 echo "    listen 80;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
                 echo "    server_name aikz.usdt2026.cc;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
                 
-                # 2. 关键修复：静态资源直接由 Nginx 处理 (不再转发给 Node)
-                # 使用实际检测到的路径
+                # 2. 关键修复：静态资源代理到 Next.js 服务器（使用 proxy_pass）
                 echo "    location /_next/static {" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
-                echo "        alias $STATIC_PATH;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_pass http://127.0.0.1:3000;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_http_version 1.1;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header Host \$host;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header X-Real-IP \$remote_addr;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header X-Forwarded-Proto \$scheme;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
                 echo "        expires 365d;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
                 echo "        access_log off;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
                 echo "    }" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
                 
-                # 3. 公共资源处理
+                # 3. 公共资源处理（同样使用 proxy_pass）
                 echo "    location /public {" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
-                echo "        alias $PUBLIC_PATH;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
-                echo "        expires 365d;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_pass http://127.0.0.1:3000;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_http_version 1.1;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header Host \$host;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header X-Real-IP \$remote_addr;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header X-Forwarded-Proto \$scheme;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        expires 30d;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
                 echo "        access_log off;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
                 echo "    }" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
                 

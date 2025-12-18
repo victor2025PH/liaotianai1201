@@ -363,12 +363,10 @@ jobs:
 
             # 最多重试 3 次
             for i in 1 2 3; do
-                echo "  第 $i 次检查..." || true
+                echo "  第 $i 次检查..."
                 if [ "$PORT_3000_CLEAN" = "false" ]; then
-                    # 检查端口是否被占用（使用更安全的方式）
-                    PORT_3000_CHECK=1 || true
-                    { sudo lsof -i:3000 >/dev/null 2>&1 && PORT_3000_CHECK=0; } || PORT_3000_CHECK=1 || true
-                    if [ "$PORT_3000_CHECK" = "0" ]; then
+                    # 检查端口是否被占用（使用最简单的 if 语句）
+                    if sudo lsof -i:3000 >/dev/null 2>&1; then
                         echo "⚠️  端口 3000 仍被占用（重试 $i/3），再次清理..."
                         sudo lsof -i:3000 | head -5 || true
                         PID=$(sudo lsof -t -i:3000 2>/dev/null | head -1 || echo "")
@@ -388,10 +386,8 @@ jobs:
                 fi
 
                 if [ "$PORT_8000_CLEAN" = "false" ]; then
-                    # 检查端口是否被占用（使用更安全的方式）
-                    PORT_8000_CHECK=1 || true
-                    { sudo lsof -i:8000 >/dev/null 2>&1 && PORT_8000_CHECK=0; } || PORT_8000_CHECK=1 || true
-                    if [ "$PORT_8000_CHECK" = "0" ]; then
+                    # 检查端口是否被占用（使用最简单的 if 语句）
+                    if sudo lsof -i:8000 >/dev/null 2>&1; then
                         echo "⚠️  端口 8000 仍被占用（重试 $i/3），再次清理..."
                         sudo lsof -i:8000 | head -5 || true
                         PID_8000=$(sudo lsof -t -i:8000 2>/dev/null | head -1 || echo "")

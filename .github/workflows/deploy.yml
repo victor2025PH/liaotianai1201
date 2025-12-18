@@ -384,7 +384,9 @@ jobs:
                 fi
 
                 if [ "$PORT_8000_CLEAN" = "false" ]; then
-                    if sudo lsof -i:8000 >/dev/null 2>&1; then
+                    # 检查端口是否被占用（使用 || true 防止命令失败）
+                    PORT_8000_CHECK=$(sudo lsof -i:8000 >/dev/null 2>&1; echo $?)
+                    if [ "$PORT_8000_CHECK" = "0" ]; then
                         echo "⚠️  端口 8000 仍被占用（重试 $i/3），再次清理..."
                         sudo lsof -i:8000 | head -5 || true
                         PID_8000=$(sudo lsof -t -i:8000 2>/dev/null | head -1 || echo "")
@@ -409,20 +411,27 @@ jobs:
                 fi
             done
 
-            # 最终验证
+            # 重新启用 set -e（在最终验证之前）
+            set -e
+
+            echo "✅ 所有端口检查完成，开始启动服务"
+
+            # 最终验证（确保端口已清理）
             if [ "$PORT_3000_CLEAN" = "false" ]; then
                 echo "❌ 严重错误：端口 3000 仍被占用，无法继续！"
                 echo "占用端口的进程详情："
-                sudo lsof -i:3000 || true
+                sudo lsof -i:3000 2>&1 || true
                 exit 1
             fi
 
             if [ "$PORT_8000_CLEAN" = "false" ]; then
                 echo "❌ 严重错误：端口 8000 仍被占用，无法继续！"
                 echo "占用端口的进程详情："
-                sudo lsof -i:8000 || true
+                sudo lsof -i:8000 2>&1 || true
                 exit 1
             fi
+
+            echo "✅ 所有端口检查完成，开始启动服务"
 
             # 6. 启动服务
             echo "🚀 启动 PM2 服务..."

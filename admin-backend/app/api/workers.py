@@ -813,7 +813,7 @@ if errorlevel 1 (
     )
 )
 
-if !MISSING_DEPS!==1 (
+if !MISSING_DEPS! equ 1 (
     echo.
     echo [INSTALL] Installing missing dependencies...
     echo [INFO] Using Tsinghua mirror source (faster in China)...

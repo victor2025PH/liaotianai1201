@@ -113,10 +113,37 @@ jobs:
             
             # 暴力复制静态资源 (Standalone 补丁)
             echo "📂 处理静态资源..."
+            # 确保 standalone 目录结构正确
             mkdir -p .next/standalone/.next/static
-            # 使用 || true 防止某些文件不存在导致报错
-            cp -r .next/static/* .next/standalone/.next/static/ || true
-            cp -r public .next/standalone/ || true
+            mkdir -p .next/standalone/public
+            
+            # 复制静态资源
+            if [ -d ".next/static" ]; then
+                cp -r .next/static/* .next/standalone/.next/static/ || true
+                echo "✅ 静态资源已复制到 standalone/.next/static"
+            else
+                echo "⚠️  .next/static 目录不存在"
+            fi
+            
+            # 复制 public 目录
+            if [ -d "public" ]; then
+                cp -r public/* .next/standalone/public/ || true
+                echo "✅ public 目录已复制"
+            else
+                echo "⚠️  public 目录不存在"
+            fi
+            
+            # 复制 BUILD_ID 和其他必要的文件
+            if [ -f ".next/BUILD_ID" ]; then
+                cp .next/BUILD_ID .next/standalone/.next/BUILD_ID || true
+            fi
+            
+            if [ -f ".next/routes-manifest.json" ]; then
+                mkdir -p .next/standalone/.next
+                cp .next/routes-manifest.json .next/standalone/.next/ || true
+            fi
+            
+            echo "✅ 静态资源处理完成"
             cd ..
             
             # 4. 后端依赖
@@ -238,10 +265,13 @@ jobs:
             # 创建 Nginx 配置文件（从仓库中的配置文件复制）
             NGINX_CONFIG_FILE="/etc/nginx/sites-available/aikz.usdt2026.cc"
             
-            # 如果仓库中有配置文件，使用它；否则使用默认配置
-            if [ -f "deploy/nginx_websocket_config.conf" ]; then
+            # 优先使用 deploy/nginx/aikz.conf，然后是 deploy/nginx_websocket_config.conf
+            if [ -f "deploy/nginx/aikz.conf" ]; then
+                sudo cp deploy/nginx/aikz.conf "$NGINX_CONFIG_FILE"
+                echo "✅ 从 deploy/nginx/aikz.conf 复制 Nginx 配置"
+            elif [ -f "deploy/nginx_websocket_config.conf" ]; then
                 sudo cp deploy/nginx_websocket_config.conf "$NGINX_CONFIG_FILE"
-                echo "✅ 从仓库复制 Nginx 配置"
+                echo "✅ 从 deploy/nginx_websocket_config.conf 复制 Nginx 配置"
             else
                 # 使用简化的配置（避免 heredoc 问题）
                 echo "server {" | sudo tee "$NGINX_CONFIG_FILE" > /dev/null

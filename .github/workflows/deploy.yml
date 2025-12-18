@@ -137,12 +137,22 @@ jobs:
             }
             
             echo "✅ 已进入 admin-backend 目录: $(pwd)"
+            
+            # 临时禁用 set -e 以进行调试
+            set +e
             echo "   当前目录内容:"
-            ls -la | head -20 || true
+            ls -la | head -20
+            LS_EXIT_CODE=$?
+            set -e
+            if [ $LS_EXIT_CODE -ne 0 ]; then
+                echo "   ⚠️  警告：列出目录内容时出现问题（退出码: $LS_EXIT_CODE）"
+            fi
             echo ""
             
             # 检查并创建虚拟环境（如果不存在）
+            echo "🔍 检查虚拟环境状态..."
             if [ ! -d "venv" ]; then
+                echo "   📦 venv 目录不存在，需要创建"
                 echo "📦 创建 Python 虚拟环境..."
                 echo "   检查 Python3..."
                 # 检查 python3 是否可用

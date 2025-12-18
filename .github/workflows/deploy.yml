@@ -31,7 +31,7 @@ jobs:
             # 遇到任何命令错误(非逻辑判断)则退出
             set -e
             
-            PROJECT_DIR="/home/ubuntu/telegram-ai-system"
+            PROJECT_DIR="/home/deployer/telegram-ai-system"
             
             echo "🚀 开始部署..."
             echo "时间: $(date)"

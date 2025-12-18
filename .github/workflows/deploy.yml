@@ -231,11 +231,125 @@ jobs:
             # 保存 PM2 配置
             sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 save"
             
-            # 最后重启 Nginx
+            # 配置 Nginx
+            echo ""
+            echo "🌐 配置 Nginx 反向代理..."
+            
+            # 创建 Nginx 配置文件
+            NGINX_CONFIG_FILE="/etc/nginx/sites-available/aikz.usdt2026.cc"
+            NGINX_CONFIG="server {
+    listen 80;
+    server_name aikz.usdt2026.cc;
+
+    client_max_body_size 50M;
+
+    # WebSocket 支持 - 通知服务（优先级最高）
+    location /api/v1/notifications/ws {
+        proxy_pass http://127.0.0.1:8000/api/v1/notifications/ws;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \"upgrade\";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+        proxy_buffering off;
+    }
+
+    # Workers API - 转发 /api/workers 到 /api/v1/workers
+    location ~ ^/api/workers(/.*)?\$ {
+        proxy_pass http://127.0.0.1:8000/api/v1/workers\$1;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    # 后端 API
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \"upgrade\";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 300;
+    }
+
+    # 后端健康检查
+    location /health {
+        proxy_pass http://127.0.0.1:8000/health;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+    }
+
+    # 后端 API 文档
+    location /docs {
+        proxy_pass http://127.0.0.1:8000/docs;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+    }
+
+    location /openapi.json {
+        proxy_pass http://127.0.0.1:8000/openapi.json;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+    }
+
+    # 前端应用
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \"upgrade\";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 86400;
+    }
+}"
+            
+            # 写入配置文件
+            echo "$NGINX_CONFIG" | sudo tee "$NGINX_CONFIG_FILE" > /dev/null
+            
+            # 创建符号链接到 sites-enabled（如果不存在）
+            if [ ! -f "/etc/nginx/sites-enabled/aikz.usdt2026.cc" ]; then
+                sudo ln -s "$NGINX_CONFIG_FILE" /etc/nginx/sites-enabled/aikz.usdt2026.cc
+                echo "✅ 创建 Nginx 配置符号链接"
+            fi
+            
+            # 禁用默认站点（如果存在）
+            sudo rm -f /etc/nginx/sites-enabled/default
+            
+            # 测试 Nginx 配置
+            if sudo nginx -t; then
+                echo "✅ Nginx 配置测试通过"
+            else
+                echo "❌ Nginx 配置测试失败"
+                exit 1
+            fi
+            
+            # 重启 Nginx
             echo ""
             echo "🔄 重启 Nginx..."
             sudo systemctl restart nginx
             sleep 2
+            
+            # 检查 Nginx 状态
+            if sudo systemctl is-active --quiet nginx; then
+                echo "✅ Nginx 运行正常"
+            else
+                echo "❌ Nginx 启动失败"
+                sudo systemctl status nginx --no-pager -l | head -20 || true
+            fi
             
             # 6. 验证服务状态
             echo ""

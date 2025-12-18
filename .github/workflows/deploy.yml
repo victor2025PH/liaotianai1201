@@ -121,7 +121,22 @@ jobs:
             
             # 4. 后端依赖
             echo "🐍 安装后端依赖..."
-            cd admin-backend
+            
+            # 检查 admin-backend 目录是否存在
+            if [ ! -d "admin-backend" ]; then
+                echo "❌ admin-backend 目录不存在"
+                echo "   当前目录: $(pwd)"
+                echo "   目录内容:"
+                ls -la || true
+                exit 1
+            fi
+            
+            cd admin-backend || {
+                echo "❌ 无法进入 admin-backend 目录"
+                exit 1
+            }
+            
+            echo "✅ 已进入 admin-backend 目录: $(pwd)"
             
             # 检查并创建虚拟环境（如果不存在）
             if [ ! -d "venv" ]; then
@@ -131,8 +146,9 @@ jobs:
                     echo "❌ Python3 未安装，请先安装 Python3"
                     exit 1
                 fi
-                # 尝试创建虚拟环境
-                if python3 -m venv venv 2>&1; then
+                echo "   使用 Python: $(python3 --version)"
+                # 尝试创建虚拟环境（显示输出以便调试）
+                if python3 -m venv venv; then
                     echo "✅ 虚拟环境创建完成"
                 else
                     echo "❌ 创建虚拟环境失败"
@@ -144,20 +160,36 @@ jobs:
                 echo "✅ 虚拟环境已存在"
             fi
             
-            # 激活虚拟环境
-            if [ -f "venv/bin/activate" ]; then
-                source venv/bin/activate
-                echo "✅ 虚拟环境已激活"
-            else
-                echo "❌ 虚拟环境激活脚本不存在"
+            # 检查虚拟环境目录结构
+            if [ ! -f "venv/bin/activate" ]; then
+                echo "❌ 虚拟环境激活脚本不存在: venv/bin/activate"
+                echo "   虚拟环境目录内容:"
+                ls -la venv/ || true
+                ls -la venv/bin/ || true
                 exit 1
             fi
             
+            # 激活虚拟环境
+            echo "🔄 激活虚拟环境..."
+            source venv/bin/activate || {
+                echo "❌ 激活虚拟环境失败"
+                exit 1
+            }
+            echo "✅ 虚拟环境已激活: $(which python)"
+            
             # 升级 pip
-            pip install --upgrade pip --quiet || true
+            echo "📦 升级 pip..."
+            pip install --upgrade pip --quiet || {
+                echo "⚠️  pip 升级失败，继续执行..."
+            }
             
             # 安装依赖
-            pip install -r requirements.txt --quiet
+            echo "📦 安装 Python 依赖..."
+            pip install -r requirements.txt --quiet || {
+                echo "❌ 依赖安装失败"
+                exit 1
+            }
+            echo "✅ 依赖安装完成"
             
             cd ..
             

@@ -22,7 +22,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          timeout: 30s
+          timeout: 60s
           command_timeout: 30m
           script_stop: true
           debug: true

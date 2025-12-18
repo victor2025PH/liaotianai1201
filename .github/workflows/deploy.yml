@@ -352,94 +352,31 @@ jobs:
             echo "⏳ 等待端口释放..."
             sleep 5
 
-            # 5. 最终检查（带重试机制）
-            # 使用 set +e 防止检查命令失败导致脚本退出
-            set +e
+            # 5. 启动服务 (Direct Start)
+            echo "✅ 清理完成，直接启动服务..."
             
-            PORT_3000_CLEAN=false
-            PORT_8000_CLEAN=false
-
-            echo "🔍 开始端口最终检查（最多重试3次）..."
-
-            # 最多重试 3 次
-            for i in 1 2 3; do
-                echo "  第 $i 次检查..."
-                if [ "$PORT_3000_CLEAN" = "false" ]; then
-                    # 检查端口是否被占用（使用最简单的 if 语句）
-                    if sudo lsof -i:3000 >/dev/null 2>&1; then
-                        echo "⚠️  端口 3000 仍被占用（重试 $i/3），再次清理..."
-                        sudo lsof -i:3000 | head -5 || true
-                        PID=$(sudo lsof -t -i:3000 2>/dev/null | head -1 || echo "")
-                        if [ -n "$PID" ]; then
-                            PPID=$(ps -o ppid= -p $PID 2>/dev/null | tr -d ' ' || echo "")
-                            if [ -n "$PPID" ] && [ "$PPID" -ne "1" ]; then
-                                sudo kill -9 $PPID 2>/dev/null || true
-                            fi
-                            sudo kill -9 $PID 2>/dev/null || true
-                        fi
-                        sudo fuser -k -9 3000/tcp 2>/dev/null || true
-                        sleep 3
-                    else
-                        PORT_3000_CLEAN=true
-                        echo "✅ 端口 3000 已彻底释放"
-                    fi
-                fi
-
-                if [ "$PORT_8000_CLEAN" = "false" ]; then
-                    # 检查端口是否被占用（使用最简单的 if 语句）
-                    if sudo lsof -i:8000 >/dev/null 2>&1; then
-                        echo "⚠️  端口 8000 仍被占用（重试 $i/3），再次清理..."
-                        sudo lsof -i:8000 | head -5 || true
-                        PID_8000=$(sudo lsof -t -i:8000 2>/dev/null | head -1 || echo "")
-                        if [ -n "$PID_8000" ]; then
-                            PPID_8000=$(ps -o ppid= -p $PID_8000 2>/dev/null | tr -d ' ' || echo "")
-                            if [ -n "$PPID_8000" ] && [ "$PPID_8000" -ne "1" ]; then
-                                sudo kill -9 $PPID_8000 2>/dev/null || true
-                            fi
-                            sudo kill -9 $PID_8000 2>/dev/null || true
-                        fi
-                        sudo fuser -k -9 8000/tcp 2>/dev/null || true
-                        sleep 3
-                    else
-                        PORT_8000_CLEAN=true
-                        echo "✅ 端口 8000 已彻底释放"
-                    fi
-                fi
-
-                # 如果两个端口都已清理，提前退出循环
-                if [ "$PORT_3000_CLEAN" = "true" ] && [ "$PORT_8000_CLEAN" = "true" ]; then
-                    break
-                fi
-            done
-
-            # 重新启用 set -e（在最终验证之前）
+            # 恢复 set -e (确保启动失败能报错)
             set -e
 
-            # 最终验证（确保端口已清理）
-            if [ "$PORT_3000_CLEAN" = "false" ]; then
-                echo "❌ 严重错误：端口 3000 仍被占用，无法继续！"
-                echo "占用端口的进程详情："
-                sudo lsof -i:3000 2>&1 || true
-                exit 1
-            fi
-
-            if [ "$PORT_8000_CLEAN" = "false" ]; then
-                echo "❌ 严重错误：端口 8000 仍被占用，无法继续！"
-                echo "占用端口的进程详情："
-                sudo lsof -i:8000 2>&1 || true
-                exit 1
-            fi
-
-            echo "✅ 所有端口检查完成，开始启动服务"
-
-            # 6. 启动服务
             echo "🚀 启动 PM2 服务..."
-            sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 start ecosystem.config.js"
-            sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 save"
+
+            # 切换到项目目录
+            cd "$PROJECT_DIR"
+
+            # 刷新 PM2 环境
+            sudo -u ubuntu pm2 update 2>/dev/null || true
+
+            # 启动服务
+            sudo -u ubuntu bash -c "cd $PROJECT_DIR && pm2 start ecosystem.config.js"
+            sudo -u ubuntu bash -c "cd $PROJECT_DIR && pm2 save"
 
             # 等待启动
-            echo "⏳ 等待服务初始化 (10秒)..."
-            sleep 10
+            echo "⏳ 等待服务初始化 (15秒)..."
+            sleep 15
+
+            # 重启 Nginx
+            echo "🔄 重启 Nginx..."
+            sudo systemctl restart nginx
             
             # 显示 PM2 状态
             echo ""

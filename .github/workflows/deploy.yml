@@ -302,16 +302,41 @@ jobs:
                 sudo kill -9 $PID 2>/dev/null || true
             fi
 
-            # 同样处理端口 8000
+            # 同样处理端口 8000（使用与端口 3000 相同的逻辑）
             echo "🔍 深度诊断端口 8000..."
             PID_8000=$(sudo lsof -t -i:8000 2>/dev/null | head -1 || echo "")
             if [ -n "$PID_8000" ]; then
                 echo "⚠️  发现端口 8000 被 PID $PID_8000 占用"
+
+                # 获取父进程 ID
                 PPID_8000=$(ps -o ppid= -p $PID_8000 2>/dev/null | tr -d ' ' || echo "")
-                if [ -n "$PPID_8000" ] && [ "$PPID_8000" -ne "1" ]; then
-                    echo "   杀掉父进程 (PID $PPID_8000)..."
-                    sudo kill -9 $PPID_8000 2>/dev/null || true
+                if [ -n "$PPID_8000" ]; then
+                    echo "   该进程由父进程 PID $PPID_8000 管理"
+                    # 打印父进程详情
+                    ps -f -p $PPID_8000 2>/dev/null || echo "   无法获取父进程详情"
+
+                    # 策略 A: 如果父进程是 Systemd (PID 1)，说明是系统服务
+                    if [ "$PPID_8000" -eq "1" ]; then
+                        echo "🚨 发现 Systemd 服务在运行！正在尝试定位并停止..."
+                        # 尝试通过 systemctl status 查找服务名
+                        SERVICE_NAME=$(sudo systemctl status $PID_8000 2>/dev/null | grep -o "Loaded: loaded (/.*" | awk '{print $3}' | xargs basename 2>/dev/null | cut -d';' -f1 || echo "")
+                        if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_NAME" != "" ]; then
+                            echo "   🛑 停止 Systemd 服务: $SERVICE_NAME"
+                            sudo systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+                            sudo systemctl disable "$SERVICE_NAME" 2>/dev/null || true
+                        else
+                            echo "   ⚠️  无法自动识别服务名，尝试暴力停止常见服务名..."
+                            sudo systemctl stop telegram-ai 2>/dev/null || true
+                            sudo systemctl stop backend 2>/dev/null || true
+                            sudo systemctl stop api-server 2>/dev/null || true
+                        fi
+                    else
+                        # 策略 B: 普通父进程 (如 PM2 God Daemon)，直接杀掉父进程
+                        echo "🔪 杀掉父进程 (PID $PPID_8000)..."
+                        sudo kill -9 $PPID_8000 2>/dev/null || true
+                    fi
                 fi
+                # 杀掉子进程
                 sudo kill -9 $PID_8000 2>/dev/null || true
             fi
 
@@ -323,25 +348,75 @@ jobs:
             sudo fuser -k -9 3000/tcp 2>/dev/null || true
             sudo fuser -k -9 8000/tcp 2>/dev/null || true
 
-            # 4. 等待释放
+            # 4. 等待释放（多次重试）
             echo "⏳ 等待端口释放..."
             sleep 5
 
-            # 5. 最终检查
-            if sudo lsof -i:3000 >/dev/null 2>&1; then
+            # 5. 最终检查（带重试机制）
+            PORT_3000_CLEAN=false
+            PORT_8000_CLEAN=false
+            
+            # 最多重试 3 次
+            for i in 1 2 3; do
+                if [ "$PORT_3000_CLEAN" = "false" ]; then
+                    if sudo lsof -i:3000 >/dev/null 2>&1; then
+                        echo "⚠️  端口 3000 仍被占用（重试 $i/3），再次清理..."
+                        sudo lsof -i:3000 | head -5 || true
+                        PID=$(sudo lsof -t -i:3000 2>/dev/null | head -1 || echo "")
+                        if [ -n "$PID" ]; then
+                            PPID=$(ps -o ppid= -p $PID 2>/dev/null | tr -d ' ' || echo "")
+                            if [ -n "$PPID" ] && [ "$PPID" -ne "1" ]; then
+                                sudo kill -9 $PPID 2>/dev/null || true
+                            fi
+                            sudo kill -9 $PID 2>/dev/null || true
+                        fi
+                        sudo fuser -k -9 3000/tcp 2>/dev/null || true
+                        sleep 3
+                    else
+                        PORT_3000_CLEAN=true
+                        echo "✅ 端口 3000 已彻底释放"
+                    fi
+                fi
+
+                if [ "$PORT_8000_CLEAN" = "false" ]; then
+                    if sudo lsof -i:8000 >/dev/null 2>&1; then
+                        echo "⚠️  端口 8000 仍被占用（重试 $i/3），再次清理..."
+                        sudo lsof -i:8000 | head -5 || true
+                        PID_8000=$(sudo lsof -t -i:8000 2>/dev/null | head -1 || echo "")
+                        if [ -n "$PID_8000" ]; then
+                            PPID_8000=$(ps -o ppid= -p $PID_8000 2>/dev/null | tr -d ' ' || echo "")
+                            if [ -n "$PPID_8000" ] && [ "$PPID_8000" -ne "1" ]; then
+                                sudo kill -9 $PPID_8000 2>/dev/null || true
+                            fi
+                            sudo kill -9 $PID_8000 2>/dev/null || true
+                        fi
+                        sudo fuser -k -9 8000/tcp 2>/dev/null || true
+                        sleep 3
+                    else
+                        PORT_8000_CLEAN=true
+                        echo "✅ 端口 8000 已彻底释放"
+                    fi
+                fi
+
+                # 如果两个端口都已清理，提前退出循环
+                if [ "$PORT_3000_CLEAN" = "true" ] && [ "$PORT_8000_CLEAN" = "true" ]; then
+                    break
+                fi
+            done
+
+            # 最终验证
+            if [ "$PORT_3000_CLEAN" = "false" ]; then
                 echo "❌ 严重错误：端口 3000 仍被占用，无法继续！"
-                sudo lsof -i:3000
+                echo "占用端口的进程详情："
+                sudo lsof -i:3000 || true
                 exit 1
-            else
-                echo "✅ 端口 3000 已彻底释放"
             fi
 
-            if sudo lsof -i:8000 >/dev/null 2>&1; then
+            if [ "$PORT_8000_CLEAN" = "false" ]; then
                 echo "❌ 严重错误：端口 8000 仍被占用，无法继续！"
-                sudo lsof -i:8000
+                echo "占用端口的进程详情："
+                sudo lsof -i:8000 || true
                 exit 1
-            else
-                echo "✅ 端口 8000 已彻底释放"
             fi
 
             # 6. 启动服务
@@ -357,7 +432,7 @@ jobs:
             echo ""
             echo "📊 PM2 进程列表："
             sudo -u ubuntu pm2 list
-            
+
             # 检查前端服务是否成功启动
             if sudo -u ubuntu pm2 list 2>/dev/null | grep -q "frontend.*errored"; then
                 echo ""
@@ -366,9 +441,13 @@ jobs:
                 echo ""
                 echo "⚠️  前端服务启动失败，部署将继续但需要手动检查"
             fi
-            
+
             # 保存 PM2 配置
             sudo -u ubuntu bash -c "cd /home/ubuntu/telegram-ai-system && pm2 save"
+
+            # 重启 Nginx
+            echo "🔄 重启 Nginx..."
+            sudo systemctl restart nginx
             
             # 配置 Nginx
             echo ""

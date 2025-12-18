@@ -514,15 +514,30 @@ jobs:
             check_status_json() {
                 local service_name=$1
                 
-                # 查找 "name":"service_name" 后紧跟着的 status 字段是否为 online
-                # 注意：JSON 是一行输出，这里使用 grep 模糊匹配
-                if echo "$PM2_JSON" | grep -q "\"name\":\"$service_name\".*\"pm2_env\":{\"status\":\"online\""; then
+                # 先检查服务是否存在
+                if ! echo "$PM2_JSON" | grep -q "\"name\":\"$service_name\""; then
+                    echo "  ❌ $service_name 服务: 未找到（可能未启动）"
+                    return 1
+                fi
+                
+                # 提取该服务的完整 JSON 对象（简化方法：查找包含 name 和 status 的片段）
+                # 使用更宽松的匹配模式，因为 JSON 可能有空格和换行
+                SERVICE_JSON_FRAGMENT=$(echo "$PM2_JSON" | grep -o "{[^}]*\"name\":\"$service_name\"[^}]*\"status\":\"[^\"]*\"[^}]*}" | head -1 || echo "")
+                
+                # 从片段中提取 status 值
+                if [ -n "$SERVICE_JSON_FRAGMENT" ]; then
+                    SERVICE_STATUS=$(echo "$SERVICE_JSON_FRAGMENT" | grep -o "\"status\":\"[^\"]*\"" | cut -d'"' -f4 || echo "未知")
+                else
+                    # 备用方法：直接在整个 JSON 中查找
+                    SERVICE_STATUS=$(echo "$PM2_JSON" | sed -n "s/.*\"name\":\"$service_name\"[^}]*\"status\":\"\([^\"]*\)\".*/\1/p" | head -1 || echo "未知")
+                fi
+                
+                # 检查状态是否为 online
+                if [ "$SERVICE_STATUS" = "online" ]; then
                     echo "  ✅ $service_name 服务: online"
                     return 0
                 else
                     echo "  ❌ $service_name 服务: 状态异常"
-                    # 如果不是 online，尝试打印出当前状态以便调试
-                    SERVICE_STATUS=$(echo "$PM2_JSON" | grep -o "\"name\":\"$service_name\"[^}]*\"pm2_env\":{\"status\":\"[^\"]*\"" | grep -o "\"status\":\"[^\"]*\"" | cut -d'"' -f4 || echo "未知")
                     echo "     📊 当前状态: $SERVICE_STATUS"
                     
                     # 打印最后日志

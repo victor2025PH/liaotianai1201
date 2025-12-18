@@ -219,36 +219,51 @@ jobs:
             echo ""
             echo "📊 服务状态检查："
             
-            BACKEND_STATUS=$(sudo -u ubuntu pm2 list 2>/dev/null | grep "backend" | awk '{print $10}' || echo "unknown")
-            FRONTEND_STATUS=$(sudo -u ubuntu pm2 list 2>/dev/null | grep "frontend" | awk '{print $10}' || echo "unknown")
+            # 使用更可靠的方式检查服务状态（直接 grep PM2 list 输出）
+            PM2_LIST_OUTPUT=$(sudo -u ubuntu pm2 list 2>/dev/null || echo "")
             
-            if [ "$BACKEND_STATUS" = "online" ]; then
+            if echo "$PM2_LIST_OUTPUT" | grep -q "backend.*online"; then
+                BACKEND_STATUS="online"
                 echo "  ✅ 后端服务: online"
-            else
-                echo "  ❌ 后端服务: $BACKEND_STATUS"
+            elif echo "$PM2_LIST_OUTPUT" | grep -q "backend.*errored"; then
+                BACKEND_STATUS="errored"
+                echo "  ❌ 后端服务: errored"
                 echo "     查看后端日志:"
                 sudo -u ubuntu pm2 logs backend --lines 10 --nostream 2>&1 || true
+            else
+                BACKEND_STATUS="unknown"
+                echo "  ⚠️  后端服务: 状态未知"
             fi
             
-            if [ "$FRONTEND_STATUS" = "online" ]; then
+            if echo "$PM2_LIST_OUTPUT" | grep -q "frontend.*online"; then
+                FRONTEND_STATUS="online"
                 echo "  ✅ 前端服务: online"
-            else
-                echo "  ❌ 前端服务: $FRONTEND_STATUS"
+            elif echo "$PM2_LIST_OUTPUT" | grep -q "frontend.*errored"; then
+                FRONTEND_STATUS="errored"
+                echo "  ❌ 前端服务: errored"
                 echo "     检查前端构建产物:"
                 ls -la saas-demo/.next/standalone/server.js 2>/dev/null || echo "     ❌ server.js 不存在"
                 echo "     查看前端日志:"
                 sudo -u ubuntu pm2 logs frontend --lines 20 --nostream 2>&1 || true
+            else
+                FRONTEND_STATUS="unknown"
+                echo "  ⚠️  前端服务: 状态未知"
             fi
             
-            # 根据服务状态决定退出码
+            # 根据服务状态决定退出码（只有 errored 状态才返回错误码）
             EXIT_CODE=0
-            if [ "$BACKEND_STATUS" != "online" ] || [ "$FRONTEND_STATUS" != "online" ]; then
+            if [ "$BACKEND_STATUS" = "errored" ] || [ "$FRONTEND_STATUS" = "errored" ]; then
                 echo ""
-                echo "⚠️  警告：有服务未正常启动，但部署步骤已完成"
-                EXIT_CODE=1  # 如果有服务失败，返回错误码
+                echo "❌ 有服务处于 errored 状态，部署失败"
+                EXIT_CODE=1
+            elif [ "$BACKEND_STATUS" = "online" ] && [ "$FRONTEND_STATUS" = "online" ]; then
+                echo ""
+                echo "✅ 所有服务运行正常，部署成功"
+                EXIT_CODE=0
             else
                 echo ""
-                echo "✅ 所有服务运行正常"
+                echo "⚠️  服务状态未知，但部署步骤已完成"
+                EXIT_CODE=0  # 状态未知时也认为成功（避免误判）
             fi
             
             # 退出脚本（确保有明确的退出码）

@@ -310,25 +310,41 @@ jobs:
             echo "  等待端口释放..."
             sleep 5
             
-            # 3. 最终验证端口是否释放
-            if sudo lsof -i:3000 >/dev/null 2>&1; then
+            # 3. 最终验证端口是否释放（使用 lsof 和 ss 双重检查）
+            PORT_3000_STILL_BUSY=false
+            if sudo lsof -i:3000 >/dev/null 2>&1 || sudo ss -ltn 2>/dev/null | grep -q ':3000'; then
+                PORT_3000_STILL_BUSY=true
+            fi
+            
+            if [ "$PORT_3000_STILL_BUSY" = "true" ]; then
                 echo "❌ 严重警告：端口 3000 依然被占用！"
-                echo "  占用端口的进程:"
-                sudo lsof -i:3000 || true
-                echo "  尝试最后一次强制清理..."
-                sudo lsof -ti:3000 | xargs -r sudo kill -9 2>/dev/null || true
-                sleep 2
+                echo "  占用端口的进程 (lsof):"
+                sudo lsof -i:3000 2>&1 || true
+                echo "  占用端口的进程 (ss):"
+                sudo ss -ltnp 2>/dev/null | grep ':3000' || true
+                echo "  最后一次强制清理..."
+                sudo lsof -ti:3000 2>/dev/null | xargs -r sudo kill -9 2>/dev/null || true
+                sudo ss -ltnp 2>/dev/null | grep ':3000' | awk '{print $6}' | cut -d',' -f2 | cut -d'=' -f2 | grep -v 'PID' | xargs -r sudo kill -9 2>/dev/null || true
+                sleep 3
             else
                 echo "  ✅ 端口 3000 已释放"
             fi
             
-            if sudo lsof -i:8000 >/dev/null 2>&1; then
+            PORT_8000_STILL_BUSY=false
+            if sudo lsof -i:8000 >/dev/null 2>&1 || sudo ss -ltn 2>/dev/null | grep -q ':8000'; then
+                PORT_8000_STILL_BUSY=true
+            fi
+            
+            if [ "$PORT_8000_STILL_BUSY" = "true" ]; then
                 echo "❌ 严重警告：端口 8000 依然被占用！"
-                echo "  占用端口的进程:"
-                sudo lsof -i:8000 || true
-                echo "  尝试最后一次强制清理..."
-                sudo lsof -ti:8000 | xargs -r sudo kill -9 2>/dev/null || true
-                sleep 2
+                echo "  占用端口的进程 (lsof):"
+                sudo lsof -i:8000 2>&1 || true
+                echo "  占用端口的进程 (ss):"
+                sudo ss -ltnp 2>/dev/null | grep ':8000' || true
+                echo "  最后一次强制清理..."
+                sudo lsof -ti:8000 2>/dev/null | xargs -r sudo kill -9 2>/dev/null || true
+                sudo ss -ltnp 2>/dev/null | grep ':8000' | awk '{print $6}' | cut -d',' -f2 | cut -d'=' -f2 | grep -v 'PID' | xargs -r sudo kill -9 2>/dev/null || true
+                sleep 3
             else
                 echo "  ✅ 端口 8000 已释放"
             fi
@@ -366,26 +382,91 @@ jobs:
             # 配置 Nginx
             echo ""
             echo "🌐 配置 Nginx 反向代理..."
-            
+
             # 创建 Nginx 配置文件（从仓库中的配置文件复制）
             NGINX_CONFIG_FILE="/etc/nginx/sites-available/aikz.usdt2026.cc"
             
-            # 优先使用 deploy/nginx/aikz.conf，然后是 deploy/nginx_websocket_config.conf
+            # 确定实际的 standalone 目录路径（用于静态资源 alias）
+            # 从之前构建步骤中，我们知道 STANDALONE_DIR 是在 saas-demo 目录下
+            cd saas-demo || exit 1
+            ACTUAL_STANDALONE_DIR=""
+            if [ -d ".next/standalone" ]; then
+                if [ -d ".next/standalone/saas-demo" ]; then
+                    ACTUAL_STANDALONE_DIR=".next/standalone/saas-demo"
+                elif [ -f ".next/standalone/server.js" ]; then
+                    ACTUAL_STANDALONE_DIR=".next/standalone"
+                else
+                    ACTUAL_STANDALONE_DIR=$(find .next/standalone -type f -name "server.js" 2>/dev/null | head -1 | xargs dirname 2>/dev/null || echo ".next/standalone")
+                fi
+            fi
+            cd ..
+            
+            # 构建完整的静态资源路径
+            STATIC_PATH="/home/ubuntu/telegram-ai-system/saas-demo/${ACTUAL_STANDALONE_DIR}/.next/static"
+            PUBLIC_PATH="/home/ubuntu/telegram-ai-system/saas-demo/${ACTUAL_STANDALONE_DIR}/public"
+            
+            echo "📂 静态资源路径: $STATIC_PATH"
+            echo "📂 公共资源路径: $PUBLIC_PATH"
+
+            # 优先使用 deploy/nginx/aikz.conf，然后根据实际路径生成配置
             if [ -f "deploy/nginx/aikz.conf" ]; then
+                # 复制配置文件，然后需要替换其中的路径
                 sudo cp deploy/nginx/aikz.conf "$NGINX_CONFIG_FILE"
-                echo "✅ 从 deploy/nginx/aikz.conf 复制 Nginx 配置"
+                # 替换路径中的占位符（如果配置文件中有的话）
+                sudo sed -i "s|/home/ubuntu/telegram-ai-system/saas-demo/.next/standalone/.next/static|$STATIC_PATH|g" "$NGINX_CONFIG_FILE"
+                sudo sed -i "s|/home/ubuntu/telegram-ai-system/saas-demo/.next/standalone/public|$PUBLIC_PATH|g" "$NGINX_CONFIG_FILE"
+                echo "✅ 从 deploy/nginx/aikz.conf 复制 Nginx 配置（已更新静态资源路径）"
             elif [ -f "deploy/nginx_websocket_config.conf" ]; then
                 sudo cp deploy/nginx_websocket_config.conf "$NGINX_CONFIG_FILE"
                 echo "✅ 从 deploy/nginx_websocket_config.conf 复制 Nginx 配置"
             else
-                # 使用简化的配置（避免 heredoc 问题）
+                # 使用简化的配置（避免 heredoc 问题），但加入静态资源处理
+                echo "正在生成优化后的 Nginx 配置..."
+                
+                # 确保 USER 变量正确（在 GitHub Actions 中，USER 可能是 runner，需要显式设置）
+                USER="ubuntu"
+                
+                # 1. 开始写入配置
                 echo "server {" | sudo tee "$NGINX_CONFIG_FILE" > /dev/null
                 echo "    listen 80;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
                 echo "    server_name aikz.usdt2026.cc;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
-                echo "    location / { proxy_pass http://127.0.0.1:3000; proxy_http_version 1.1; proxy_set_header Host \$host; }" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
-                echo "    location /api/ { proxy_pass http://127.0.0.1:8000/api/; proxy_http_version 1.1; proxy_set_header Host \$host; }" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                
+                # 2. 关键修复：静态资源直接由 Nginx 处理 (不再转发给 Node)
+                # 使用实际检测到的路径
+                echo "    location /_next/static {" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        alias $STATIC_PATH;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        expires 365d;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        access_log off;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "    }" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                
+                # 3. 公共资源处理
+                echo "    location /public {" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        alias $PUBLIC_PATH;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        expires 365d;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        access_log off;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "    }" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                
+                # 4. 主应用转发
+                echo "    location / {" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_pass http://127.0.0.1:3000;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_http_version 1.1;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header Upgrade \$http_upgrade;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header Connection 'upgrade';" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header Host \$host;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_cache_bypass \$http_upgrade;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "    }" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                
+                # 5. API 转发
+                echo "    location /api/ {" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_pass http://127.0.0.1:8000/api/;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_http_version 1.1;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header Host \$host;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header X-Real-IP \$remote_addr;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                echo "    }" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
+                
                 echo "}" | sudo tee -a "$NGINX_CONFIG_FILE" > /dev/null
-                echo "✅ 使用简化 Nginx 配置"
+                echo "✅ Nginx 配置已更新 (包含静态资源优化)"
             fi
             
             # 创建符号链接到 sites-enabled（如果不存在）

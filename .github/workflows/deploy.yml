@@ -184,16 +184,29 @@ jobs:
             
             # 检查前端构建产物是否存在（Next.js standalone 模式要求）
             echo "🔍 检查前端构建产物..."
-            if [ ! -f "saas-demo/.next/standalone/server.js" ]; then
+            
+            # 查找 standalone/server.js 的实际路径（可能是 .next/standalone/server.js 或 .next/standalone/xxx/server.js）
+            STANDALONE_SERVER=""
+            if [ -f "saas-demo/.next/standalone/server.js" ]; then
+                STANDALONE_SERVER="saas-demo/.next/standalone/server.js"
+            else
+                # 尝试查找嵌套路径（如 .next/standalone/saas-demo/server.js）
+                STANDALONE_SERVER=$(find saas-demo/.next/standalone -name "server.js" 2>/dev/null | head -1 || echo "")
+            fi
+            
+            if [ -z "$STANDALONE_SERVER" ] || [ ! -f "$STANDALONE_SERVER" ]; then
                 echo "❌ 错误：前端 standalone 构建产物不存在"
-                echo "   路径: saas-demo/.next/standalone/server.js"
                 echo "   请检查前端构建是否成功完成"
                 echo "   当前目录: $(pwd)"
                 echo "   saas-demo/.next 目录内容:"
                 ls -la saas-demo/.next/ 2>/dev/null | head -20 || echo "   .next 目录不存在"
+                if [ -d "saas-demo/.next/standalone" ]; then
+                    echo "   standalone 目录内容:"
+                    find saas-demo/.next/standalone -name "server.js" 2>/dev/null || echo "   未找到 server.js"
+                fi
                 exit 1
             fi
-            echo "✅ 前端构建产物检查通过"
+            echo "✅ 前端构建产物检查通过: $STANDALONE_SERVER"
             
             # 确保日志目录存在
             mkdir -p logs || true

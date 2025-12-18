@@ -261,22 +261,49 @@ jobs:
             
             # 清理端口 3000
             echo "  正在清理端口 3000..."
-            # 先使用 fuser 查找并终止进程
+            # 方法 1: 先使用 fuser 尝试终止
             sudo fuser -k -n tcp 3000 2>&1 || true
-            # 再使用 lsof 和 kill -9 强制终止所有相关进程
+            sleep 1
+            # 方法 2: 使用 lsof 查找所有占用端口的进程并强制终止
             PORT_3000_PIDS=$(sudo lsof -ti:3000 2>/dev/null || echo "")
             if [ -n "$PORT_3000_PIDS" ]; then
-                echo "  发现端口 3000 仍有进程占用: $PORT_3000_PIDS，强制终止..."
-                echo "$PORT_3000_PIDS" | xargs -r sudo kill -9 2>/dev/null || true
+                echo "  发现端口 3000 仍有进程占用: $PORT_3000_PIDS"
+                for pid in $PORT_3000_PIDS; do
+                    echo "    强制终止进程 $pid..."
+                    sudo kill -9 $pid 2>/dev/null || true
+                done
+            fi
+            # 方法 3: 使用 ss 作为备用检查（某些情况下 lsof 可能检测不到）
+            PORT_3000_PIDS_SS=$(sudo ss -ltnp 2>/dev/null | grep ':3000' | awk '{print $6}' | cut -d',' -f2 | cut -d'=' -f2 | sort -u | grep -v 'PID' || echo "")
+            if [ -n "$PORT_3000_PIDS_SS" ]; then
+                for pid in $PORT_3000_PIDS_SS; do
+                    if [ -n "$pid" ] && [ "$pid" != "PID" ]; then
+                        echo "    通过 ss 发现进程 $pid，强制终止..."
+                        sudo kill -9 $pid 2>/dev/null || true
+                    fi
+                done
             fi
             
             # 清理端口 8000
             echo "  正在清理端口 8000..."
             sudo fuser -k -n tcp 8000 2>&1 || true
+            sleep 1
             PORT_8000_PIDS=$(sudo lsof -ti:8000 2>/dev/null || echo "")
             if [ -n "$PORT_8000_PIDS" ]; then
-                echo "  发现端口 8000 仍有进程占用: $PORT_8000_PIDS，强制终止..."
-                echo "$PORT_8000_PIDS" | xargs -r sudo kill -9 2>/dev/null || true
+                echo "  发现端口 8000 仍有进程占用: $PORT_8000_PIDS"
+                for pid in $PORT_8000_PIDS; do
+                    echo "    强制终止进程 $pid..."
+                    sudo kill -9 $pid 2>/dev/null || true
+                done
+            fi
+            PORT_8000_PIDS_SS=$(sudo ss -ltnp 2>/dev/null | grep ':8000' | awk '{print $6}' | cut -d',' -f2 | cut -d'=' -f2 | sort -u | grep -v 'PID' || echo "")
+            if [ -n "$PORT_8000_PIDS_SS" ]; then
+                for pid in $PORT_8000_PIDS_SS; do
+                    if [ -n "$pid" ] && [ "$pid" != "PID" ]; then
+                        echo "    通过 ss 发现进程 $pid，强制终止..."
+                        sudo kill -9 $pid 2>/dev/null || true
+                    fi
+                done
             fi
             
             # 等待系统释放资源

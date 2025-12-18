@@ -235,9 +235,11 @@ jobs:
             echo ""
             echo "🌐 配置 Nginx 反向代理..."
             
-            # 创建 Nginx 配置文件（使用 cat 和 heredoc，但通过管道传递以避免 YAML 解析问题）
+            # 创建 Nginx 配置文件（使用临时脚本文件避免 YAML heredoc 解析问题）
             NGINX_CONFIG_FILE="/etc/nginx/sites-available/aikz.usdt2026.cc"
-            cat > /tmp/nginx-config-temp.conf <<'NGINXEOF'
+            cat > /tmp/setup-nginx.sh << 'SCRIPTEOF'
+#!/bin/bash
+cat > "$1" << 'NGINXEOF'
 server {
     listen 80;
     server_name aikz.usdt2026.cc;
@@ -303,8 +305,7 @@ server {
         proxy_read_timeout 86400;
     }
 }
-NGINXEOF
-            sudo mv /tmp/nginx-config-temp.conf "$NGINX_CONFIG_FILE"
+EOF
             
             # 创建符号链接到 sites-enabled（如果不存在）
             if [ ! -f "/etc/nginx/sites-enabled/aikz.usdt2026.cc" ]; then

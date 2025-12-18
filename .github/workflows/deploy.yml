@@ -126,15 +126,32 @@ jobs:
             # 检查并创建虚拟环境（如果不存在）
             if [ ! -d "venv" ]; then
                 echo "📦 创建 Python 虚拟环境..."
-                python3 -m venv venv || {
-                    echo "❌ 创建虚拟环境失败，请检查 Python3 是否已安装"
+                # 检查 python3 是否可用
+                if ! command -v python3 &> /dev/null; then
+                    echo "❌ Python3 未安装，请先安装 Python3"
                     exit 1
-                }
-                echo "✅ 虚拟环境创建完成"
+                fi
+                # 尝试创建虚拟环境
+                if python3 -m venv venv 2>&1; then
+                    echo "✅ 虚拟环境创建完成"
+                else
+                    echo "❌ 创建虚拟环境失败"
+                    echo "   可能原因：缺少 python3-venv 模块"
+                    echo "   解决方法：在服务器上运行: sudo apt update && sudo apt install -y python3-venv"
+                    exit 1
+                fi
+            else
+                echo "✅ 虚拟环境已存在"
             fi
             
             # 激活虚拟环境
-            source venv/bin/activate
+            if [ -f "venv/bin/activate" ]; then
+                source venv/bin/activate
+                echo "✅ 虚拟环境已激活"
+            else
+                echo "❌ 虚拟环境激活脚本不存在"
+                exit 1
+            fi
             
             # 升级 pip
             pip install --upgrade pip --quiet || true

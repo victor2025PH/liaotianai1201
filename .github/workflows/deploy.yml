@@ -22,8 +22,8 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          timeout: 300s
-          command_timeout: 55m
+          timeout: 30s
+          command_timeout: 30m
           script_stop: true
           debug: true
           envs: GITHUB_REPO=${{ github.repository }},SERVER_HOST=${{ secrets.SERVER_HOST }}
@@ -34,6 +34,16 @@ jobs:
             PROJECT_DIR="/home/ubuntu/telegram-ai-system"
             
             echo "🚀 开始部署..."
+            echo "时间: $(date)"
+            echo "系统资源:"
+            free -h || true
+            echo ""
+            
+            # 0. 启用 Swap（如果未启用）
+            echo "检查并启用 Swap..."
+            sudo swapon /swapfile 2>/dev/null || echo "Swap 已启用或文件不存在"
+            free -h || true
+            echo ""
             
             # 1. 进入目录并更新代码
             cd "$PROJECT_DIR"

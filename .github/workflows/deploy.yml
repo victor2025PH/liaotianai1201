@@ -388,8 +388,9 @@ jobs:
                 fi
 
                 if [ "$PORT_8000_CLEAN" = "false" ]; then
-                    # 检查端口是否被占用（使用 || true 防止命令失败）
-                    PORT_8000_CHECK=$(sudo lsof -i:8000 >/dev/null 2>&1; echo $?)
+                    # 检查端口是否被占用（使用更安全的方式）
+                    PORT_8000_CHECK=1
+                    sudo lsof -i:8000 >/dev/null 2>&1 && PORT_8000_CHECK=0 || PORT_8000_CHECK=1
                     if [ "$PORT_8000_CHECK" = "0" ]; then
                         echo "⚠️  端口 8000 仍被占用（重试 $i/3），再次清理..."
                         sudo lsof -i:8000 | head -5 || true

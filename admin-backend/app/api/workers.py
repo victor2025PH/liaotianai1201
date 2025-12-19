@@ -1058,7 +1058,7 @@ SESSIONS_DIR.mkdir(exist_ok=True)
 
 # Excel 配置文件 - 在多个位置查找
 def find_excel_file() -> Optional[Path]:
-    """查找 Excel 配置文件，支持多个位置"""
+    """查找 Excel 配置文件，支持多个位置和智能匹配"""
     node_id = NODE_ID
     excel_name = node_id + ".xlsx"
     
@@ -1084,6 +1084,81 @@ def find_excel_file() -> Optional[Path]:
         
         return None
     
+    def match_excel_by_phone_numbers(directory: Path) -> Optional[Path]:
+        """通过电话号码匹配 Excel 文件"""
+        try:
+            import openpyxl
+            
+            # 获取所有 session 文件的电话号码
+            session_phones = set()
+            if SESSIONS_DIR.exists():
+                for session_file in SESSIONS_DIR.glob("*.session"):
+                    # 从文件名提取电话号码（去掉 .session 扩展名）
+                    phone = session_file.stem
+                    session_phones.add(phone)
+            
+            if not session_phones:
+                logger.debug("[EXCEL] 没有找到 session 文件，无法进行电话号码匹配")
+                return None
+            
+            logger.debug(f"[EXCEL] 找到 {{len(session_phones)}} 个 session 文件的电话号码")
+            
+            # 扫描目录中的所有 Excel 文件
+            xlsx_files = list(directory.glob("*.xlsx"))
+            if not xlsx_files:
+                return None
+            
+            logger.info(f"[EXCEL] 在目录 {{directory}} 中找到 {{len(xlsx_files)}} 个 Excel 文件，尝试通过电话号码匹配...")
+            
+            for xlsx_file in xlsx_files:
+                try:
+                    wb = openpyxl.load_workbook(xlsx_file, read_only=True)
+                    ws = wb.active
+                    
+                    # 读取表头
+                    headers = [str(cell.value).strip().lower() if cell.value else "" for cell in ws[1]]
+                    phone_idx = next((i for i, h in enumerate(headers) if 'phone' in h), None)
+                    
+                    if phone_idx is None:
+                        logger.debug(f"[EXCEL] {{xlsx_file.name}} 没有 phone 列，跳过")
+                        wb.close()
+                        continue
+                    
+                    # 读取 Excel 中的电话号码
+                    excel_phones = set()
+                    for row in ws.iter_rows(min_row=2, values_only=True):
+                        if row[phone_idx]:
+                            phone = str(row[phone_idx]).strip()
+                            if phone:
+                                excel_phones.add(phone)
+                    
+                    wb.close()
+                    
+                    # 检查是否有匹配的电话号码
+                    matched_phones = session_phones & excel_phones
+                    if matched_phones:
+                        match_count = len(matched_phones)
+                        total_excel = len(excel_phones)
+                        total_session = len(session_phones)
+                        logger.info(f"[EXCEL] 找到匹配的 Excel 文件: {{xlsx_file.name}}")
+                        logger.info(f"[EXCEL] 匹配详情: Excel 中有 {{total_excel}} 个号码，Session 中有 {{total_session}} 个号码，匹配了 {{match_count}} 个")
+                        return xlsx_file
+                    else:
+                        logger.debug(f"[EXCEL] {{xlsx_file.name}} 中的电话号码与 session 文件不匹配")
+                        
+                except Exception as e:
+                    logger.debug(f"[EXCEL] 读取 {{xlsx_file.name}} 失败: {{e}}")
+                    continue
+            
+            return None
+            
+        except ImportError:
+            logger.debug("[EXCEL] openpyxl 未安装，无法进行电话号码匹配")
+            return None
+        except Exception as e:
+            logger.debug(f"[EXCEL] 电话号码匹配过程出错: {{e}}")
+            return None
+    
     # 1. 当前工作目录
     current_dir = Path.cwd()
     excel_file = check_file_in_dir(current_dir, excel_name)
@@ -1107,6 +1182,7 @@ def find_excel_file() -> Optional[Path]:
             script_dir = script_path.resolve().parent
         else:
             script_dir = Path.cwd()
+    
     # 2. 脚本所在目录（使用改进的查找函数）
     excel_file = check_file_in_dir(script_dir, excel_name)
     if excel_file:
@@ -1132,6 +1208,19 @@ def find_excel_file() -> Optional[Path]:
     excel_file = check_file_in_dir(SESSIONS_DIR, excel_name)
     if excel_file:
         logger.info(f"[EXCEL] 在 sessions 目录找到: {{excel_file}}")
+        return excel_file
+    
+    # 5. 智能匹配：通过电话号码匹配脚本目录中的 Excel 文件
+    logger.info(f"[EXCEL] 未找到名称匹配的配置文件，尝试通过电话号码智能匹配...")
+    excel_file = match_excel_by_phone_numbers(script_dir)
+    if excel_file:
+        logger.info(f"[EXCEL] 通过电话号码匹配找到 Excel 文件: {{excel_file}}")
+        return excel_file
+    
+    # 6. 智能匹配：通过电话号码匹配当前工作目录中的 Excel 文件
+    excel_file = match_excel_by_phone_numbers(current_dir)
+    if excel_file:
+        logger.info(f"[EXCEL] 通过电话号码匹配找到 Excel 文件: {{excel_file}}")
         return excel_file
     
     # 未找到 - 输出详细的调试信息

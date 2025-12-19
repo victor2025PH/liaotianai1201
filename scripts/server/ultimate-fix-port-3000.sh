@@ -19,8 +19,8 @@ sleep 2
 echo "✅ PM2 进程已全部停止"
 echo ""
 
-# 2. 查找并显示所有占用端口 3000 的进程
-echo "[2/7] 查找所有占用端口 3000 的进程..."
+# 2. 查找并显示所有占用端口 3000 的进程（包括所有用户）
+echo "[2/7] 查找所有占用端口 3000 的进程（包括所有用户）..."
 echo "----------------------------------------"
 PORT_3000_PIDS=$(sudo lsof -t -i:3000 2>/dev/null || echo "")
 if [ -n "$PORT_3000_PIDS" ]; then
@@ -33,27 +33,60 @@ if [ -n "$PORT_3000_PIDS" ]; then
         fi
     done
 else
-    echo "✅ 端口 3000 当前未被占用"
+    echo "✅ 端口 3000 当前未被占用（lsof 检查）"
+fi
+
+# 使用 ss 命令也检查一下（可能发现 lsof 没发现的）
+SS_PORT_3000=$(sudo ss -tlnp 2>/dev/null | grep ":3000 " || echo "")
+if [ -n "$SS_PORT_3000" ]; then
+    echo ""
+    echo "⚠️  ss 命令发现端口 3000 被占用:"
+    echo "$SS_PORT_3000"
+    # 从 ss 输出中提取 PID
+    SS_PID=$(echo "$SS_PORT_3000" | grep -oP 'pid=\K\d+' | head -1 || echo "")
+    if [ -n "$SS_PID" ]; then
+        echo "  发现进程 PID: $SS_PID"
+        ps -fp $SS_PID -o pid,ppid,user,comm,args 2>/dev/null || true
+        PORT_3000_PIDS="$PORT_3000_PIDS $SS_PID"
+    fi
 fi
 echo ""
 
-# 3. 杀掉所有占用端口 3000 的进程
-echo "[3/7] 强制杀掉所有占用端口 3000 的进程..."
+# 3. 杀掉所有占用端口 3000 的进程（包括所有用户）
+echo "[3/7] 强制杀掉所有占用端口 3000 的进程（包括所有用户）..."
 echo "----------------------------------------"
 if [ -n "$PORT_3000_PIDS" ]; then
     for PID in $PORT_3000_PIDS; do
-        echo "  杀掉 PID $PID..."
+        # 获取进程用户信息
+        PROCESS_USER=$(ps -o user= -p $PID 2>/dev/null | tr -d ' ' || echo "unknown")
+        echo "  杀掉 PID $PID (用户: $PROCESS_USER)..."
         sudo kill -9 $PID 2>/dev/null || true
     done
     sleep 2
 fi
 
-# 使用多种方法清理
+# 使用多种方法清理（包括所有用户的进程）
+echo "  使用 fuser 清理端口 3000..."
 sudo fuser -k -9 3000/tcp 2>/dev/null || true
+
+echo "  杀掉所有 next-server 进程（所有用户）..."
 sudo pkill -9 -f "next-server" 2>/dev/null || true
+
+echo "  杀掉所有 standalone/server.js 进程（所有用户）..."
 sudo pkill -9 -f "standalone/server.js" 2>/dev/null || true
-sleep 2
-echo "✅ 已强制清理"
+
+# 额外：杀掉所有在端口 3000 上监听的 node 进程
+echo "  查找并杀掉所有在端口 3000 上监听的 node 进程..."
+NODE_PIDS=$(sudo lsof -t -i:3000 2>/dev/null | xargs ps -o pid,user,comm -p 2>/dev/null | grep -E "node|next" | awk '{print $1}' || echo "")
+if [ -n "$NODE_PIDS" ]; then
+    for PID in $NODE_PIDS; do
+        echo "    杀掉 node 相关进程 PID $PID..."
+        sudo kill -9 $PID 2>/dev/null || true
+    done
+fi
+
+sleep 3
+echo "✅ 已强制清理所有用户的进程"
 echo ""
 
 # 4. 再次检查端口状态

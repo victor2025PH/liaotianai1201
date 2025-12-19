@@ -17,6 +17,7 @@ jobs:
       - name: Deploy to Server
         uses: appleboy/ssh-action@v1.2.0
         continue-on-error: false
+        timeout-minutes: 45
         env:
           GITHUB_REPO: ${{ github.repository }}
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
@@ -29,6 +30,13 @@ jobs:
           command_timeout: 60m
           script_stop: true
           debug: true
+          proxy_host: ''
+          proxy_port: 0
+          proxy_username: ''
+          proxy_password: ''
+          proxy_passphrase: ''
+          proxy_timeout: 60s
+          dial_timeout: 30s
           envs: GITHUB_REPO,SERVER_HOST
           script: |
             # 自动移除脚本中的 Windows 换行符 (关键修复)

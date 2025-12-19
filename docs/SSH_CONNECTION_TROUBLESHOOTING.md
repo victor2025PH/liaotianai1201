@@ -1,208 +1,153 @@
-# SSH 连接问题排查指南
+# SSH 連接問題排查指南
 
-## 🔍 问题：ssh-server.bat 无法连接服务器
+## 問題描述
 
-### 可能的原因
+在 GitHub Actions 部署過程中，可能遇到以下 SSH 連接錯誤：
 
-1. **密钥认证失败**：服务器没有配置对应的公钥
-2. **密码认证未启用**：服务器只允许密钥认证
-3. **网络连接问题**：IP地址错误或服务器不可达
-4. **防火墙阻止**：端口22被阻止
+1. `ssh: handshake failed: read tcp ...:22: read: connection reset by peer`
+2. `ssh: unexpected packet in response to channel open`
+3. `wait: remote command exited without exit status or exit signal`
 
----
+## 可能原因
 
-## ✅ 解决方案
+1. **網絡不穩定**：GitHub Actions runner 到服務器的網絡路徑不穩定
+2. **SSH 服務器配置**：服務器端的 SSH 配置可能限制了連接
+3. **防火牆或安全組**：可能阻斷了連接
+4. **連接超時**：長時間執行的腳本導致連接超時
 
-### 方案1: 使用密码认证（已修复）
+## 解決方案
 
-**已更新 `ssh-server.bat`**，现在使用密码认证而不是密钥认证。
+### 1. 檢查服務器端 SSH 配置
 
-**使用方法：**
-1. 双击 `ssh-server.bat`
-2. 当提示输入密码时，输入：`8iDcGrYb52Fxpzee`
-3. 注意：输入密码时不会显示任何字符（这是SSH的安全特性）
+在服務器上執行以下命令檢查 SSH 配置：
 
----
+```bash
+# 檢查 SSH 配置
+sudo nano /etc/ssh/sshd_config
 
-### 方案2: 手动测试SSH连接
+# 確保以下配置合理：
+# ClientAliveInterval 60
+# ClientAliveCountMax 3
+# MaxStartups 10:30:100
+# MaxSessions 10
 
-**在PowerShell中执行：**
-
-```powershell
-# 测试连接（会提示输入密码）
-ssh ubuntu@165.154.235.170
-
-# 如果连接成功，你会看到服务器提示符
-# 输入密码：8iDcGrYb52Fxpzee（输入时不会显示）
+# 重啟 SSH 服務
+sudo systemctl restart sshd
 ```
 
----
+### 2. 檢查 SSH 密鑰權限
 
-### 方案3: 使用详细模式查看错误
+確保服務器上的 SSH 密鑰權限正確：
 
-**在PowerShell中执行：**
-
-```powershell
-# 使用详细模式，查看具体错误信息
-ssh -v ubuntu@165.154.235.170
-```
-
-**常见错误信息：**
-- `Connection timed out` → 网络问题或防火墙阻止
-- `Permission denied` → 密码错误或用户不存在
-- `Host key verification failed` → 主机密钥问题（已通过 `-o StrictHostKeyChecking=no` 解决）
-
----
-
-### 方案4: 检查网络连接
-
-**在PowerShell中执行：**
-
-```powershell
-# 测试网络连通性
-ping 165.154.235.170
-
-# 测试SSH端口是否开放
-Test-NetConnection -ComputerName 165.154.235.170 -Port 22
-```
-
----
-
-### 方案5: 使用密钥认证（如果已配置）
-
-如果服务器已配置公钥，可以使用密钥认证：
-
-```powershell
-# 使用密钥文件连接
-ssh -i scripts/local/keys/server_key ubuntu@165.154.235.170
-```
-
-**配置公钥到服务器：**
-
-```powershell
-# 1. 读取公钥内容
-Get-Content scripts/local/keys/server_key.pub
-
-# 2. SSH登录到服务器（使用密码）
-ssh ubuntu@165.154.235.170
-
-# 3. 在服务器上执行（将公钥添加到authorized_keys）
-mkdir -p ~/.ssh
+```bash
+# 在服務器上執行
 chmod 700 ~/.ssh
-echo "你的公钥内容" >> ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
 ```
 
----
+### 3. 檢查防火牆設置
 
-## 🔧 修复后的脚本说明
+確保服務器的防火牆允許來自 GitHub Actions IP 範圍的連接：
 
-### ssh-server.bat（已修复）
+```bash
+# 查看 UFW 狀態
+sudo ufw status
 
-**特点：**
-- ✅ 使用密码认证（与配置文件一致）
-- ✅ 跳过主机密钥验证（避免首次连接问题）
-- ✅ 静默模式（减少输出）
-- ✅ 自动打开PowerShell窗口
-
-**使用方法：**
-1. 双击 `ssh-server.bat`
-2. 输入密码：`8iDcGrYb52Fxpzee`
-3. 连接成功后，会显示服务器提示符
-
----
-
-## 📝 配置文件中的认证信息
-
-根据 `data/master_config.json`：
-
-```json
-"los-angeles": {
-  "host": "165.154.235.170",
-  "user": "ubuntu",
-  "password": "8iDcGrYb52Fxpzee",
-  ...
-}
+# 確保 SSH 端口開放
+sudo ufw allow 22/tcp
 ```
 
-**认证方式：** 密码认证
-**用户名：** ubuntu
-**密码：** 8iDcGrYb52Fxpzee
+### 4. 使用 GitHub Actions 重試機制
 
----
+在 workflow 中添加重試邏輯（需要修改 workflow 文件）：
 
-## ⚠️ 常见问题
-
-### Q1: 输入密码时没有反应？
-
-**A:** 这是正常的！SSH为了安全，输入密码时不会显示任何字符（包括 `*`）。直接输入密码后按 Enter。
-
-### Q2: 连接超时？
-
-**A:** 可能的原因：
-1. IP地址错误
-2. 服务器未运行
-3. 防火墙阻止端口22
-4. 网络问题
-
-**解决方法：**
-```powershell
-# 测试网络连通性
-ping 165.154.235.170
-
-# 如果ping不通，检查IP地址是否正确
+```yaml
+- name: Deploy to Server
+  uses: appleboy/ssh-action@v1.2.0
+  # ... 其他配置 ...
+  continue-on-error: false
+  # 注意：appleboy/ssh-action 本身不支持重試，但可以在 step 層級添加重試
 ```
 
-### Q3: 权限被拒绝（Permission denied）？
+### 5. 將腳本分步驟執行
 
-**A:** 可能的原因：
-1. 密码错误
-2. 用户名错误
-3. 服务器不允许密码认证
+將長腳本拆分為多個較短的步驟，減少單次連接的時間：
 
-**解决方法：**
-1. 确认密码：`8iDcGrYb52Fxpzee`
-2. 确认用户名：`ubuntu`
-3. 检查服务器SSH配置（如果可能）
+```yaml
+- name: Step 1 - Update Code
+  uses: appleboy/ssh-action@v1.2.0
+  with:
+    script: |
+      # 只執行代碼更新
+      cd /home/ubuntu/telegram-ai-system
+      git pull origin main
 
-### Q4: 想要使用密钥认证？
+- name: Step 2 - Build Frontend
+  uses: appleboy/ssh-action@v1.2.0
+  with:
+    script: |
+      # 只執行前端構建
+      cd /home/ubuntu/telegram-ai-system/saas-demo
+      npm run build
 
-**A:** 需要：
-1. 确保服务器已配置公钥
-2. 修改 `ssh-server.bat`，添加 `-i scripts/local/keys/server_key` 参数
-
----
-
-## 🎯 快速测试
-
-**在PowerShell中执行：**
-
-```powershell
-# 快速测试连接
-ssh -o ConnectTimeout=5 ubuntu@165.154.235.170 "echo '连接成功'"
+# ... 更多步驟 ...
 ```
 
-如果连接成功，会显示 "连接成功"。
+### 6. 將部署腳本上傳到服務器執行
 
----
+使用 `scp` 或 `rsync` 先上傳腳本，然後執行：
 
-## 📚 相关文件
+```yaml
+- name: Upload Deploy Script
+  uses: appleboy/scp-action@master
+  with:
+    host: ${{ secrets.SERVER_HOST }}
+    username: ${{ secrets.SERVER_USER }}
+    key: ${{ secrets.SERVER_SSH_KEY }}
+    source: "deploy.sh"
+    target: "/tmp/"
 
-- `ssh-server.bat` - SSH连接脚本（已修复）
-- `scripts/local/ssh-to-server.bat` - 另一个SSH连接脚本
-- `data/master_config.json` - 服务器配置（包含密码信息）
+- name: Execute Deploy Script
+  uses: appleboy/ssh-action@v1.2.0
+  with:
+    script: |
+      chmod +x /tmp/deploy.sh
+      bash /tmp/deploy.sh
+      rm /tmp/deploy.sh
+```
 
----
+### 7. 檢查服務器資源
 
-## ✅ 验证修复
+確保服務器有足夠的資源（內存、CPU）來處理部署：
 
-修复后，执行以下步骤验证：
+```bash
+# 檢查系統資源
+free -h
+df -h
+top
+```
 
-1. **双击 `ssh-server.bat`**
-2. **等待PowerShell窗口打开**
-3. **输入密码：`8iDcGrYb52Fxpzee`**（输入时不会显示）
-4. **按 Enter**
-5. **如果连接成功，会显示服务器提示符：`ubuntu@...:~$`**
+### 8. 檢查 SSH 日誌
 
-如果仍然无法连接，请查看详细错误信息（使用 `ssh -v`）。
+在服務器上查看 SSH 日誌以了解連接問題：
 
+```bash
+# 查看 SSH 日誌
+sudo tail -f /var/log/auth.log
+
+# 或
+sudo journalctl -u ssh -f
+```
+
+## 如果問題持續存在
+
+如果上述方法都無法解決問題，可以考慮：
+
+1. **手動部署**：使用本地腳本或直接 SSH 到服務器手動執行部署
+2. **使用 Webhook**：在服務器上設置 webhook 監聽器，接收 GitHub webhook 觸發部署
+3. **使用 CI/CD 服務**：考慮使用其他 CI/CD 服務（如 GitLab CI、Jenkins）或自託管的 runner
+
+## 相關文件
+
+- [GitHub Actions SSH 配置指南](./SETUP_GITHUB_ACTIONS_SSH.md)
+- [部署腳本文檔](../deploy/README.md)

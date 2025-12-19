@@ -567,14 +567,20 @@ jobs:
                 echo "✅ 创建 Nginx 配置符号链接"
             fi
             
-            # 禁用默认站点（如果存在）
+            # 禁用默认站点（如果不存在）
             sudo rm -f /etc/nginx/sites-enabled/default
             
-            # 测试 Nginx 配置
-            if sudo nginx -t; then
+            # 测试 Nginx 配置（在 set -e 生效时，需要捕获错误）
+            set +e  # 临时关闭，避免测试失败导致脚本退出
+            sudo nginx -t
+            NGINX_TEST_RESULT=$?
+            set -e  # 恢复错误退出模式
+            
+            if [ $NGINX_TEST_RESULT -eq 0 ]; then
                 echo "✅ Nginx 配置测试通过"
             else
                 echo "❌ Nginx 配置测试失败"
+                sudo nginx -t  # 再次显示错误信息
                 exit 1
             fi
             
@@ -584,11 +590,12 @@ jobs:
             sudo systemctl restart nginx
             sleep 2
             
-            # 检查 Nginx 状态
+            # 检查 Nginx 状态（使用 set +e 避免状态检查失败导致脚本退出）
+            set +e
             if sudo systemctl is-active --quiet nginx; then
                 echo "✅ Nginx 运行正常"
             else
-                echo "❌ Nginx 启动失败"
+                echo "⚠️  Nginx 可能未正常运行（继续部署）"
                 sudo systemctl status nginx --no-pager -l | head -20 || true
             fi
             
@@ -596,7 +603,7 @@ jobs:
             echo ""
             echo "🔍 验证服务状态..."
             
-            # ！！！关键：关闭错误立即退出模式，防止检查逻辑误杀脚本！！！
+            # ！！！关键：确保关闭错误立即退出模式，防止检查逻辑误杀脚本！！！
             set +e
 
             # 获取 PM2 列表

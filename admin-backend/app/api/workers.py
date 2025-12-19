@@ -803,14 +803,15 @@ if errorlevel 1 (
 ) else (
     echo [OK] openpyxl: installed
 )
+
 if !MISSING_DEPS! equ 1 (
     echo.
     echo [INSTALL] Installing missing dependencies...
     echo [INFO] Using Tsinghua mirror source...
-    python -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple
+    python -m pip install telethon requests openpyxl pycryptodome -i https://pypi.tuna.tsinghua.edu.cn/simple
     if errorlevel 1 (
         echo [WARN] Mirror source failed, trying default source...
-        python -m pip install telethon requests openpyxl --upgrade
+        python -m pip install telethon requests openpyxl pycryptodome --upgrade
         if errorlevel 1 (
             echo [ERROR] Failed to install dependencies
             pause
@@ -823,7 +824,7 @@ if !MISSING_DEPS! equ 1 (
     if errorlevel 1 (
         echo [ERROR] Dependency verification failed
         echo [INFO] Trying to reinstall...
-        python -m pip install telethon requests openpyxl --upgrade --force-reinstall
+        python -m pip install telethon requests openpyxl pycryptodome --upgrade --force-reinstall
         if errorlevel 1 (
             echo [ERROR] Reinstallation failed
             pause
@@ -837,7 +838,7 @@ if !MISSING_DEPS! equ 1 (
     python -c "import telethon; import requests; import openpyxl; print('OK')" >nul 2>&1
     if errorlevel 1 (
         echo [WARN] Some dependencies cannot be imported, reinstalling...
-        python -m pip install telethon requests openpyxl --upgrade --force-reinstall
+        python -m pip install telethon requests openpyxl pycryptodome --upgrade --force-reinstall
         if errorlevel 1 (
             echo [ERROR] Reinstallation failed
             pause
@@ -845,6 +846,25 @@ if !MISSING_DEPS! equ 1 (
         )
     )
     echo [OK] All dependencies are available
+)
+
+REM Install optional cryptg for better performance (non-blocking)
+echo.
+echo [OPTIONAL] Installing optional cryptg module for better performance...
+python -c "import cryptg" >nul 2>&1
+if errorlevel 1 (
+    python -m pip install cryptg -i https://pypi.tuna.tsinghua.edu.cn/simple >nul 2>&1
+    if errorlevel 1 (
+        python -m pip install cryptg >nul 2>&1
+    )
+    python -c "import cryptg" >nul 2>&1
+    if errorlevel 1 (
+        echo [INFO] cryptg installation failed, will use slower Python encryption
+    ) else (
+        echo [OK] cryptg installed successfully
+    )
+) else (
+    echo [OK] cryptg: already installed
 )
 
 REM Step 4: Setup environment
@@ -1355,9 +1375,12 @@ def scan_session_files() -> List[str]:
 
 def get_account_info_via_telethon(phone: str, api_id: Optional[int], api_hash: Optional[str]) -> Dict[str, Any]:
     """通过 Telethon 获取账号信息"""
+    # 首先检查 Telethon 是否可以导入
     try:
+        import telethon
         from telethon import TelegramClient
         from telethon.errors import SessionPasswordNeeded, PhoneCodeInvalid
+        logger.debug(f"Telethon 版本: {{telethon.__version__ if hasattr(telethon, '__version__') else 'unknown'}}")
     except ImportError as e:
         logger.warning(f"Telethon 未安装或导入失败: {{e}}")
         logger.info("提示: 如果已安装 telethon，可能是缺少 SSL 库依赖")
@@ -1366,6 +1389,21 @@ def get_account_info_via_telethon(phone: str, api_id: Optional[int], api_hash: O
     except Exception as e:
         logger.warning(f"导入 Telethon 时出错: {{e}}")
         return {{"phone": phone, "user_id": None, "username": None, "name": None, "status": "offline"}}
+    
+    # 检查 SSL 库和 cryptg 模块（可选但推荐）
+    try:
+        import ssl
+        logger.debug("SSL 库可用")
+    except ImportError:
+        logger.warning("Python SSL 库不可用，Telethon 可能无法正常工作")
+        logger.info("建议: 确保使用标准 Python 安装，而不是精简版")
+    
+    try:
+        import cryptg
+        logger.debug("cryptg 模块已安装（快速加密）")
+    except ImportError:
+        logger.debug("cryptg 模块未安装（将使用较慢的 Python 加密）")
+        logger.debug("提示: 安装 cryptg 可提升性能: pip install cryptg")
     
     try:
         session_file = SESSIONS_DIR / f"{{phone}}.session"
@@ -1404,7 +1442,20 @@ def get_account_info_via_telethon(phone: str, api_id: Optional[int], api_hash: O
             client.disconnect()
             
     except Exception as e:
-        logger.debug(f"获取账号 {{phone}} 信息失败: {{e}}")
+        error_msg = str(e)
+        logger.debug(f"获取账号 {{phone}} 信息失败: {{error_msg}}")
+        
+        # 提供更详细的错误诊断
+        if "ssl" in error_msg.lower() or "crypt" in error_msg.lower():
+            logger.warning(f"账号 {{phone}} 的 Telethon 操作失败，可能是 SSL/加密库问题")
+            logger.info("建议执行以下命令:")
+            logger.info("  1. pip install --upgrade --force-reinstall pycryptodome")
+            logger.info("  2. pip install cryptg  (可选，提升性能)")
+            logger.info("  3. 重启 worker 进程")
+        elif "connection" in error_msg.lower() or "timeout" in error_msg.lower():
+            logger.debug(f"账号 {{phone}} 连接问题: {{error_msg}}")
+        else:
+            logger.debug(f"账号 {{phone}} 其他错误: {{error_msg}}")
     
     return {{"phone": phone, "user_id": None, "username": None, "name": None, "status": "offline"}}
 

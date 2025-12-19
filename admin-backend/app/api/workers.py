@@ -818,7 +818,6 @@ if !MISSING_DEPS! equ 1 (
             exit /b 1
         )
     )
-    
     echo.
     echo [VERIFY] Verifying installation...
     python -c "import telethon; import requests; import openpyxl; print('All dependencies OK')" 2>nul

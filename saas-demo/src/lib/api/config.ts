@@ -17,17 +17,18 @@ export function getApiBaseUrl(): string {
   // 如果是在瀏覽器環境
   if (typeof window !== "undefined") {
     const host = window.location.host;
-    const protocol = window.location.protocol;
     
     // 開發環境：localhost 使用 8000 端口
     if (host.includes("localhost") || host.includes("127.0.0.1")) {
       return "http://localhost:8000/api/v1";
     }
     
-    // 生產環境：使用相對路徑，讓 Nginx 處理代理
-    // 這樣可以避免 CORS 問題，並且讓 Nginx 正確代理到後端
-    // 使用當前協議和主機，確保在生產環境中正確工作
-    return `${protocol}//${host}/api/v1`;
+    // 生產環境：強制使用 HTTP（因為服務器只配置了 HTTP）
+    // 如果將來配置了 HTTPS，可以改回使用 window.location.protocol
+    // 使用相對路徑，讓 Nginx 處理代理
+    // 注意：如果頁面是 HTTPS，瀏覽器可能會阻止混合內容（HTTP API 請求）
+    // 解決方案：配置 HTTPS 或使用相對路徑（讓 Nginx 處理協議）
+    return `http://${host}/api/v1`;
   }
 
   // 服務端渲染：檢查是否在生產環境
@@ -75,9 +76,9 @@ export function getWebSocketUrl(): string {
       return "ws://localhost:8000/api/v1/notifications/ws";
     }
     
-    // 生產環境：使用當前域名
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${protocol}//${host}/api/v1/notifications/ws`;
+    // 生產環境：強制使用 WS（因為服務器只配置了 HTTP）
+    // 如果將來配置了 HTTPS，可以改回使用 wss
+    return `ws://${host}/api/v1/notifications/ws`;
   }
 
   // 默認值

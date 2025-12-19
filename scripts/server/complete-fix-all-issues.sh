@@ -36,21 +36,32 @@ sleep 5
 echo "✅ 所有进程已停止"
 echo ""
 
-# 2. 验证端口已释放
+# 2. 验证端口已释放（使用强力清理脚本）
 echo "[2/6] 验证端口已释放..."
 echo "----------------------------------------"
-PORT_3000=$(sudo ss -tlnp 2>/dev/null | grep ":3000 " || echo "")
-PORT_8000=$(sudo ss -tlnp 2>/dev/null | grep ":8000 " || echo "")
-if [ -n "$PORT_3000" ] || [ -n "$PORT_8000" ]; then
-    echo "⚠️  警告：端口仍被占用"
-    [ -n "$PORT_3000" ] && echo "端口 3000: $PORT_3000"
-    [ -n "$PORT_8000" ] && echo "端口 8000: $PORT_8000"
-    echo "再次强制清理..."
-    sudo lsof -t -i:3000 2>/dev/null | xargs sudo kill -9 2>/dev/null || true
-    sudo lsof -t -i:8000 2>/dev/null | xargs sudo kill -9 2>/dev/null || true
-    sleep 3
+# 使用专门的脚本来彻底清理
+if [ -f "$PROJECT_DIR/scripts/server/kill-next-server-completely.sh" ]; then
+    echo "使用强力清理脚本..."
+    bash "$PROJECT_DIR/scripts/server/kill-next-server-completely.sh"
+    CLEANUP_RESULT=$?
+    if [ $CLEANUP_RESULT -ne 0 ]; then
+        echo "⚠️  清理脚本执行失败，但继续尝试..."
+    fi
 else
-    echo "✅ 端口已确认释放"
+    # 备用清理方法
+    PORT_3000=$(sudo ss -tlnp 2>/dev/null | grep ":3000 " || echo "")
+    PORT_8000=$(sudo ss -tlnp 2>/dev/null | grep ":8000 " || echo "")
+    if [ -n "$PORT_3000" ] || [ -n "$PORT_8000" ]; then
+        echo "⚠️  警告：端口仍被占用"
+        [ -n "$PORT_3000" ] && echo "端口 3000: $PORT_3000"
+        [ -n "$PORT_8000" ] && echo "端口 8000: $PORT_8000"
+        echo "再次强制清理..."
+        sudo lsof -t -i:3000 2>/dev/null | xargs sudo kill -9 2>/dev/null || true
+        sudo lsof -t -i:8000 2>/dev/null | xargs sudo kill -9 2>/dev/null || true
+        sleep 3
+    else
+        echo "✅ 端口已确认释放"
+    fi
 fi
 echo ""
 

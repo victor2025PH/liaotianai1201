@@ -25,12 +25,15 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          timeout: 180s
-          command_timeout: 30m
-          script_stop: false
+          timeout: 300s
+          command_timeout: 60m
+          script_stop: true
           debug: true
           envs: GITHUB_REPO,SERVER_HOST
           script: |
+            # 将脚本保存到临时文件并执行（提高稳定性）
+            DEPLOY_SCRIPT="/tmp/deploy_$$.sh"
+            cat > "$DEPLOY_SCRIPT" <<'SCRIPT_END'
             # 自动移除脚本中的 Windows 换行符 (关键修复)
             sed -i 's/\r$//' "$0" 2>/dev/null || true
             
@@ -652,3 +655,17 @@ jobs:
             echo "退出码: 0"
             # 确保脚本以成功状态退出，避免 SSH 连接问题影响部署状态判断
             exit 0
+SCRIPT_END
+            
+            # 移除 Windows 换行符并赋予执行权限
+            sed -i 's/\r$//' "$DEPLOY_SCRIPT" 2>/dev/null || true
+            chmod +x "$DEPLOY_SCRIPT"
+            
+            # 执行脚本并捕获退出码
+            bash "$DEPLOY_SCRIPT" || EXIT_CODE=$?
+            
+            # 清理临时文件
+            rm -f "$DEPLOY_SCRIPT"
+            
+            # 使用脚本的退出码
+            exit ${EXIT_CODE:-0}

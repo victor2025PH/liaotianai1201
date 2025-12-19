@@ -1398,7 +1398,6 @@ def get_account_info_via_telethon(phone: str, api_id: Optional[int], api_hash: O
     try:
         import telethon
         from telethon import TelegramClient
-        from telethon.errors import SessionPasswordNeeded, PhoneCodeInvalid
         logger.debug(f"Telethon 版本: {{telethon.__version__ if hasattr(telethon, '__version__') else 'unknown'}}")
     except ImportError as e:
         logger.warning(f"Telethon 未安装或导入失败: {{e}}")

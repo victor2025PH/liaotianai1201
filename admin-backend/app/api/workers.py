@@ -1286,8 +1286,12 @@ def load_accounts_from_excel() -> List[Dict[str, Any]]:
             return accounts
         
         # 读取数据行
+        logger.debug(f"[EXCEL] 开始读取数据行，表头: {{headers}}")
+        logger.debug(f"[EXCEL] 列索引 - phone: {{phone_idx}}, api_id: {{api_id_idx}}, api_hash: {{api_hash_idx}}, enabled: {{enabled_idx}}")
+        
         for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
             if not any(row):
+                logger.debug(f"[EXCEL] 第 {{row_num}} 行为空，跳过")
                 continue
             
             phone = str(row[phone_idx]).strip() if row[phone_idx] else None
@@ -1297,15 +1301,33 @@ def load_accounts_from_excel() -> List[Dict[str, Any]]:
             if enabled_idx is not None and row[enabled_idx] is not None:
                 enabled = bool(int(row[enabled_idx])) if str(row[enabled_idx]).isdigit() else bool(row[enabled_idx])
             
+            logger.debug(f"[EXCEL] 第 {{row_num}} 行 - phone: {{phone}}, api_id: {{api_id}}, enabled: {{enabled}}")
+            
             if phone and api_id and api_hash and enabled:
+                # 清理电话号码（移除空格、+号等）
+                phone_clean = phone.replace(" ", "").replace("-", "").replace("+", "")
                 accounts.append({{
-                    "phone": phone,
+                    "phone": phone_clean,
                     "api_id": int(api_id) if api_id.isdigit() else None,
                     "api_hash": api_hash,
                     "enabled": enabled
                 }})
+                logger.debug(f"[EXCEL] 已添加账号: {{phone_clean}}")
+            else:
+                missing_fields = []
+                if not phone:
+                    missing_fields.append("phone")
+                if not api_id:
+                    missing_fields.append("api_id")
+                if not api_hash:
+                    missing_fields.append("api_hash")
+                if not enabled:
+                    missing_fields.append("enabled")
+                logger.warning(f"[EXCEL] 第 {{row_num}} 行数据不完整，缺少: {{', '.join(missing_fields)}}")
         
         logger.info(f"从 Excel 加载了 {{len(accounts)}} 个账号")
+        if accounts:
+            logger.debug(f"[EXCEL] 加载的账号电话号码: {{[acc['phone'] for acc in accounts]}}")
         return accounts
         
     except ImportError:
@@ -1336,13 +1358,23 @@ def get_account_info_via_telethon(phone: str, api_id: Optional[int], api_hash: O
     try:
         from telethon import TelegramClient
         from telethon.errors import SessionPasswordNeeded, PhoneCodeInvalid
-        
+    except ImportError as e:
+        logger.warning(f"Telethon 未安装或导入失败: {{e}}")
+        logger.info("提示: 如果已安装 telethon，可能是缺少 SSL 库依赖")
+        logger.info("Windows 用户可能需要安装: pip install pycryptodome")
+        return {{"phone": phone, "user_id": None, "username": None, "name": None, "status": "offline"}}
+    except Exception as e:
+        logger.warning(f"导入 Telethon 时出错: {{e}}")
+        return {{"phone": phone, "user_id": None, "username": None, "name": None, "status": "offline"}}
+    
+    try:
         session_file = SESSIONS_DIR / f"{{phone}}.session"
         if not session_file.exists():
+            logger.debug(f"Session 文件不存在: {{session_file}}")
             return {{"phone": phone, "user_id": None, "username": None, "name": None}}
         
         # 使用 Excel 中的 API ID/Hash，如果没有则使用默认值
-        effective_api_id = api_id or (int(DEFAULT_API_ID) if DEFAULT_API_ID.isdigit() else None)
+        effective_api_id = api_id or (int(DEFAULT_API_ID) if DEFAULT_API_ID and DEFAULT_API_ID.isdigit() else None)
         effective_api_hash = api_hash or DEFAULT_API_HASH
         
         if not effective_api_id or not effective_api_hash:
@@ -1355,10 +1387,12 @@ def get_account_info_via_telethon(phone: str, api_id: Optional[int], api_hash: O
             client.connect()
             
             if not client.is_connected():
+                logger.debug(f"账号 {{phone}} 连接失败")
                 return {{"phone": phone, "user_id": None, "username": None, "name": None}}
             
             me = client.get_me()
             if me:
+                logger.debug(f"账号 {{phone}} 信息获取成功: user_id={{me.id}}")
                 return {{
                     "phone": phone,
                     "user_id": me.id,
@@ -1369,8 +1403,6 @@ def get_account_info_via_telethon(phone: str, api_id: Optional[int], api_hash: O
         finally:
             client.disconnect()
             
-    except ImportError:
-        logger.warning("Telethon 未安装，无法获取账号详细信息")
     except Exception as e:
         logger.debug(f"获取账号 {{phone}} 信息失败: {{e}}")
     

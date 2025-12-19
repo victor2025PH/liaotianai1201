@@ -25,10 +25,11 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          timeout: 120s
+          timeout: 180s
           command_timeout: 30m
           script_stop: true
           debug: true
+          # 增加 SSH 保活设置（如果支持）
           envs: GITHUB_REPO,SERVER_HOST
           script: |
             # 自动移除脚本中的 Windows 换行符 (关键修复)
@@ -651,4 +652,11 @@ jobs:
             echo "脚本执行完成时间: $(date)"
             echo "退出码: 0"
             # 确保脚本以成功状态退出，避免 SSH 连接问题影响部署状态判断
+            
+            # 刷新所有输出缓冲区，确保所有内容都发送到客户端
+            sync
+            # 添加短暂延迟，确保 SSH 连接正常关闭
+            sleep 1
+            # 明确输出结束标记
+            echo "=== 部署脚本执行完毕，准备关闭 SSH 连接 ==="
             exit 0

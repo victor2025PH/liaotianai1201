@@ -28,6 +28,9 @@ jobs:
           debug: true
           envs: GITHUB_REPO=${{ github.repository }},SERVER_HOST=${{ secrets.SERVER_HOST }}
           script: |
+            # 自动移除脚本中的 Windows 换行符 (关键修复)
+            sed -i 's/\r$//' "$0" 2>/dev/null || true
+            
             # 遇到任何命令错误(非逻辑判断)则退出
             set -e
             
@@ -222,30 +225,30 @@ jobs:
             pip install --upgrade pip --quiet
             pip install -r requirements.txt --quiet
             
-            # 5. 检查并创建 .env 文件
+            # 5. 检查并创建 .env 文件 (兼容性修复版)
             echo "🔧 检查后端配置文件..."
-            if [ ! -f .env ]; then
-                echo "⚠️  缺少 .env 文件，正在从 env.example 复制..."
-                if [ -f env.example ]; then
+            
+            # 使用最简单的逻辑，避免语法解析错误
+            if [ -f ".env" ]; then
+                echo "✅ .env 文件已存在"
+            else
+                echo "⚠️  .env 不存在，正在创建..."
+                # 优先尝试复制示例文件
+                if [ -f "env.example" ]; then
                     cp env.example .env
-                    echo "✅ 已从 env.example 创建 .env 文件"
-                    echo "⚠️  注意：请确保 .env 文件中的配置（如 JWT_SECRET、CORS_ORIGINS）适合生产环境"
+                    echo "✅ 已从 env.example 复制"
                 else
-                    echo "❌ 错误：env.example 文件不存在，无法创建 .env"
-                    echo "   将创建一个基本的 .env 文件..."
-                    # 创建基本的 .env 文件（使用 echo 逐行写入，避免 YAML 解析问题）
-                    echo "JWT_SECRET=change_me_production_key_please_change" > .env
-                    echo "JWT_ALGORITHM=HS256" >> .env
-                    echo "ACCESS_TOKEN_EXPIRE_MINUTES=60" >> .env
-                    echo "ADMIN_DEFAULT_EMAIL=admin@example.com" >> .env
-                    echo "ADMIN_DEFAULT_PASSWORD=changeme123" >> .env
+                    # 如果示例文件也不存在，直接写入默认值
+                    echo "JWT_SECRET=production_secret_key_change_me" > .env
+                    echo "LOG_LEVEL=INFO" >> .env
                     echo "CORS_ORIGINS=https://aikz.usdt2026.cc,http://aikz.usdt2026.cc,http://localhost:3000" >> .env
                     echo "DATABASE_URL=sqlite:///./admin.db" >> .env
-                    echo "✅ 已创建基本的 .env 文件"
+                    echo "✅ 已生成基础 .env 文件"
                 fi
-            else
-                echo "✅ .env 文件已存在，跳过创建"
             fi
+            
+            # 再次确认
+            ls -l .env || echo "❌ .env 文件创建失败"
             
             echo "✅ 后端依赖安装完成"
             cd ..

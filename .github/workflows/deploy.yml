@@ -652,17 +652,3 @@ jobs:
             echo "退出码: 0"
             # 确保脚本以成功状态退出，避免 SSH 连接问题影响部署状态判断
             exit 0
-SCRIPT_END
-            
-            # 移除 Windows 换行符并赋予执行权限
-            sed -i 's/\r$//' "$DEPLOY_SCRIPT" 2>/dev/null || true
-            chmod +x "$DEPLOY_SCRIPT"
-            
-            # 执行脚本并捕获退出码
-            bash "$DEPLOY_SCRIPT" || EXIT_CODE=$?
-            
-            # 清理临时文件
-            rm -f "$DEPLOY_SCRIPT"
-            
-            # 使用脚本的退出码
-            exit ${EXIT_CODE:-0}

@@ -49,6 +49,21 @@ const nextConfig: NextConfig = {
   
   // 重定向優化（移除末尾斜杠）
   trailingSlash: false,
+  
+  // 確保 standalone 模式正確生成所有必需文件
+  // 這可以解決 routes.js 缺失的問題
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // 確保服務器端構建包含所有必需文件
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+      };
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

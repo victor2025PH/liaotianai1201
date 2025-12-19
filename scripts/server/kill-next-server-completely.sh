@@ -33,11 +33,11 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
         echo "$PROCESS_INFO"
     fi
     
-    # 获取父进程 ID
-    PPID=$(ps -o ppid= -p $NEXT_PID 2>/dev/null | tr -d ' ' || echo "")
-    if [ -n "$PPID" ] && [ "$PPID" != "1" ]; then
-        echo "父进程 PID: $PPID"
-        PARENT_INFO=$(ps -fp $PPID -o pid,ppid,user,comm,args 2>/dev/null || echo "")
+    # 获取父进程 ID（使用不同的变量名避免与 shell 内置变量冲突）
+    PARENT_PID=$(ps -o ppid= -p $NEXT_PID 2>/dev/null | tr -d ' ' || echo "")
+    if [ -n "$PARENT_PID" ] && [ "$PARENT_PID" != "1" ]; then
+        echo "父进程 PID: $PARENT_PID"
+        PARENT_INFO=$(ps -fp $PARENT_PID -o pid,ppid,user,comm,args 2>/dev/null || echo "")
         if [ -n "$PARENT_INFO" ]; then
             echo "父进程信息:"
             echo "$PARENT_INFO"
@@ -48,11 +48,11 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
     echo "杀掉进程 PID $NEXT_PID..."
     sudo kill -9 $NEXT_PID 2>/dev/null || true
     
-    if [ -n "$PPID" ] && [ "$PPID" != "1" ]; then
-        PARENT_COMM=$(ps -o comm= -p $PPID 2>/dev/null | tr -d ' ' || echo "")
+    if [ -n "$PARENT_PID" ] && [ "$PARENT_PID" != "1" ]; then
+        PARENT_COMM=$(ps -o comm= -p $PARENT_PID 2>/dev/null | tr -d ' ' || echo "")
         if [[ ! "$PARENT_COMM" =~ ^(systemd|init)$ ]]; then
-            echo "杀掉父进程 PID $PPID..."
-            sudo kill -9 $PPID 2>/dev/null || true
+            echo "杀掉父进程 PID $PARENT_PID..."
+            sudo kill -9 $PARENT_PID 2>/dev/null || true
         fi
     fi
     

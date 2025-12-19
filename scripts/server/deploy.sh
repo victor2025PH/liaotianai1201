@@ -108,11 +108,51 @@ if [ -z "$STANDALONE_DIR" ] || [ ! -d "$STANDALONE_DIR" ]; then
     exit 1
 fi
 
+# 确保目录结构完整
 mkdir -p "$STANDALONE_DIR/.next/static"
 mkdir -p "$STANDALONE_DIR/.next/server"
-cp -r .next/static/* "$STANDALONE_DIR/.next/static/" 2>/dev/null || true
-if [ -d "public" ]; then cp -r public "$STANDALONE_DIR/" 2>/dev/null || true; fi
-cp -r .next/server/* "$STANDALONE_DIR/.next/server/" 2>/dev/null || true
+mkdir -p "$STANDALONE_DIR/.next"
+
+# 复制 BUILD_ID（必需）
+if [ -f ".next/BUILD_ID" ]; then
+    cp .next/BUILD_ID "$STANDALONE_DIR/.next/BUILD_ID" 2>/dev/null || true
+    echo "✅ BUILD_ID 已复制"
+fi
+
+# 复制所有 JSON 配置文件（必需）
+for json_file in .next/*.json; do
+    if [ -f "$json_file" ]; then
+        cp "$json_file" "$STANDALONE_DIR/.next/" 2>/dev/null || true
+    fi
+done
+echo "✅ JSON 配置文件已复制"
+
+# 复制 static 目录（必需）
+if [ -d ".next/static" ]; then
+    cp -r .next/static/* "$STANDALONE_DIR/.next/static/" 2>/dev/null || true
+    echo "✅ static 目录已复制"
+fi
+
+# 复制 server 目录（必需，包含 pages-manifest.json 等）
+if [ -d ".next/server" ]; then
+    cp -r .next/server/* "$STANDALONE_DIR/.next/server/" 2>/dev/null || true
+    echo "✅ server 目录已复制"
+fi
+
+# 复制 public 目录
+if [ -d "public" ]; then
+    cp -r public "$STANDALONE_DIR/" 2>/dev/null || true
+    echo "✅ public 目录已复制"
+fi
+
+# 验证关键文件
+if [ ! -f "$STANDALONE_DIR/.next/BUILD_ID" ]; then
+    echo "⚠️  警告：BUILD_ID 未复制"
+fi
+
+if [ ! -f "$STANDALONE_DIR/.next/server/pages-manifest.json" ]; then
+    echo "⚠️  警告：pages-manifest.json 未复制"
+fi
 
 cd ..
 

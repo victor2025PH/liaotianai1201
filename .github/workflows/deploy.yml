@@ -14,6 +14,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Debug - List files to verify deploy.sh exists
+        run: |
+          echo "=== Current working directory ==="
+          pwd
+          echo ""
+          echo "=== Listing scripts/server directory ==="
+          ls -la scripts/server/ || echo "scripts/server directory not found"
+          echo ""
+          echo "=== Checking if deploy.sh exists ==="
+          if [ -f "scripts/server/deploy.sh" ]; then
+            echo "✅ deploy.sh found at scripts/server/deploy.sh"
+            ls -lh scripts/server/deploy.sh
+          else
+            echo "❌ deploy.sh NOT found at scripts/server/deploy.sh"
+            echo "Searching for deploy.sh..."
+            find . -name "deploy.sh" -type f 2>/dev/null || echo "No deploy.sh found in repository"
+          fi
+
       - name: Upload deploy script to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -43,6 +61,30 @@ jobs:
           debug: true
           envs: GITHUB_REPO,SERVER_HOST
           script: |
-            # 赋予执行权限并运行
-            chmod +x /tmp/deploy.sh
+            echo "=== Checking uploaded files in /tmp ==="
+            echo "Listing /tmp directory contents:"
+            ls -la /tmp/ | grep -E "(deploy|script)" || ls -la /tmp/ | head -20
+            echo ""
+            echo "Searching for deploy.sh in /tmp:"
+            DEPLOY_FILE=$(find /tmp -name "deploy.sh" -type f 2>/dev/null | head -1)
+            if [ -n "$DEPLOY_FILE" ]; then
+              echo "✅ Found deploy.sh at: $DEPLOY_FILE"
+              ls -lh "$DEPLOY_FILE"
+              echo ""
+              echo "=== Copying to /tmp/deploy.sh ==="
+              cp "$DEPLOY_FILE" /tmp/deploy.sh
+              chmod +x /tmp/deploy.sh
+              echo "✅ File ready at /tmp/deploy.sh"
+            elif [ -f "/tmp/deploy.sh" ]; then
+              echo "✅ /tmp/deploy.sh already exists"
+              ls -lh /tmp/deploy.sh
+              chmod +x /tmp/deploy.sh
+            else
+              echo "❌ deploy.sh NOT found in /tmp"
+              echo "Full /tmp directory listing:"
+              ls -la /tmp/
+              exit 1
+            fi
+            echo ""
+            echo "=== Running deploy script ==="
             bash /tmp/deploy.sh

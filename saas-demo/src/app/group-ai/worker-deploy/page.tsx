@@ -46,7 +46,7 @@ export default function WorkerDeployPage() {
   
   const [config, setConfig] = useState<DeployConfig>({
     node_id: "",
-    server_url: typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : "https://aikz.usdt2026.cc",
+    server_url: typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : "http://aikz.usdt2026.cc",
     api_key: "",
     heartbeat_interval: 30,
     telegram_api_id: "",

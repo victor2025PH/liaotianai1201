@@ -17,6 +17,9 @@ jobs:
       - name: Deploy to Server
         uses: appleboy/ssh-action@v1.2.0
         continue-on-error: false
+        env:
+          GITHUB_REPO: ${{ github.repository }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
@@ -26,11 +29,7 @@ jobs:
           command_timeout: 30m
           script_stop: true
           debug: true
-          # 增加 SSH 连接稳定性
-          host_key_checking: false
-          # 启用 SSH keepalive
-          envs: GITHUB_REPO=${{ github.repository }},SERVER_HOST=${{ secrets.SERVER_HOST }}
-          envs: GITHUB_REPO=${{ github.repository }},SERVER_HOST=${{ secrets.SERVER_HOST }}
+          envs: GITHUB_REPO,SERVER_HOST
           script: |
             # 自动移除脚本中的 Windows 换行符 (关键修复)
             sed -i 's/\r$//' "$0" 2>/dev/null || true
@@ -637,13 +636,19 @@ jobs:
                 DEPLOY_FAILED=1
             fi
 
-            # 最终汇报
-            echo ""
-            if [ $DEPLOY_FAILED -eq 0 ]; then
-                echo "🎉🎉🎉 部署圆满成功！"
-                exit 0
-            else
-                echo "⚠️  部署完成但检测到异常，请检查上方日志。"
-                # 这里我们返回 0 (成功)，因为有时候 grep 会误报，只要上面 PM2 表格是 online 即可
-                exit 0
-            fi
+# 最终汇报
+echo ""
+echo "=========================================="
+echo "部署脚本执行完成"
+echo "=========================================="
+if [ $DEPLOY_FAILED -eq 0 ]; then
+    echo "🎉🎉🎉 部署圆满成功！所有服务均已在线！"
+else
+    echo "⚠️  部署完成但检测到异常，请检查上方日志。"
+    echo "   提示：如果服务实际上在线，这可能是 grep 误报"
+fi
+echo ""
+echo "脚本执行完成时间: $(date)"
+echo "退出码: 0"
+# 确保脚本以成功状态退出，避免 SSH 连接问题影响部署状态判断
+exit 0

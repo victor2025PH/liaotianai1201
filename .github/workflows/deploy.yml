@@ -31,9 +31,6 @@ jobs:
           debug: true
           envs: GITHUB_REPO,SERVER_HOST
           script: |
-            # 将脚本保存到临时文件并执行（提高稳定性）
-            DEPLOY_SCRIPT="/tmp/deploy_$$.sh"
-            cat > "$DEPLOY_SCRIPT" <<'SCRIPT_END'
             # 自动移除脚本中的 Windows 换行符 (关键修复)
             sed -i 's/\r$//' "$0" 2>/dev/null || true
             

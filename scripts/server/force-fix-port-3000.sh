@@ -98,13 +98,61 @@ echo "----------------------------------------"
 cd "$PROJECT_DIR" || exit 1
 
 # 等待一下确保端口完全释放
-sleep 3
+echo "等待端口完全释放..."
+sleep 5
+
+# 再次确认端口 3000 已释放
+echo "再次确认端口 3000 状态..."
+FINAL_CHECK=$(sudo lsof -t -i:3000 2>/dev/null || echo "")
+if [ -n "$FINAL_CHECK" ]; then
+    echo "⚠️  警告：端口 3000 仍被占用，强制清理..."
+    for PID in $FINAL_CHECK; do
+        sudo kill -9 $PID 2>/dev/null || true
+    done
+    sudo fuser -k -9 3000/tcp 2>/dev/null || true
+    sleep 3
+fi
+
+# 最终验证
+FINAL_CHECK2=$(sudo lsof -t -i:3000 2>/dev/null || echo "")
+if [ -n "$FINAL_CHECK2" ]; then
+    echo "❌ 端口 3000 仍被占用，无法启动服务"
+    echo "占用进程: $FINAL_CHECK2"
+    exit 1
+fi
+
+echo "✅ 端口 3000 已确认释放"
+echo ""
+
+# 检查是否有 systemd 服务也在运行前端
+echo "检查是否有 systemd 前端服务..."
+if systemctl cat liaotian-frontend.service >/dev/null 2>&1; then
+    echo "⚠️  发现 systemd 前端服务，先停止它..."
+    sudo systemctl stop liaotian-frontend 2>/dev/null || true
+    sudo systemctl disable liaotian-frontend 2>/dev/null || true
+    sleep 2
+fi
 
 # 检查 ecosystem.config.js
 if [ -f "ecosystem.config.js" ]; then
     echo "使用 ecosystem.config.js 启动所有服务..."
-    sudo -u ubuntu pm2 start ecosystem.config.js
-    sleep 5
+    # 先启动 backend
+    sudo -u ubuntu pm2 start ecosystem.config.js --only backend
+    sleep 3
+    
+    # 再次确认端口 3000 空闲
+    sleep 2
+    PORT_CHECK_FINAL=$(sudo lsof -t -i:3000 2>/dev/null || echo "")
+    if [ -z "$PORT_CHECK_FINAL" ]; then
+        echo "启动 frontend 服务..."
+        sudo -u ubuntu pm2 start ecosystem.config.js --only frontend
+        sleep 5
+    else
+        echo "❌ 端口 3000 在启动前被占用: $PORT_CHECK_FINAL"
+        echo "查看占用进程:"
+        ps -p $PORT_CHECK_FINAL -o pid,comm,args 2>/dev/null || true
+        exit 1
+    fi
     
     # 检查状态
     echo ""

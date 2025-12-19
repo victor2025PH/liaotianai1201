@@ -803,7 +803,6 @@ if errorlevel 1 (
 ) else (
     echo [OK] openpyxl: installed
 )
-
 if !MISSING_DEPS! equ 1 (
     echo.
     echo [INSTALL] Installing missing dependencies...

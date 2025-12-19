@@ -983,16 +983,16 @@ if [ $MISSING_DEPS -eq 1 ]; then
     echo ""
     echo "[INSTALL] Installing missing dependencies..."
     echo "[INFO] Using Tsinghua mirror source (faster in China)..."
-    python3 -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple
+    python3 -m pip install telethon requests openpyxl pycryptodome -i https://pypi.tuna.tsinghua.edu.cn/simple
     if [ $? -ne 0 ]; then
         echo "[WARN] Mirror source failed, trying default source..."
-        python3 -m pip install telethon requests openpyxl --upgrade
+        python3 -m pip install telethon requests openpyxl pycryptodome --upgrade
         if [ $? -ne 0 ]; then
             echo "[ERROR] Failed to install dependencies"
             echo ""
             echo "Troubleshooting:"
             echo "  1. Check your internet connection"
-            echo "  2. Try: python3 -m pip install telethon requests openpyxl --upgrade"
+            echo "  2. Try: python3 -m pip install telethon requests openpyxl pycryptodome --upgrade"
             echo "  3. Check firewall/proxy settings"
             exit 1
         fi
@@ -1010,9 +1010,28 @@ else
     python3 -c "import telethon; import requests; import openpyxl; print('OK')" &>/dev/null
     if [ $? -ne 0 ]; then
         echo "[WARN] Some dependencies cannot be imported, reinstalling..."
-        python3 -m pip install telethon requests openpyxl --upgrade --force-reinstall
+        python3 -m pip install telethon requests openpyxl pycryptodome --upgrade --force-reinstall
     fi
     echo "[OK] All dependencies are available"
+fi
+
+# Install optional cryptg for better performance (non-blocking)
+echo ""
+echo "[OPTIONAL] Installing optional cryptg module for better performance..."
+python3 -c "import cryptg" &>/dev/null
+if [ $? -ne 0 ]; then
+    python3 -m pip install cryptg -i https://pypi.tuna.tsinghua.edu.cn/simple &>/dev/null
+    if [ $? -ne 0 ]; then
+        python3 -m pip install cryptg &>/dev/null
+    fi
+    python3 -c "import cryptg" &>/dev/null
+    if [ $? -ne 0 ]; then
+        echo "[INFO] cryptg installation failed, will use slower Python encryption"
+    else
+        echo "[OK] cryptg installed successfully"
+    fi
+else
+    echo "[OK] cryptg: already installed"
 fi
 
 # Step 4: Setup environment

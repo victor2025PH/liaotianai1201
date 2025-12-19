@@ -30,13 +30,6 @@ jobs:
           command_timeout: 60m
           script_stop: true
           debug: true
-          proxy_host: ''
-          proxy_port: 0
-          proxy_username: ''
-          proxy_password: ''
-          proxy_passphrase: ''
-          proxy_timeout: 60s
-          dial_timeout: 30s
           envs: GITHUB_REPO,SERVER_HOST
           script: |
             # 自动移除脚本中的 Windows 换行符 (关键修复)
@@ -384,36 +377,54 @@ jobs:
             if [ -n "$PID_8000" ]; then
                 echo "⚠️  发现端口 8000 被 PID $PID_8000 占用"
                 
-                # 获取父进程 ID
-                PPID_8000=$(ps -o ppid= -p $PID_8000 2>/dev/null | tr -d ' ' || echo "")
-                if [ -n "$PPID_8000" ]; then
-                    echo "   该进程由父进程 PID $PPID_8000 管理"
-                    # 打印父进程详情
-                    ps -f -p $PPID_8000 2>/dev/null || echo "   无法获取父进程详情"
-                    
-                    # 策略 A: 如果父进程是 Systemd (PID 1)，说明是系统服务
-                    if [ "$PPID_8000" -eq "1" ]; then
-                        echo "🚨 发现 Systemd 服务在运行！正在尝试定位并停止..."
-                        # 尝试通过 systemctl status 查找服务名
-                        SERVICE_NAME=$(sudo systemctl status $PID_8000 2>/dev/null | grep -o "Loaded: loaded (/.*" | awk '{print $3}' | xargs basename 2>/dev/null | cut -d';' -f1 || echo "")
-                        if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_NAME" != "" ]; then
-                            echo "   🛑 停止 Systemd 服务: $SERVICE_NAME"
-                            sudo systemctl stop "$SERVICE_NAME" 2>/dev/null || true
-                            sudo systemctl disable "$SERVICE_NAME" 2>/dev/null || true
+                # 检查进程名，如果是关键系统进程，直接跳过
+                PROCESS_NAME_8000=$(ps -p $PID_8000 -o comm= 2>/dev/null | tr -d ' ' || echo "")
+                if [[ "$PROCESS_NAME_8000" =~ ^(sshd|ssh|systemd|dbus)$ ]]; then
+                    echo "   ⚠️  跳过关键系统进程: $PROCESS_NAME_8000 (PID: $PID_8000)"
+                    echo "   ℹ️  这可能是一个误报，端口可能已经被释放"
+                else
+                    # 获取父进程 ID
+                    PPID_8000=$(ps -o ppid= -p $PID_8000 2>/dev/null | tr -d ' ' || echo "")
+                    if [ -n "$PPID_8000" ]; then
+                        echo "   该进程由父进程 PID $PPID_8000 管理"
+                        # 打印父进程详情
+                        ps -f -p $PPID_8000 2>/dev/null || echo "   无法获取父进程详情"
+                        
+                        # 策略 A: 如果父进程是 Systemd (PID 1)，说明是系统服务
+                        if [ "$PPID_8000" -eq "1" ]; then
+                            echo "🚨 发现 Systemd 服务在运行！正在尝试定位并停止..."
+                            # 尝试通过 systemctl status 查找服务名
+                            SERVICE_NAME=$(sudo systemctl status $PID_8000 2>/dev/null | grep -o "Loaded: loaded (/.*" | awk '{print $3}' | xargs basename 2>/dev/null | cut -d';' -f1 || echo "")
+                            if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_NAME" != "" ]; then
+                                # 检查是否为关键系统服务
+                                if [[ " $CRITICAL_SERVICES " =~ " $SERVICE_NAME " ]]; then
+                                    echo "   ⚠️  跳过关键系统服务: $SERVICE_NAME (不会停止)"
+                                else
+                                    echo "   🛑 停止 Systemd 服务: $SERVICE_NAME"
+                                    sudo systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+                                    sudo systemctl disable "$SERVICE_NAME" 2>/dev/null || true
+                                fi
+                            else
+                                echo "   ⚠️  无法自动识别服务名，尝试停止已知应用服务..."
+                                # 只停止已知的应用服务，避免误操作系统服务
+                                sudo systemctl stop telegram-ai 2>/dev/null || true
+                                sudo systemctl stop backend 2>/dev/null || true
+                                sudo systemctl stop api-server 2>/dev/null || true
+                            fi
                         else
-                            echo "   ⚠️  无法自动识别服务名，尝试暴力停止常见服务名..."
-                            sudo systemctl stop telegram-ai 2>/dev/null || true
-                            sudo systemctl stop backend 2>/dev/null || true
-                            sudo systemctl stop api-server 2>/dev/null || true
+                            # 策略 B: 普通父进程，检查是否为关键进程
+                            PARENT_PROCESS_8000=$(ps -p $PPID_8000 -o comm= 2>/dev/null | tr -d ' ' || echo "")
+                            if [[ "$PARENT_PROCESS_8000" =~ ^(sshd|ssh|systemd|dbus)$ ]]; then
+                                echo "   ⚠️  父进程是关键系统进程: $PARENT_PROCESS_8000，跳过"
+                            else
+                                echo "🔪 杀掉父进程 (PID $PPID_8000)..."
+                                sudo kill -9 $PPID_8000 2>/dev/null || true
+                            fi
                         fi
-                    else
-                        # 策略 B: 普通父进程 (如 PM2 God Daemon)，直接杀掉父进程
-                        echo "🔪 杀掉父进程 (PID $PPID_8000)..."
-                        sudo kill -9 $PPID_8000 2>/dev/null || true
                     fi
+                    # 杀掉子进程
+                    sudo kill -9 $PID_8000 2>/dev/null || true
                 fi
-                # 杀掉子进程
-                sudo kill -9 $PID_8000 2>/dev/null || true
             fi
             
             # 3. 执行常规清理（双重保险）

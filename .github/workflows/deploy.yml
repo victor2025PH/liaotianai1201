@@ -310,6 +310,9 @@ jobs:
                 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y net-tools
             fi
             
+            # 临时关闭 set -e，避免端口诊断过程中的命令失败导致脚本退出
+            set +e
+            
             echo "🔍 深度诊断端口 3000..."
             
             # 定义不允许停止的关键系统服务列表（防止误停 SSH 等服务）

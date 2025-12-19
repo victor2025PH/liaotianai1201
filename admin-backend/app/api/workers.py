@@ -752,7 +752,7 @@ if errorlevel 1 (
 )
 
 for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
-echo [OK] Python found: %%PYTHON_VERSION%%
+echo [OK] Python found: !PYTHON_VERSION!
 
 REM Step 2: Check and upgrade pip
 echo.
@@ -785,8 +785,10 @@ if errorlevel 1 (
     echo [MISSING] telethon
     set MISSING_DEPS=1
 ) else (
-    python -c "import telethon; print('telethon:', telethon.__version__)" 2>nul
-    if errorlevel 1 (
+    for /f "delims=" %%v in ('python -c "import telethon; print(telethon.__version__)" 2^>nul') do set TELETHON_VERSION=%%v
+    if defined TELETHON_VERSION (
+        echo [OK] telethon: !TELETHON_VERSION!
+    ) else (
         echo [OK] telethon: installed
     )
 )
@@ -796,8 +798,10 @@ if errorlevel 1 (
     echo [MISSING] requests
     set MISSING_DEPS=1
 ) else (
-    python -c "import requests; print('requests:', requests.__version__)" 2>nul
-    if errorlevel 1 (
+    for /f "delims=" %%v in ('python -c "import requests; print(requests.__version__)" 2^>nul') do set REQUESTS_VERSION=%%v
+    if defined REQUESTS_VERSION (
+        echo [OK] requests: !REQUESTS_VERSION!
+    ) else (
         echo [OK] requests: installed
     )
 )
@@ -807,8 +811,10 @@ if errorlevel 1 (
     echo [MISSING] openpyxl
     set MISSING_DEPS=1
 ) else (
-    python -c "import openpyxl; print('openpyxl:', openpyxl.__version__)" 2>nul
-    if errorlevel 1 (
+    for /f "delims=" %%v in ('python -c "import openpyxl; print(openpyxl.__version__)" 2^>nul') do set OPENPYXL_VERSION=%%v
+    if defined OPENPYXL_VERSION (
+        echo [OK] openpyxl: !OPENPYXL_VERSION!
+    ) else (
         echo [OK] openpyxl: installed
     )
 )

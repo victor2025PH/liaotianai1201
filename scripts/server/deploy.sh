@@ -227,7 +227,36 @@ else
     sleep 10
 fi
 
+# ====================================================
+# 7. 更新 Nginx 配置（确保静态资源路径正确）
+# ====================================================
+echo "🌐 更新 Nginx 配置..."
+set +e
+
+NGINX_CONFIG="/etc/nginx/sites-available/aikz.usdt2026.cc"
+
+# 如果使用仓库中的配置文件，复制并更新
+if [ -f "$PROJECT_DIR/deploy/nginx/aikz.conf" ]; then
+    echo "使用仓库中的 Nginx 配置..."
+    sudo cp "$PROJECT_DIR/deploy/nginx/aikz.conf" "$NGINX_CONFIG"
+    
+    # 创建符号链接
+    sudo ln -sf "$NGINX_CONFIG" /etc/nginx/sites-enabled/aikz.usdt2026.cc
+    echo "✅ Nginx 配置已更新（包含 /next/static 和 /_next/static 路径支持）"
+fi
+
+# 测试 Nginx 配置
+if sudo nginx -t 2>/dev/null; then
+    echo "✅ Nginx 配置测试通过"
+else
+    echo "⚠️ Nginx 配置测试失败，但继续执行..."
+    sudo nginx -t 2>&1 | head -10 || true
+fi
+
+set -e
+
 # 重启 Nginx
+echo "🔄 重启 Nginx..."
 sudo systemctl restart nginx || echo "⚠️ Nginx 重启失败，请手动检查"
 
 echo "🎉 部署完成！"

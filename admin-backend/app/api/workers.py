@@ -785,12 +785,7 @@ if errorlevel 1 (
     echo [MISSING] telethon
     set MISSING_DEPS=1
 ) else (
-    for /f "delims=" %%v in ('python -c "import telethon; print(telethon.__version__)" 2^>nul') do set TELETHON_VERSION=%%v
-    if defined TELETHON_VERSION (
-        echo [OK] telethon: !TELETHON_VERSION!
-    ) else (
-        echo [OK] telethon: installed
-    )
+    echo [OK] telethon: installed
 )
 
 python -c "import requests" >nul 2>&1
@@ -798,12 +793,7 @@ if errorlevel 1 (
     echo [MISSING] requests
     set MISSING_DEPS=1
 ) else (
-    for /f "delims=" %%v in ('python -c "import requests; print(requests.__version__)" 2^>nul') do set REQUESTS_VERSION=%%v
-    if defined REQUESTS_VERSION (
-        echo [OK] requests: !REQUESTS_VERSION!
-    ) else (
-        echo [OK] requests: installed
-    )
+    echo [OK] requests: installed
 )
 
 python -c "import openpyxl" >nul 2>&1
@@ -811,30 +801,19 @@ if errorlevel 1 (
     echo [MISSING] openpyxl
     set MISSING_DEPS=1
 ) else (
-    for /f "delims=" %%v in ('python -c "import openpyxl; print(openpyxl.__version__)" 2^>nul') do set OPENPYXL_VERSION=%%v
-    if defined OPENPYXL_VERSION (
-        echo [OK] openpyxl: !OPENPYXL_VERSION!
-    ) else (
-        echo [OK] openpyxl: installed
-    )
+    echo [OK] openpyxl: installed
 )
 
 if !MISSING_DEPS! equ 1 (
     echo.
     echo [INSTALL] Installing missing dependencies...
-    echo [INFO] Using Tsinghua mirror source (faster in China)...
+    echo [INFO] Using Tsinghua mirror source...
     python -m pip install telethon requests openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple
     if errorlevel 1 (
         echo [WARN] Mirror source failed, trying default source...
         python -m pip install telethon requests openpyxl --upgrade
         if errorlevel 1 (
             echo [ERROR] Failed to install dependencies
-            echo.
-            echo Troubleshooting:
-            echo   1. Check your internet connection
-            echo   2. Try: python -m pip install telethon requests openpyxl --upgrade
-            echo   3. Check firewall/antivirus settings
-            echo.
             pause
             exit /b 1
         )

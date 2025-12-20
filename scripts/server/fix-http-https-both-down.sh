@@ -55,6 +55,14 @@ fi
 HAS_HTTP=$(grep -c "listen 80" "$NGINX_CONFIG" 2>/dev/null || echo "0")
 HAS_HTTPS=$(grep -c "listen 443" "$NGINX_CONFIG" 2>/dev/null || echo "0")
 
+# 确保变量是数字
+if [ -z "$HAS_HTTP" ] || ! [[ "$HAS_HTTP" =~ ^[0-9]+$ ]]; then
+    HAS_HTTP=0
+fi
+if [ -z "$HAS_HTTPS" ] || ! [[ "$HAS_HTTPS" =~ ^[0-9]+$ ]]; then
+    HAS_HTTPS=0
+fi
+
 if [ "$HAS_HTTP" -eq 0 ] || [ "$HAS_HTTPS" -eq 0 ]; then
     echo "⚠️  配置不完整，使用项目中的完整配置..."
     

@@ -114,8 +114,8 @@ function LayoutWrapperInner({ children }: { children: React.ReactNode }) {
     window.addEventListener("storage", handleStorageChange);
     window.addEventListener("tokenCleared", handleTokenCleared);
     
-    // 優化：減少檢查頻率到 5 秒
-    const interval = setInterval(checkAuth, 5000);
+    // 優化：減少檢查頻率到 10 秒（減少 CPU 負載）
+    const interval = setInterval(checkAuth, 10000);
     
     return () => {
       clearInterval(interval);

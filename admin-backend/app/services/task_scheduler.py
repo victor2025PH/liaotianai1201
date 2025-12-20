@@ -12,6 +12,7 @@ from apscheduler.triggers.date import DateTrigger
 
 from app.db import SessionLocal
 from app.models.group_ai import GroupAIAutomationTask
+from app.models.unified_features import ScheduledMessageTask
 from app.services.task_executor import get_task_executor
 
 logger = logging.getLogger(__name__)
@@ -54,22 +55,38 @@ class TaskScheduler:
         logger.info("任務調度器已停止")
     
     def load_scheduled_tasks(self):
-        """從數據庫加載所有啟用的定時任務"""
+        """從數據庫加載所有啟用的定時任務（包括新的定時消息任務）"""
         try:
             db = SessionLocal()
             try:
-                tasks = db.query(GroupAIAutomationTask).filter(
+                # 加載原有的自動化任務
+                automation_tasks = db.query(GroupAIAutomationTask).filter(
                     GroupAIAutomationTask.enabled == True,
                     GroupAIAutomationTask.task_type == "scheduled"
                 ).all()
                 
-                for task in tasks:
+                for task in automation_tasks:
                     try:
                         self.schedule_task(task)
                     except Exception as e:
-                        logger.error(f"加載任務 {task.name} ({task.id}) 失敗: {e}", exc_info=True)
+                        logger.error(f"加載自動化任務 {task.name} ({task.id}) 失敗: {e}", exc_info=True)
                 
-                logger.info(f"已加載 {len(tasks)} 個定時任務")
+                # 加載新的定時消息任務
+                try:
+                    scheduled_message_tasks = db.query(ScheduledMessageTask).filter(
+                        ScheduledMessageTask.enabled == True
+                    ).all()
+                    
+                    for task in scheduled_message_tasks:
+                        try:
+                            self.schedule_scheduled_message_task(task)
+                        except Exception as e:
+                            logger.error(f"加載定時消息任務 {task.name} ({task.task_id}) 失敗: {e}", exc_info=True)
+                    
+                    logger.info(f"已加載 {len(automation_tasks)} 個自動化任務和 {len(scheduled_message_tasks)} 個定時消息任務")
+                except Exception as e:
+                    logger.warning(f"加載定時消息任務失敗（可能表尚未創建）: {e}")
+                    logger.info(f"已加載 {len(automation_tasks)} 個自動化任務")
             finally:
                 db.close()
         except Exception as e:
@@ -118,6 +135,143 @@ class TaskScheduler:
                 logger.info(f"任務 {task_id} 已從調度器移除")
             except Exception as e:
                 logger.warning(f"移除任務 {task_id} 失敗: {e}")
+    
+    def schedule_scheduled_message_task(self, task: ScheduledMessageTask):
+        """調度一個定時消息任務"""
+        if not self.scheduler:
+            logger.error("調度器未啟動")
+            return
+        
+        # 移除舊的任務（如果存在）
+        job_id = f"scheduled_message_{task.task_id}"
+        self.unschedule_task_by_job_id(job_id)
+        
+        # 解析調度配置
+        trigger = None
+        if task.schedule_type == "cron" and task.cron_expression:
+            try:
+                # 解析 Cron 表達式
+                parts = task.cron_expression.split()
+                if len(parts) == 5:
+                    trigger = CronTrigger(
+                        minute=parts[0],
+                        hour=parts[1],
+                        day=parts[2],
+                        month=parts[3],
+                        day_of_week=parts[4],
+                        timezone=task.timezone
+                    )
+            except Exception as e:
+                logger.error(f"解析 Cron 表達式失敗: {task.cron_expression}: {e}")
+        elif task.schedule_type == "interval" and task.interval_seconds:
+            trigger = IntervalTrigger(seconds=task.interval_seconds)
+        elif task.schedule_type == "once" and task.next_run_at:
+            trigger = DateTrigger(run_date=task.next_run_at)
+        
+        if not trigger:
+            logger.warning(f"定時消息任務 {task.name} ({task.task_id}) 的調度配置無效，跳過")
+            return
+        
+        # 添加任務到調度器
+        self.scheduler.add_job(
+            func=self._execute_scheduled_message_task_wrapper,
+            trigger=trigger,
+            args=[task.task_id],
+            id=job_id,
+            name=f"scheduled_message_{task.name}",
+            replace_existing=True,
+        )
+        
+        self.scheduled_job_ids.add(job_id)
+        logger.info(f"定時消息任務 {task.name} ({task.task_id}) 已添加到調度器")
+    
+    def unschedule_task_by_job_id(self, job_id: str):
+        """通過 job_id 取消調度任務"""
+        if not self.scheduler:
+            return
+        
+        try:
+            if self.scheduler.get_job(job_id):
+                self.scheduler.remove_job(job_id)
+                self.scheduled_job_ids.discard(job_id)
+                logger.info(f"任務 {job_id} 已從調度器移除")
+        except Exception as e:
+            logger.warning(f"移除任務 {job_id} 失敗: {e}")
+    
+    def _execute_scheduled_message_task_wrapper(self, task_id: str):
+        """定時消息任務執行包裝器"""
+        import asyncio
+        try:
+            # 創建新的事件循環（如果當前線程沒有）
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # 執行異步任務
+            if loop.is_running():
+                # 如果循環正在運行，創建任務
+                asyncio.create_task(self._execute_scheduled_message_task(task_id))
+            else:
+                # 如果循環未運行，運行直到完成
+                loop.run_until_complete(self._execute_scheduled_message_task(task_id))
+        except Exception as e:
+            logger.error(f"執行定時消息任務 {task_id} 失敗: {e}", exc_info=True)
+    
+    async def _execute_scheduled_message_task(self, task_id: str):
+        """執行定時消息任務（異步）"""
+        try:
+            db = SessionLocal()
+            try:
+                task = db.query(ScheduledMessageTask).filter(
+                    ScheduledMessageTask.task_id == task_id
+                ).first()
+                
+                if not task or not task.enabled:
+                    logger.warning(f"定時消息任務 {task_id} 不存在或已停用")
+                    return
+                
+                # 使用 ScheduledMessageProcessor 執行任務
+                from group_ai_service.scheduled_message_processor import ScheduledMessageProcessor
+                processor = ScheduledMessageProcessor()
+                
+                # 獲取 ActionExecutor 和 AccountManager（如果可用）
+                action_executor = None
+                account_manager = None
+                try:
+                    # 嘗試從 ServiceManager 獲取
+                    import sys
+                    from pathlib import Path
+                    project_root = Path(__file__).parent.parent.parent.parent
+                    if str(project_root) not in sys.path:
+                        sys.path.insert(0, str(project_root))
+                    
+                    from group_ai_service.service_manager import ServiceManager
+                    service_manager = ServiceManager.get_instance()
+                    if service_manager:
+                        if hasattr(service_manager, 'unified_message_handler') and service_manager.unified_message_handler:
+                            action_executor = service_manager.unified_message_handler.action_executor
+                        if hasattr(service_manager, 'account_manager'):
+                            account_manager = service_manager.account_manager
+                except Exception as e:
+                    logger.debug(f"無法獲取 ActionExecutor/AccountManager: {e}")
+                
+                # 執行任務
+                await processor._execute_task(task, action_executor, account_manager)
+                
+                # 更新執行記錄（從處理器任務對象同步回來）
+                task.last_run_at = datetime.now()
+                task.run_count = getattr(task, 'run_count', 0) + 1
+                task.success_count = getattr(task, 'success_count', 0) + (getattr(task, 'success_count', 0) if hasattr(task, 'success_count') else 0)
+                task.failure_count = getattr(task, 'failure_count', 0) + (getattr(task, 'failure_count', 0) if hasattr(task, 'failure_count') else 0)
+                
+                db.commit()
+                logger.info(f"定時消息任務 {task.name} ({task_id}) 執行完成")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"執行定時消息任務 {task_id} 失敗: {e}", exc_info=True)
     
     def _parse_schedule_config(self, config: Optional[Dict], task_id: str):
         """解析調度配置，返回 trigger 對象"""

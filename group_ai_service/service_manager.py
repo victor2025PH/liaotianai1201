@@ -63,16 +63,58 @@ class ServiceManager:
             try:
                 # 傳入遊戲 API 客戶端給 RedpacketHandler
                 from group_ai_service.redpacket_handler import RedpacketHandler
-                redpacket_handler = RedpacketHandler(game_api_client=self.game_api_client)
+                self.redpacket_handler = RedpacketHandler(game_api_client=self.game_api_client)
                 
                 self.dialogue_manager = DialogueManager(
-                    redpacket_handler=redpacket_handler,
+                    redpacket_handler=self.redpacket_handler,
                     coordination_manager=self.coordination_manager
                 )
                 logger.debug("DialogueManager 初始化成功")
             except Exception as e:
                 logger.error(f"DialogueManager 初始化失敗: {e}", exc_info=True)
                 raise  # 暫時還是拋出異常，讓調用者知道
+            
+            # 初始化關鍵詞觸發處理器（新架構）
+            try:
+                from group_ai_service.keyword_trigger_processor import KeywordTriggerProcessor
+                self.keyword_trigger_processor = KeywordTriggerProcessor()
+                logger.info("關鍵詞觸發處理器初始化成功")
+            except Exception as e:
+                logger.warning(f"關鍵詞觸發處理器初始化失敗: {e}")
+                self.keyword_trigger_processor = None
+            
+            # 初始化定時消息處理器（新架構）
+            try:
+                from group_ai_service.scheduled_message_processor import ScheduledMessageProcessor
+                self.scheduled_message_processor = ScheduledMessageProcessor()
+                logger.info("定時消息處理器初始化成功")
+            except Exception as e:
+                logger.warning(f"定時消息處理器初始化失敗: {e}")
+                self.scheduled_message_processor = None
+            
+            # 初始化統一消息處理中心（新架構）
+            try:
+                from group_ai_service.unified_message_handler import UnifiedMessageHandler
+                self.unified_message_handler = UnifiedMessageHandler(
+                    redpacket_handler=self.redpacket_handler,
+                    dialogue_manager=self.dialogue_manager,
+                    account_manager=self.account_manager,
+                    keyword_trigger_service=self.keyword_trigger_processor,
+                    scheduled_message_service=self.scheduled_message_processor
+                )
+                logger.info("統一消息處理中心初始化成功")
+            except Exception as e:
+                logger.warning(f"統一消息處理中心初始化失敗: {e}，將使用原有處理方式")
+                self.unified_message_handler = None
+            
+            # 初始化統一配置管理器（新架構）
+            try:
+                from group_ai_service.unified_config_manager import ConfigManager
+                self.config_manager = ConfigManager()
+                logger.info("統一配置管理器初始化成功")
+            except Exception as e:
+                logger.warning(f"統一配置管理器初始化失敗: {e}")
+                self.config_manager = None
             
             # 初始化遊戲引導服務
             try:
@@ -92,7 +134,18 @@ class ServiceManager:
                 logger.warning(f"初始化遊戲引導服務失敗: {e}，遊戲引導功能將不可用")
                 self.game_guide_service = None
             
-            self.session_pool: Optional[ExtendedSessionPool] = None
+            # 初始化 SessionPool（傳入統一消息處理中心）
+            try:
+                self.session_pool = ExtendedSessionPool(
+                    account_manager=self.account_manager,
+                    dialogue_manager=self.dialogue_manager,
+                    redpacket_handler=self.redpacket_handler
+                )
+                logger.debug("ExtendedSessionPool 初始化成功")
+            except Exception as e:
+                logger.warning(f"ExtendedSessionPool 初始化失敗: {e}")
+                self.session_pool = None
+            
             self._scripts_cache: Dict[str, Script] = {}  # 緩存已加載的劇本
             
             # 啟動協同管理器
@@ -326,7 +379,8 @@ class ServiceManager:
             try:
                 self.session_pool = ExtendedSessionPool(
                     account_manager=self.account_manager,
-                    dialogue_manager=self.dialogue_manager
+                    dialogue_manager=self.dialogue_manager,
+                    redpacket_handler=self.redpacket_handler
                 )
                 await self.session_pool.start()
                 logger.info("會話池已啟動")

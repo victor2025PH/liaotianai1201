@@ -12,7 +12,7 @@ interface UseRealtimeMetricsOptions {
 }
 
 export function useRealtimeMetrics(options: UseRealtimeMetricsOptions = {}) {
-  const { interval = 5000, enabled = true } = options;
+  const { interval = 10000, enabled = true } = options; // 默認改為 10 秒
   const queryKey = ["realtimeMetrics"];
 
   const { data, isLoading, error, refetch, isFetching } = useQuery<MetricsData, Error>({
@@ -27,7 +27,7 @@ export function useRealtimeMetrics(options: UseRealtimeMetricsOptions = {}) {
       }
       return result.data;
     },
-    staleTime: 5 * 1000, // 5 秒
+    staleTime: 10 * 1000, // 10 秒（與輪詢間隔一致）
     gcTime: 2 * 60 * 1000, // 2 分鐘
     refetchInterval: enabled ? interval : false, // 根據 enabled 決定是否輪詢
     enabled, // 根據 enabled 決定是否啟用查詢

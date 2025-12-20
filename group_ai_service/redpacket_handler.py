@@ -567,9 +567,19 @@ class RedpacketHandler:
                     if result.success:
                         self._increment_hourly_participation(account_id)
                     
-                    # 處理最佳手氣提示和搶包通知
+                    # 處理最佳手氣提示、搶包通知和感謝消息
                     if success and amount:
                         await self._handle_redpacket_result(
+                            account_id=account_id,
+                            redpacket=redpacket,
+                            result=result,
+                            client=client,
+                            sender_name=sender_name,
+                            participant_name=participant_name
+                        )
+                        
+                        # 發送感謝消息
+                        await self._send_thank_message(
                             account_id=account_id,
                             redpacket=redpacket,
                             result=result,
@@ -685,9 +695,19 @@ class RedpacketHandler:
             if result.success:
                 self._increment_hourly_participation(account_id)
             
-            # 處理最佳手氣提示和搶包通知
+            # 處理最佳手氣提示、搶包通知和感謝消息
             if success and amount:
                 await self._handle_redpacket_result(
+                    account_id=account_id,
+                    redpacket=redpacket,
+                    result=result,
+                    client=client,
+                    sender_name=sender_name,
+                    participant_name=participant_name
+                )
+                
+                # 發送感謝消息
+                await self._send_thank_message(
                     account_id=account_id,
                     redpacket=redpacket,
                     result=result,
@@ -728,9 +748,27 @@ class RedpacketHandler:
     def get_participation_stats(
         self,
         account_id: Optional[str] = None,
-        time_range: Optional[timedelta] = None
+        time_range: Optional[timedelta] = None,
+        use_database: bool = True
     ) -> Dict[str, Any]:
-        """獲取參與統計"""
+        """
+        獲取參與統計
+        
+        Args:
+            account_id: 賬號ID（可選，過濾）
+            time_range: 時間範圍（可選）
+            use_database: 是否從數據庫讀取（優先使用數據庫，如果不可用則使用內存日誌）
+        """
+        # 優先從數據庫讀取
+        if use_database:
+            try:
+                db_stats = self._get_stats_from_database(account_id, time_range)
+                if db_stats:
+                    return db_stats
+            except Exception as e:
+                logger.warning(f"從數據庫讀取統計失敗: {e}，回退到內存日誌")
+        
+        # 回退到內存日誌
         results = self.participation_log
         
         # 按賬號過濾
@@ -752,8 +790,83 @@ class RedpacketHandler:
             "failed": total - successful,
             "success_rate": successful / total if total > 0 else 0.0,
             "total_amount": total_amount,
-            "average_amount": total_amount / successful if successful > 0 else 0.0
+            "average_amount": total_amount / successful if successful > 0 else 0.0,
+            "source": "memory"  # 標記數據來源
         }
+    
+    def _get_stats_from_database(
+        self,
+        account_id: Optional[str] = None,
+        time_range: Optional[timedelta] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        從數據庫讀取紅包統計
+        
+        Returns:
+            統計字典，如果數據庫不可用則返回 None
+        """
+        try:
+            # 動態導入，避免循環依賴
+            import sys
+            from pathlib import Path
+            
+            # 檢查是否在 admin-backend 環境中
+            admin_backend_path = Path(__file__).parent.parent.parent / "admin-backend"
+            if admin_backend_path.exists() and str(admin_backend_path) not in sys.path:
+                sys.path.insert(0, str(admin_backend_path))
+            
+            from app.db import SessionLocal
+            from app.models.group_ai import GroupAIRedpacketLog
+            from sqlalchemy import func, and_
+            
+            db = SessionLocal()
+            try:
+                # 構建查詢
+                query = db.query(GroupAIRedpacketLog)
+                
+                # 按賬號過濾
+                if account_id:
+                    query = query.filter(GroupAIRedpacketLog.account_id == account_id)
+                
+                # 按時間範圍過濾
+                if time_range:
+                    cutoff = datetime.now() - time_range
+                    query = query.filter(GroupAIRedpacketLog.created_at >= cutoff)
+                
+                # 統計總數
+                total = query.count()
+                
+                # 統計成功數
+                successful_query = query.filter(GroupAIRedpacketLog.success == True)
+                successful = successful_query.count()
+                
+                # 統計總金額
+                total_amount_result = successful_query.with_entities(
+                    func.sum(GroupAIRedpacketLog.amount)
+                ).scalar()
+                total_amount = float(total_amount_result) if total_amount_result else 0.0
+                
+                # 計算平均金額
+                average_amount = total_amount / successful if successful > 0 else 0.0
+                
+                return {
+                    "total_participations": total,
+                    "successful": successful,
+                    "failed": total - successful,
+                    "success_rate": successful / total if total > 0 else 0.0,
+                    "total_amount": total_amount,
+                    "average_amount": average_amount,
+                    "source": "database"  # 標記數據來源
+                }
+            finally:
+                db.close()
+        except ImportError:
+            # 數據庫模組不可用（可能在 worker 節點環境）
+            logger.debug("數據庫模組不可用，跳過從數據庫讀取統計")
+            return None
+        except Exception as e:
+            logger.warning(f"從數據庫讀取統計失敗: {e}")
+            return None
     
     async def _handle_redpacket_result(
         self,
@@ -947,6 +1060,101 @@ class RedpacketHandler:
         
         # 定期清理舊數據
         await self._cleanup_old_data()
+    
+    async def _send_thank_message(
+        self,
+        account_id: str,
+        redpacket: RedpacketInfo,
+        result: RedpacketResult,
+        client,
+        sender_name: Optional[str] = None,
+        participant_name: Optional[str] = None
+    ):
+        """
+        發送感謝消息給發包人
+        
+        在成功搶到紅包後，向發包人發送感謝消息
+        """
+        try:
+            # 檢查是否啟用感謝消息
+            try:
+                from group_ai_service.config import get_group_ai_config
+                config = get_group_ai_config()
+                thank_message_enabled = getattr(config, 'redpacket_thank_message_enabled', True)
+            except Exception:
+                thank_message_enabled = True  # 默認啟用
+            
+            if not thank_message_enabled:
+                logger.debug("感謝消息已禁用，跳過發送")
+                return
+            
+            # 檢查是否已經發送過感謝消息（避免重複發送）
+            thank_key = f"{account_id}:{redpacket.redpacket_id}:thank"
+            if thank_key in self._best_luck_announced:  # 復用現有的跟踪字典
+                logger.debug(f"已發送過感謝消息，跳過: {thank_key}")
+                return
+            
+            # 構建感謝消息
+            if not participant_name:
+                # 嘗試獲取參與者名稱
+                try:
+                    if client and hasattr(client, 'get_me'):
+                        me = await client.get_me()
+                        if me:
+                            participant_name = me.first_name or me.username or f"用戶 {account_id}"
+                        else:
+                            participant_name = f"用戶 {account_id}"
+                    else:
+                        participant_name = f"用戶 {account_id}"
+                except Exception as e:
+                    logger.debug(f"獲取參與者名稱失敗: {e}")
+                    participant_name = f"用戶 {account_id}"
+            
+            # 感謝消息模板
+            thank_messages = [
+                f"謝謝 {sender_name} 的紅包！🎉 搶到了 {result.amount:.2f}",
+                f"感謝 {sender_name}！收到了 {result.amount:.2f}，開心～",
+                f"多謝 {sender_name} 的紅包！{result.amount:.2f} 已收到",
+                f"感謝 {sender_name} 發的紅包！搶到了 {result.amount:.2f}，謝謝！",
+            ]
+            
+            import random
+            thank_message = random.choice(thank_messages)
+            
+            # 如果沒有發包人名字，使用通用感謝消息
+            if not sender_name:
+                thank_messages_generic = [
+                    f"謝謝紅包！🎉 搶到了 {result.amount:.2f}",
+                    f"感謝！收到了 {result.amount:.2f}，開心～",
+                    f"多謝紅包！{result.amount:.2f} 已收到",
+                    f"感謝發的紅包！搶到了 {result.amount:.2f}，謝謝！",
+                ]
+                thank_message = random.choice(thank_messages_generic)
+            
+            # 發送感謝消息到群組
+            try:
+                from pyrogram.errors import FloodWait
+                await client.send_message(
+                    chat_id=redpacket.group_id,
+                    text=thank_message
+                )
+                
+                # 標記為已發送
+                self._best_luck_announced[thank_key] = True
+                
+                logger.info(
+                    f"已發送感謝消息: 賬號 {account_id}, "
+                    f"紅包 {redpacket.redpacket_id}, 金額 {result.amount:.2f}"
+                )
+            except FloodWait as e:
+                logger.warning(f"發送感謝消息觸發 FloodWait，等待 {e.value} 秒")
+                # 可以選擇等待後重試，或記錄到隊列稍後發送
+                # 這裡暫時跳過，避免阻塞
+            except Exception as e:
+                logger.error(f"發送感謝消息失敗: {e}", exc_info=True)
+                
+        except Exception as e:
+            logger.error(f"處理感謝消息失敗: {e}", exc_info=True)
     
     async def _cleanup_old_data(self):
         """清理舊的跟踪數據，避免內存泄漏"""

@@ -27,6 +27,9 @@ router = APIRouter(prefix="/workers", tags=["workers"])
 _workers_memory_store: Dict[str, Dict[str, Any]] = {}
 _worker_commands: Dict[str, List[Dict[str, Any]]] = {}  # 存储待执行的命令
 _worker_responses: Dict[str, Dict[str, Any]] = {}  # 存储 Worker 节点的响应结果
+# 账号同步计数器（用于减少数据库写入频率）
+_account_sync_counters: Dict[str, int] = {}  # node_id -> 心跳计数
+ACCOUNT_SYNC_INTERVAL = 3  # 每 3 次心跳才同步一次账号（约 90 秒）
 
 # Redis 客户端（如果可用）
 _redis_client = None
@@ -401,23 +404,63 @@ async def worker_heartbeat(
                 _save_response(request.node_id, command_id, response_data)
                 logger.info(f"收到节点 {request.node_id} 的命令响应: {command_id}")
         
-        # 同步賬號信息到數據庫
+        # 優化：減少數據庫寫入頻率 - 每 N 次心跳才同步一次賬號
+        # 將賬號信息先存儲到 Redis，減少數據庫壓力
         if request.accounts:
-            try:
-                from app.api.group_ai.remote_account_sync import sync_accounts_from_worker
-                sync_result = sync_accounts_from_worker(
-                    node_id=request.node_id,
-                    accounts=request.accounts,
-                    db=db
-                )
-                logger.info(f"從節點 {request.node_id} 同步了 {sync_result['synced_count']} 個賬號")
-            except Exception as sync_error:
-                logger.error(f"同步賬號信息失敗: {sync_error}", exc_info=True)
+            # 將賬號信息存儲到 Redis（輕量操作）
+            if _redis_client:
+                try:
+                    accounts_key = f"worker:accounts:{request.node_id}"
+                    _redis_client.setex(
+                        accounts_key, 
+                        300,  # 5 分鐘 TTL
+                        json.dumps(request.accounts)
+                    )
+                except Exception as e:
+                    logger.warning(f"存儲賬號信息到 Redis 失敗: {e}")
+            
+            # 檢查是否需要同步到數據庫（每 N 次心跳同步一次）
+            sync_counter = _account_sync_counters.get(request.node_id, 0)
+            sync_counter += 1
+            _account_sync_counters[request.node_id] = sync_counter
+            
+            if sync_counter >= ACCOUNT_SYNC_INTERVAL:
+                # 重置計數器
+                _account_sync_counters[request.node_id] = 0
+                
+                # 異步同步到數據庫（不阻塞心跳響應）
+                try:
+                    from app.api.group_ai.remote_account_sync import sync_accounts_from_worker
+                    # 使用背景任務或線程池執行，避免阻塞
+                    import threading
+                    def sync_in_background():
+                        try:
+                            # 創建新的數據庫會話
+                            from app.db import SessionLocal
+                            sync_db = SessionLocal()
+                            try:
+                                sync_result = sync_accounts_from_worker(
+                                    node_id=request.node_id,
+                                    accounts=request.accounts,
+                                    db=sync_db
+                                )
+                                logger.info(f"從節點 {request.node_id} 同步了 {sync_result['synced_count']} 個賬號（背景任務）")
+                            finally:
+                                sync_db.close()
+                        except Exception as e:
+                            logger.error(f"背景同步賬號信息失敗: {e}", exc_info=True)
+                    
+                    # 在背景線程中執行同步
+                    threading.Thread(target=sync_in_background, daemon=True).start()
+                except Exception as sync_error:
+                    logger.error(f"啟動賬號同步背景任務失敗: {sync_error}", exc_info=True)
+            else:
+                logger.debug(f"節點 {request.node_id} 心跳計數: {sync_counter}/{ACCOUNT_SYNC_INTERVAL}，跳過數據庫同步")
         
         # 检查是否有待执行的命令
         commands = _get_commands(request.node_id)
         
-        logger.info(f"Worker {request.node_id} 心跳: {request.account_count} 账号, {len(commands)} 待执行命令")
+        logger.debug(f"Worker {request.node_id} 心跳: {request.account_count} 账号, {len(commands)} 待执行命令")
         
         return {
             "success": True,
@@ -848,6 +891,26 @@ if !MISSING_DEPS! equ 1 (
     echo [OK] All dependencies are available
 )
 
+REM Check SSL library (critical for HTTPS connections)
+echo.
+echo [CHECK] Checking SSL library...
+python -c "import ssl" >nul 2>&1
+if errorlevel 1 (
+    echo [WARN] SSL library not found - this may cause connection issues
+    echo [INFO] Attempting to fix SSL library...
+    python -m pip install --upgrade certifi pyopenssl cryptography >nul 2>&1
+    python -c "import ssl" >nul 2>&1
+    if errorlevel 1 (
+        echo [ERROR] SSL library still not available after fix attempt
+        echo [INFO] Please reinstall Python from https://www.python.org/downloads/
+        echo [INFO] Make sure to check "Add Python to PATH" during installation
+    ) else (
+        echo [OK] SSL library fixed successfully
+    )
+) else (
+    echo [OK] SSL library: available
+)
+
 REM Install optional cryptg for better performance (non-blocking)
 echo.
 echo [OPTIONAL] Installing optional cryptg module for better performance...
@@ -1013,6 +1076,23 @@ else
         python3 -m pip install telethon requests openpyxl pycryptodome --upgrade --force-reinstall
     fi
     echo "[OK] All dependencies are available"
+fi
+
+# Check SSL library (critical for HTTPS connections)
+echo ""
+echo "[CHECK] Checking SSL library..."
+if ! python3 -c "import ssl" &>/dev/null; then
+    echo "[WARN] SSL library not found - this may cause connection issues"
+    echo "[INFO] Attempting to fix SSL library..."
+    python3 -m pip install --upgrade certifi pyopenssl cryptography &>/dev/null
+    if ! python3 -c "import ssl" &>/dev/null; then
+        echo "[ERROR] SSL library still not available after fix attempt"
+        echo "[INFO] Please check Python installation or install OpenSSL"
+    else
+        echo "[OK] SSL library fixed successfully"
+    fi
+else
+    echo "[OK] SSL library: available"
 fi
 
 # Install optional cryptg for better performance (non-blocking)

@@ -1477,6 +1477,514 @@ export type ExportFormat = "csv" | "excel" | "pdf"
 /**
  * 導出劇本列表
  */
+// ============ 關鍵詞觸發規則 API ============
+
+export interface KeywordTriggerRule {
+  id: string
+  rule_id: string
+  name: string
+  enabled: boolean
+  keywords: string[]
+  pattern?: string
+  match_type: "simple" | "regex" | "fuzzy" | "all" | "any" | "context"
+  case_sensitive: boolean
+  sender_ids: number[]
+  sender_blacklist: number[]
+  time_range_start?: string
+  time_range_end?: string
+  weekdays: number[]
+  group_ids: number[]
+  message_length_min?: number
+  message_length_max?: number
+  condition_logic: "AND" | "OR"
+  actions: Array<{
+    type: string
+    params: Record<string, any>
+    delay_min?: number
+    delay_max?: number
+  }>
+  priority: number
+  context_window: number
+  trigger_count: number
+  last_triggered_at?: string
+  description?: string
+  created_by?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface KeywordTriggerCreate {
+  rule_id: string
+  name: string
+  enabled?: boolean
+  keywords: string[]
+  pattern?: string
+  match_type?: "simple" | "regex" | "fuzzy" | "all" | "any" | "context"
+  case_sensitive?: boolean
+  sender_ids?: number[]
+  sender_blacklist?: number[]
+  time_range_start?: string
+  time_range_end?: string
+  weekdays?: number[]
+  group_ids?: number[]
+  message_length_min?: number
+  message_length_max?: number
+  condition_logic?: "AND" | "OR"
+  actions: Array<{
+    type: string
+    params: Record<string, any>
+    delay_min?: number
+    delay_max?: number
+  }>
+  priority?: number
+  context_window?: number
+  description?: string
+}
+
+export interface KeywordTriggerUpdate {
+  name?: string
+  enabled?: boolean
+  keywords?: string[]
+  pattern?: string
+  match_type?: "simple" | "regex" | "fuzzy" | "all" | "any" | "context"
+  case_sensitive?: boolean
+  sender_ids?: number[]
+  sender_blacklist?: number[]
+  time_range_start?: string
+  time_range_end?: string
+  weekdays?: number[]
+  group_ids?: number[]
+  message_length_min?: number
+  message_length_max?: number
+  condition_logic?: "AND" | "OR"
+  actions?: Array<{
+    type: string
+    params: Record<string, any>
+    delay_min?: number
+    delay_max?: number
+  }>
+  priority?: number
+  context_window?: number
+  description?: string
+}
+
+export async function listKeywordTriggers(params?: {
+  enabled?: boolean
+  skip?: number
+  limit?: number
+}): Promise<KeywordTriggerRule[]> {
+  const { fetchWithAuth } = await import("./client")
+  const urlParams = new URLSearchParams()
+  if (params?.enabled !== undefined) urlParams.append("enabled", params.enabled.toString())
+  if (params?.skip) urlParams.append("skip", params.skip.toString())
+  if (params?.limit) urlParams.append("limit", params.limit.toString())
+  
+  const response = await fetchWithAuth(`${API_BASE}/keyword-triggers?${urlParams}`)
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getKeywordTrigger(ruleId: string): Promise<KeywordTriggerRule> {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/keyword-triggers/${ruleId}`)
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function createKeywordTrigger(rule: KeywordTriggerCreate): Promise<KeywordTriggerRule> {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/keyword-triggers`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(rule),
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function updateKeywordTrigger(ruleId: string, rule: KeywordTriggerUpdate): Promise<KeywordTriggerRule> {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/keyword-triggers/${ruleId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(rule),
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function deleteKeywordTrigger(ruleId: string): Promise<void> {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/keyword-triggers/${ruleId}`, {
+    method: "DELETE",
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+}
+
+// ============ 定時消息任務 API ============
+
+export interface ScheduledMessageTask {
+  id: string
+  task_id: string
+  name: string
+  enabled: boolean
+  schedule_type: "cron" | "interval" | "once" | "conditional"
+  cron_expression?: string
+  interval_seconds?: number
+  start_time?: string
+  end_time?: string
+  timezone: string
+  condition?: string
+  check_interval: number
+  groups: number[]
+  accounts: string[]
+  rotation: boolean
+  rotation_strategy: "round_robin" | "random" | "priority"
+  message_template: string
+  template_variables: Record<string, any>
+  media_path?: string
+  delay_min: number
+  delay_max: number
+  retry_times: number
+  retry_interval: number
+  last_run_at?: string
+  next_run_at?: string
+  run_count: number
+  success_count: number
+  failure_count: number
+  description?: string
+  created_by?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ScheduledMessageLog {
+  id: string
+  task_id: string
+  account_id: string
+  group_id: number
+  success: boolean
+  message_sent?: string
+  error_message?: string
+  executed_at: string
+}
+
+export interface ScheduledMessageCreate {
+  task_id: string
+  name: string
+  enabled?: boolean
+  schedule_type: "cron" | "interval" | "once" | "conditional"
+  cron_expression?: string
+  interval_seconds?: number
+  start_time?: string
+  end_time?: string
+  timezone?: string
+  condition?: string
+  check_interval?: number
+  groups: number[]
+  accounts: string[]
+  rotation?: boolean
+  rotation_strategy?: "round_robin" | "random" | "priority"
+  message_template: string
+  template_variables?: Record<string, any>
+  media_path?: string
+  delay_min?: number
+  delay_max?: number
+  retry_times?: number
+  retry_interval?: number
+  description?: string
+}
+
+export interface ScheduledMessageUpdate {
+  name?: string
+  enabled?: boolean
+  schedule_type?: "cron" | "interval" | "once" | "conditional"
+  cron_expression?: string
+  interval_seconds?: number
+  start_time?: string
+  end_time?: string
+  timezone?: string
+  condition?: string
+  check_interval?: number
+  groups?: number[]
+  accounts?: string[]
+  rotation?: boolean
+  rotation_strategy?: "round_robin" | "random" | "priority"
+  message_template?: string
+  template_variables?: Record<string, any>
+  media_path?: string
+  delay_min?: number
+  delay_max?: number
+  retry_times?: number
+  retry_interval?: number
+  description?: string
+}
+
+export async function listScheduledMessages(params?: {
+  enabled?: boolean
+  skip?: number
+  limit?: number
+}): Promise<ScheduledMessageTask[]> {
+  const { fetchWithAuth } = await import("./client")
+  const urlParams = new URLSearchParams()
+  if (params?.enabled !== undefined) urlParams.append("enabled", params.enabled.toString())
+  if (params?.skip) urlParams.append("skip", params.skip.toString())
+  if (params?.limit) urlParams.append("limit", params.limit.toString())
+  
+  const response = await fetchWithAuth(`${API_BASE}/scheduled-messages?${urlParams}`)
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getScheduledMessage(taskId: string): Promise<ScheduledMessageTask> {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/scheduled-messages/${taskId}`)
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function createScheduledMessage(task: ScheduledMessageCreate): Promise<ScheduledMessageTask> {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/scheduled-messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(task),
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function updateScheduledMessage(taskId: string, task: ScheduledMessageUpdate): Promise<ScheduledMessageTask> {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/scheduled-messages/${taskId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(task),
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function deleteScheduledMessage(taskId: string): Promise<void> {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/scheduled-messages/${taskId}`, {
+    method: "DELETE",
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+}
+
+export async function getScheduledMessageLogs(taskId: string, params?: {
+  skip?: number
+  limit?: number
+}): Promise<ScheduledMessageLog[]> {
+  const { fetchWithAuth } = await import("./client")
+  const urlParams = new URLSearchParams()
+  if (params?.skip) urlParams.append("skip", params.skip.toString())
+  if (params?.limit) urlParams.append("limit", params.limit.toString())
+  
+  const response = await fetchWithAuth(`${API_BASE}/scheduled-messages/${taskId}/logs?${urlParams}`)
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+// ============ 群組管理 API ============
+
+export interface GroupJoinConfig {
+  id: string
+  config_id: string
+  name: string
+  enabled: boolean
+  join_type: "invite_link" | "username" | "group_id" | "search"
+  invite_link?: string
+  username?: string
+  group_id?: number
+  search_keywords: string[]
+  account_ids: string[]
+  min_members?: number
+  max_members?: number
+  group_types: string[]
+  post_join_actions: Array<{
+    type: string
+    message?: string
+    delay?: number | [number, number]
+  }>
+  priority: number
+  join_count: number
+  last_joined_at?: string
+  description?: string
+  created_by?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface GroupActivityMetrics {
+  id: string
+  group_id: number
+  message_count_24h: number
+  active_members_24h: number
+  new_members_24h: number
+  redpacket_count_24h: number
+  last_activity?: string
+  health_score: number
+  recorded_at: string
+}
+
+export interface GroupJoinConfigCreate {
+  config_id: string
+  name: string
+  enabled?: boolean
+  join_type: "invite_link" | "username" | "group_id" | "search"
+  invite_link?: string
+  username?: string
+  group_id?: number
+  search_keywords?: string[]
+  account_ids: string[]
+  min_members?: number
+  max_members?: number
+  group_types?: string[]
+  post_join_actions?: Array<{
+    type: string
+    message?: string
+    delay?: number | [number, number]
+  }>
+  priority?: number
+  description?: string
+}
+
+export interface GroupJoinConfigUpdate {
+  name?: string
+  enabled?: boolean
+  join_type?: "invite_link" | "username" | "group_id" | "search"
+  invite_link?: string
+  username?: string
+  group_id?: number
+  search_keywords?: string[]
+  account_ids?: string[]
+  min_members?: number
+  max_members?: number
+  group_types?: string[]
+  post_join_actions?: Array<{
+    type: string
+    message?: string
+    delay?: number | [number, number]
+  }>
+  priority?: number
+  description?: string
+}
+
+export async function listGroupJoinConfigs(params?: {
+  enabled?: boolean
+  skip?: number
+  limit?: number
+}): Promise<GroupJoinConfig[]> {
+  const { fetchWithAuth } = await import("./client")
+  const urlParams = new URLSearchParams()
+  if (params?.enabled !== undefined) urlParams.append("enabled", params.enabled.toString())
+  if (params?.skip) urlParams.append("skip", params.skip.toString())
+  if (params?.limit) urlParams.append("limit", params.limit.toString())
+  
+  const response = await fetchWithAuth(`${API_BASE}/group-management/join-configs?${urlParams}`)
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function getGroupJoinConfig(configId: string): Promise<GroupJoinConfig> {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/group-management/join-configs/${configId}`)
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function createGroupJoinConfig(config: GroupJoinConfigCreate): Promise<GroupJoinConfig> {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/group-management/join-configs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(config),
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function updateGroupJoinConfig(configId: string, config: GroupJoinConfigUpdate): Promise<GroupJoinConfig> {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/group-management/join-configs/${configId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(config),
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function deleteGroupJoinConfig(configId: string): Promise<void> {
+  const { fetchWithAuth } = await import("./client")
+  const response = await fetchWithAuth(`${API_BASE}/group-management/join-configs/${configId}`, {
+    method: "DELETE",
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+}
+
+export async function getGroupActivityMetrics(groupId: number, params?: {
+  skip?: number
+  limit?: number
+}): Promise<GroupActivityMetrics[]> {
+  const { fetchWithAuth } = await import("./client")
+  const urlParams = new URLSearchParams()
+  if (params?.skip) urlParams.append("skip", params.skip.toString())
+  if (params?.limit) urlParams.append("limit", params.limit.toString())
+  
+  const response = await fetchWithAuth(`${API_BASE}/group-management/activity-metrics/${groupId}?${urlParams}`)
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function exportScripts(format: ExportFormat): Promise<Blob> {
   const { fetchWithAuth } = await import("./client")
   const response = await fetchWithAuth(`${API_BASE}/export/scripts?format=${format}`)

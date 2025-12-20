@@ -635,20 +635,20 @@ async def send_code():
         try:
             me = await client.get_me()
             if me:
-                print("ERROR:ALREADY_AUTHORIZED")
+                logger.warning("賬號已授權，無需重新發送驗證碼")
                 return
         except AuthKeyUnregistered:
             # 未授权，可以继续发送验证码
             pass
         
-        print("DEBUG: 准备发送验证码到 " + str(PHONE))
+        logger.debug(f"準備發送驗證碼到 {PHONE}")
         sent_code = await client.send_code(PHONE)
-        print("DEBUG: send_code 调用成功，phone_code_hash=" + str(sent_code.phone_code_hash))
-        print("CODE_SENT:" + str(sent_code.phone_code_hash))
+        logger.debug(f"send_code 調用成功，phone_code_hash={sent_code.phone_code_hash}")
+        logger.info(f"CODE_SENT:{sent_code.phone_code_hash}")
     except PhoneNumberBanned:
-        print("ERROR:PHONE_BANNED")
+        logger.error("ERROR:PHONE_BANNED")
     except FloodWait as e:
-        print("ERROR:FLOOD_WAIT:" + str(e.value))
+        logger.error(f"ERROR:FLOOD_WAIT:{e.value}")
     finally:
         if client.is_connected:
             await client.disconnect()
@@ -1001,24 +1001,19 @@ async def verify():
     try:
         await client.connect()
         
-        print("DEBUG: 准备验证验证码")
-        print("DEBUG: PHONE=" + str(PHONE))
-        print("DEBUG: PHONE_CODE_HASH=" + str(PHONE_CODE_HASH))
-        print("DEBUG: CODE=" + str(CODE))
-        print("DEBUG: CODE类型=" + str(type(CODE)))
-        print("DEBUG: CODE长度=" + str(len(str(CODE))))
+        logger.debug(f"準備驗證驗證碼: PHONE={PHONE}, PHONE_CODE_HASH={PHONE_CODE_HASH}, CODE={CODE}, CODE類型={type(CODE)}, CODE長度={len(str(CODE))}")
         
         try:
             await client.sign_in(PHONE, PHONE_CODE_HASH, CODE)
         except PhoneCodeExpired:
-            print("ERROR:PHONE_CODE_EXPIRED")
+            logger.error("ERROR:PHONE_CODE_EXPIRED")
             return
         except PhoneCodeInvalid:
-            print("ERROR:PHONE_CODE_INVALID")
+            logger.error("ERROR:PHONE_CODE_INVALID")
             return
         except SessionPasswordNeeded:
             if not PASSWORD:
-                print("ERROR:PASSWORD_REQUIRED")
+                logger.error("ERROR:PASSWORD_REQUIRED")
                 return
             await client.check_password(PASSWORD)
         

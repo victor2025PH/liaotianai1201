@@ -20,12 +20,52 @@ logger = logging.getLogger(__name__)
 class ExtendedSessionPool:
     """擴展的會話池，支持多賬號並行管理"""
     
-    def __init__(self, account_manager: AccountManager, dialogue_manager: Optional[DialogueManager] = None):
+    def __init__(
+        self, 
+        account_manager: AccountManager, 
+        dialogue_manager: Optional[DialogueManager] = None,
+        redpacket_handler=None
+    ):
+        """
+        初始化會話池
+        
+        Args:
+            account_manager: 賬號管理器
+            dialogue_manager: 對話管理器（可選）
+            redpacket_handler: 紅包處理器（可選，用於統一消息處理中心）
+        """
         self.account_manager = account_manager
         self.dialogue_manager = dialogue_manager
         self._message_handlers: Dict[str, List[Callable]] = {}
         self._running = False
         self._tasks: List[asyncio.Task] = []
+        
+        # 初始化統一消息處理中心
+        try:
+            from group_ai_service.unified_message_handler import UnifiedMessageHandler, ActionExecutor
+            from group_ai_service.redpacket_handler import RedpacketHandler
+            
+            # 如果未提供 redpacket_handler，嘗試從 dialogue_manager 獲取
+            if not redpacket_handler and dialogue_manager:
+                redpacket_handler = getattr(dialogue_manager, 'redpacket_handler', None)
+            
+            # 創建 ActionExecutor（需要 account_manager）
+            action_executor = ActionExecutor(account_manager=account_manager)
+            
+            # 創建 UnifiedMessageHandler
+            self.unified_message_handler = UnifiedMessageHandler(
+                redpacket_handler=redpacket_handler,
+                dialogue_manager=dialogue_manager
+            )
+            
+            # 更新 ActionExecutor 的 account_manager 引用
+            self.unified_message_handler.action_executor.account_manager = account_manager
+            
+            logger.info("統一消息處理中心已初始化並整合到 SessionPool")
+        except Exception as e:
+            logger.warning(f"初始化統一消息處理中心失敗，將使用原有處理方式: {e}")
+            self.unified_message_handler = None
+        
         logger.info("ExtendedSessionPool 初始化完成")
     
     async def start(self):
@@ -138,7 +178,7 @@ class ExtendedSessionPool:
             logger.exception(f"賬號 {account_id} 監聽任務異常: {e}")
     
     async def _handle_message(self, account: AccountInstance, message: Message, account_id: str):
-        """處理接收到的消息（提取的邏輯，便於測試）"""
+        """處理接收到的消息（使用統一消息處理中心）"""
         try:
             # 只處理群組消息
             if not message.chat or message.chat.type.name != "GROUP":
@@ -153,29 +193,75 @@ class ExtendedSessionPool:
             account.last_activity = datetime.now()
             account.message_count += 1
             
-            # 如果有對話管理器，優先使用對話管理器處理
-            if self.dialogue_manager:
+            # 使用統一消息處理中心（如果已初始化）
+            if hasattr(self, 'unified_message_handler') and self.unified_message_handler:
                 try:
-                    reply = await self.dialogue_manager.process_message(
+                    # 獲取對話上下文
+                    dialogue_context = None
+                    if self.dialogue_manager:
+                        dialogue_context = self.dialogue_manager.get_context(
+                            account_id=account.account_id,
+                            group_id=message.chat.id
+                        )
+                    
+                    # 使用統一消息處理中心處理
+                    from group_ai_service.unified_message_handler import UnifiedMessageHandler
+                    result = await self.unified_message_handler.handle_message(
                         account_id=account.account_id,
-                        group_id=message.chat.id,
                         message=message,
-                        account_config=account.config
+                        chat=message.chat,
+                        account_config=account.config,
+                        dialogue_context=dialogue_context
                     )
-                    if reply:
-                        await message.reply_text(reply)
-                        account.reply_count += 1
-                        logger.info(f"已發送回復（賬號: {account.account_id}, 群組: {message.chat.id}）")
+                    
+                    # 處理結果
+                    if result.action_taken:
+                        if result.action_type == "send_message" and result.result_data:
+                            # 消息已由 ActionExecutor 發送，更新統計
+                            account.reply_count += 1
+                            logger.info(f"已發送回復（賬號: {account.account_id}, 群組: {message.chat.id}）")
+                        elif result.action_type == "grab_redpacket":
+                            # 紅包已處理，更新統計
+                            account.redpacket_count += 1
+                    
+                    if result.error:
+                        account.error_count += 1
+                        logger.warning(f"消息處理有錯誤: {result.error}")
+                    
                 except Exception as e:
-                    logger.exception(f"對話管理器處理失敗: {e}")
+                    logger.exception(f"統一消息處理中心處理失敗: {e}")
                     account.error_count += 1
-            
-            # 調用註冊的處理器（作為備用）
-            await self._dispatch_message(account, message)
+                    # 回退到原有處理方式
+                    await self._fallback_handle_message(account, message, account_id)
+            else:
+                # 回退到原有處理方式
+                await self._fallback_handle_message(account, message, account_id)
             
         except Exception as e:
             logger.exception(f"處理消息失敗 (account={account_id}): {e}")
             account.error_count += 1
+    
+    async def _fallback_handle_message(self, account: AccountInstance, message: Message, account_id: str):
+        """回退處理方式（原有邏輯）"""
+        # 如果有對話管理器，優先使用對話管理器處理
+        if self.dialogue_manager:
+            try:
+                reply = await self.dialogue_manager.process_message(
+                    account_id=account.account_id,
+                    group_id=message.chat.id,
+                    message=message,
+                    account_config=account.config
+                )
+                if reply:
+                    await message.reply_text(reply)
+                    account.reply_count += 1
+                    logger.info(f"已發送回復（賬號: {account.account_id}, 群組: {message.chat.id}）")
+            except Exception as e:
+                logger.exception(f"對話管理器處理失敗: {e}")
+                account.error_count += 1
+        
+        # 調用註冊的處理器（作為備用）
+        await self._dispatch_message(account, message)
     
     async def _handle_new_members(
         self,

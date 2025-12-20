@@ -16,6 +16,29 @@ from app.models.telegram_registration import (
     SessionFile,
     AntiDetectionLog,
 )
+from app.models.group_ai import (
+    GroupAIAccount,
+    GroupAIScript,
+    GroupAIScriptVersion,
+    AllocationHistory,
+    GroupAIDialogueHistory,
+    GroupAIRedpacketLog,
+    GroupAIMetric,
+    GroupAIAlertRule,
+    GroupAIRoleAssignmentScheme,
+    GroupAIRoleAssignmentHistory,
+    GroupAIAutomationTask,
+    GroupAIAutomationTaskLog,
+)
+from app.models.unified_features import (
+    KeywordTriggerRule,
+    ScheduledMessageTask,
+    ScheduledMessageLog,
+    GroupJoinConfig,
+    GroupJoinLog,
+    UnifiedConfig,
+    GroupActivityMetrics,
+)
 
 __all__ = [
     "Role",
@@ -32,5 +55,24 @@ __all__ = [
     "UserRegistration",
     "SessionFile",
     "AntiDetectionLog",
+    "GroupAIAccount",
+    "GroupAIScript",
+    "GroupAIScriptVersion",
+    "AllocationHistory",
+    "GroupAIDialogueHistory",
+    "GroupAIRedpacketLog",
+    "GroupAIMetric",
+    "GroupAIAlertRule",
+    "GroupAIRoleAssignmentScheme",
+    "GroupAIRoleAssignmentHistory",
+    "GroupAIAutomationTask",
+    "GroupAIAutomationTaskLog",
+    "KeywordTriggerRule",
+    "ScheduledMessageTask",
+    "ScheduledMessageLog",
+    "GroupJoinConfig",
+    "GroupJoinLog",
+    "UnifiedConfig",
+    "GroupActivityMetrics",
 ]
 

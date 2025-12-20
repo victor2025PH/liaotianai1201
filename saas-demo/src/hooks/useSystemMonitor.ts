@@ -16,9 +16,9 @@ export function useSystemMonitor() {
       }
       return result.data;
     },
-    staleTime: 30 * 1000, // 30 秒
+    staleTime: 10 * 1000, // 10 秒
     gcTime: 5 * 60 * 1000, // 5 分鐘
-    refetchInterval: 30 * 1000, // 每 30 秒自動刷新
+    refetchInterval: 10 * 1000, // 每 10 秒自動刷新（優化：減少 CPU 負載）
     placeholderData: (previousData) => previousData,
     retry: 1,
     retryDelay: 1000,

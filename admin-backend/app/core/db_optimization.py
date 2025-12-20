@@ -1,121 +1,226 @@
 """
 數據庫查詢優化工具
-包括索引優化和 N+1 查詢優化
+提供查詢結果緩存和 N+1 查詢優化
 """
-from sqlalchemy import Index
-from sqlalchemy.orm import joinedload, selectinload, Session, Query
-from typing import Type, TypeVar, List
+import hashlib
+import json
+import logging
+from functools import wraps
+from typing import Callable, Any, Optional, Type
+from datetime import datetime, timedelta
 
-T = TypeVar('T')
+logger = logging.getLogger(__name__)
+
+try:
+    from app.core.cache import get_cache_manager
+    CACHE_AVAILABLE = True
+except ImportError:
+    CACHE_AVAILABLE = False
+    logger.warning("緩存管理器不可用，查詢緩存功能將受限")
 
 
-def optimize_query_for_list(
-    query: Query,
-    model_class: Type[T],
-    relationships: List[str] = None,
-) -> Query:
+def cache_query_result(
+    ttl: int = 60,
+    key_prefix: str = "query",
+    include_args: bool = True,
+    include_kwargs: bool = True
+):
     """
-    優化列表查詢，避免 N+1 問題
+    緩存查詢結果的裝飾器
     
     Args:
-        query: SQLAlchemy 查詢對象
-        model_class: 模型類
-        relationships: 需要預加載的關係列表
+        ttl: 緩存時間（秒）
+        key_prefix: 緩存鍵前綴
+        include_args: 是否在緩存鍵中包含位置參數
+        include_kwargs: 是否在緩存鍵中包含關鍵字參數
     
-    Returns:
-        優化後的查詢對象
+    Example:
+        @cache_query_result(ttl=60)
+        async def get_accounts(db: Session, active: bool = True):
+            return db.query(Account).filter(Account.active == active).all()
     """
-    if relationships:
-        for rel in relationships:
-            if hasattr(model_class, rel):
-                # 使用 selectinload 進行批量加載（性能更好）
-                query = query.options(selectinload(getattr(model_class, rel)))
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            # 生成緩存鍵
+            cache_key_parts = [key_prefix, func.__name__]
+            
+            if include_args:
+                # 過濾掉數據庫會話對象（不可序列化）
+                filtered_args = [
+                    arg for arg in args
+                    if not hasattr(arg, 'query')  # 過濾 SQLAlchemy Session
+                ]
+                if filtered_args:
+                    cache_key_parts.append(str(hash(str(filtered_args))))
+            
+            if include_kwargs:
+                # 過濾掉數據庫會話
+                filtered_kwargs = {
+                    k: v for k, v in kwargs.items()
+                    if not hasattr(v, 'query')  # 過濾 SQLAlchemy Session
+                }
+                if filtered_kwargs:
+                    cache_key_parts.append(str(hash(json.dumps(filtered_kwargs, sort_keys=True, default=str))))
+            
+            cache_key = ":".join(cache_key_parts)
+            
+            # 嘗試從緩存獲取
+            if CACHE_AVAILABLE:
+                try:
+                    cache = get_cache_manager()
+                    cached_result = cache.get(cache_key)  # 使用同步方法
+                    if cached_result is not None:
+                        logger.debug(f"查詢緩存命中: {func.__name__}")
+                        return cached_result
+                except Exception as e:
+                    logger.debug(f"獲取緩存失敗: {e}")
+            
+            # 執行查詢
+            result = await func(*args, **kwargs)
+            
+            # 緩存結果
+            if CACHE_AVAILABLE:
+                try:
+                    cache = get_cache_manager()
+                    cache.set(cache_key, result, ttl=ttl)  # 使用同步方法
+                    logger.debug(f"查詢結果已緩存: {func.__name__} (TTL: {ttl}s)")
+                except Exception as e:
+                    logger.debug(f"設置緩存失敗: {e}")
+            
+            return result
+        
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            # 同步函數版本
+            cache_key_parts = [key_prefix, func.__name__]
+            
+            if include_args:
+                filtered_args = [
+                    arg for arg in args
+                    if not hasattr(arg, 'query')
+                ]
+                if filtered_args:
+                    cache_key_parts.append(str(hash(str(filtered_args))))
+            
+            if include_kwargs:
+                filtered_kwargs = {
+                    k: v for k, v in kwargs.items()
+                    if not hasattr(v, 'query')
+                }
+                if filtered_kwargs:
+                    cache_key_parts.append(str(hash(json.dumps(filtered_kwargs, sort_keys=True, default=str))))
+            
+            cache_key = ":".join(cache_key_parts)
+            
+            # 嘗試從緩存獲取
+            if CACHE_AVAILABLE:
+                try:
+                    cache = get_cache_manager()
+                    cached_result = cache.get_sync(cache_key)
+                    if cached_result is not None:
+                        logger.debug(f"查詢緩存命中: {func.__name__}")
+                        return cached_result
+                except Exception as e:
+                    logger.debug(f"獲取緩存失敗: {e}")
+            
+            # 執行查詢
+            result = func(*args, **kwargs)
+            
+            # 緩存結果
+            if CACHE_AVAILABLE:
+                try:
+                    cache = get_cache_manager()
+                    cache.set_sync(cache_key, result, ttl=ttl)
+                    logger.debug(f"查詢結果已緩存: {func.__name__} (TTL: {ttl}s)")
+                except Exception as e:
+                    logger.debug(f"設置緩存失敗: {e}")
+            
+            return result
+        
+        # 判斷是異步還是同步函數
+        import asyncio
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        else:
+            return sync_wrapper
     
-    return query
+    return decorator
 
 
-def get_optimized_user_query(db: Session, include_roles: bool = True) -> Query:
-    """獲取優化的用戶查詢（預加載角色）"""
-    from app.models.user import User
-    query = db.query(User)
-    if include_roles:
-        query = query.options(selectinload(User.roles))
-    return query
-
-
-def get_optimized_role_query(db: Session, include_permissions: bool = True) -> Query:
-    """獲取優化的角色查詢（預加載權限）"""
-    from app.models.role import Role
-    query = db.query(Role)
-    if include_permissions:
-        query = query.options(selectinload(Role.permissions))
-    return query
-
-
-# 定義需要添加的複合索引
-ADDITIONAL_INDEXES = {
-    "group_ai_accounts": [
-        Index("idx_account_script_status", "script_id", "active"),
-        Index("idx_account_server", "server_id", "active"),
-        Index("idx_account_created", "created_at"),
-    ],
-    "group_ai_scripts": [
-        Index("idx_script_status_created", "status", "created_at"),
-    ],
-    "group_ai_dialogue_history": [
-        Index("idx_dialogue_account_group", "account_id", "group_id", "timestamp"),
-        Index("idx_dialogue_timestamp", "timestamp"),
-    ],
-    "group_ai_metrics": [
-        Index("idx_metric_account_type_time", "account_id", "metric_type", "timestamp"),
-        Index("idx_metric_timestamp", "timestamp"),
-    ],
-    "group_ai_redpacket_logs": [
-        Index("idx_redpacket_account_group", "account_id", "group_id", "timestamp"),
-    ],
-    "notifications": [
-        Index("idx_notification_recipient_read", "recipient", "read", "created_at"),
-        Index("idx_notification_status_created", "status", "created_at"),
-    ],
-    "audit_logs": [
-        Index("idx_audit_user_resource", "user_id", "resource_type", "created_at"),
-    ],
-    "group_ai_automation_tasks": [
-        Index("idx_task_enabled_next_run", "enabled", "next_run_at"),
-        Index("idx_task_type_enabled", "task_type", "enabled"),
-    ],
-    "group_ai_automation_task_logs": [
-        Index("idx_task_log_task_status", "task_id", "status", "started_at"),
-    ],
-}
-
-
-def create_additional_indexes(engine):
+def optimize_query(use_joinedload: bool = False, use_selectinload: bool = False):
     """
-    創建額外的數據庫索引
+    優化查詢的裝飾器（用於修復 N+1 問題）
     
-    注意：這需要在數據庫遷移中執行，而不是在運行時動態創建
+    Args:
+        use_joinedload: 使用 joinedload 預加載關聯
+        use_selectinload: 使用 selectinload 預加載關聯
+    
+    Note:
+        這個裝飾器主要用於提示開發者，實際優化需要在查詢中使用 joinedload/selectinload
     """
-    from sqlalchemy import inspect
-    
-    inspector = inspect(engine)
-    existing_indexes = {}
-    
-    # 獲取現有索引
-    for table_name in inspector.get_table_names():
-        existing_indexes[table_name] = [
-            idx["name"] for idx in inspector.get_indexes(table_name)
-        ]
-    
-    # 創建缺失的索引
-    for table_name, indexes in ADDITIONAL_INDEXES.items():
-        if table_name in inspector.get_table_names():
-            for index in indexes:
-                index_name = index.name if hasattr(index, "name") else str(index)
-                if index_name not in existing_indexes.get(table_name, []):
-                    try:
-                        index.create(engine)
-                        print(f"✓ 創建索引: {table_name}.{index_name}")
-                    except Exception as e:
-                        print(f"✗ 創建索引失敗 {table_name}.{index_name}: {e}")
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # 這裡可以添加查詢優化邏輯
+            # 例如：自動檢測 N+1 查詢並記錄警告
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
+
+def monitor_query_performance(threshold: float = 1.0):
+    """
+    監控查詢性能的裝飾器
+    
+    Args:
+        threshold: 慢查詢閾值（秒）
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            import time
+            start_time = time.time()
+            result = await func(*args, **kwargs)
+            duration = time.time() - start_time
+            
+            if duration > threshold:
+                logger.warning(
+                    f"慢查詢檢測: {func.__name__} 耗時 {duration:.2f} 秒（閾值: {threshold} 秒）",
+                    extra={
+                        "function": func.__name__,
+                        "duration": duration,
+                        "threshold": threshold,
+                        "args": str(args)[:200],
+                        "kwargs": str(kwargs)[:200]
+                    }
+                )
+            
+            return result
+        
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            import time
+            start_time = time.time()
+            result = func(*args, **kwargs)
+            duration = time.time() - start_time
+            
+            if duration > threshold:
+                logger.warning(
+                    f"慢查詢檢測: {func.__name__} 耗時 {duration:.2f} 秒（閾值: {threshold} 秒）",
+                    extra={
+                        "function": func.__name__,
+                        "duration": duration,
+                        "threshold": threshold
+                    }
+                )
+            
+            return result
+        
+        import asyncio
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        else:
+            return sync_wrapper
+    
+    return decorator

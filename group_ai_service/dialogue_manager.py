@@ -323,11 +323,18 @@ class DialogueManager:
         
         # 處理消息（使用劇本引擎）
         try:
+            # 記錄開始時間
+            process_start_time = datetime.now()
+            
             reply = await script_engine.process_message(
                 account_id=account_id,
                 message=message,
                 context=context_info
             )
+            
+            # 計算實際處理時間
+            process_end_time = datetime.now()
+            actual_reply_time = (process_end_time - process_start_time).total_seconds()
             
             if reply:
                 # 更新上下文
@@ -335,10 +342,10 @@ class DialogueManager:
                 context.last_reply_time = datetime.now()
                 context.reply_count_today += 1
                 
-                # 記錄監控指標
+                # 記錄監控指標（使用實際回復時間）
                 self.monitor_service.record_reply(
                     account_id=account_id,
-                    reply_time=0.0,  # TODO: 計算實際回復時間
+                    reply_time=actual_reply_time,
                     success=True
                 )
                 self.monitor_service.record_message(
@@ -459,10 +466,17 @@ class DialogueManager:
             return {}
     
     async def _check_redpacket(self, message: Message) -> bool:
-        """檢查是否為紅包消息"""
-        # 使用 RedpacketHandler 檢測
-        redpacket = await self.redpacket_handler.detect_redpacket(message)
-        return redpacket is not None
+        """檢查是否為紅包消息（使用統一檢測邏輯）"""
+        # 優先使用統一消息處理中心的 RedpacketProcessor（如果可用）
+        try:
+            from group_ai_service.unified_message_handler import RedpacketProcessor
+            # 創建臨時處理器實例用於檢測
+            temp_processor = RedpacketProcessor(self.redpacket_handler)
+            return temp_processor.is_redpacket_message(message)
+        except Exception:
+            # 回退到原有方法
+            redpacket = await self.redpacket_handler.detect_redpacket(message)
+            return redpacket is not None
     
     def _start_cleanup_task(self):
         """啟動定期清理任務（延遲啟動，避免初始化時的事件循環問題）"""

@@ -48,6 +48,7 @@ class GroupAIConfig(BaseSettings):
     redpacket_min_amount: float = 0.01  # 最小紅包金額（防止 amountTo 太小）
     redpacket_notification_enabled: bool = True  # 是否啟用搶包通知
     redpacket_best_luck_announcement_enabled: bool = True  # 是否啟用最佳手氣提示
+    redpacket_thank_message_enabled: bool = True  # 是否啟用感謝消息（搶紅包成功後自動發送）
     
     # 遊戲系統 API 配置
     game_api_base_url: Optional[str] = None

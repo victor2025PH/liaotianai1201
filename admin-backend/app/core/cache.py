@@ -211,6 +211,10 @@ class CacheManager:
         
         return None
     
+    def get_sync(self, key: str) -> Optional[Any]:
+        """獲取緩存值（同步版本，別名）"""
+        return self.get(key)
+    
     async def get_async(self, key: str) -> Optional[Any]:
         """获取缓存值（异步版本）"""
         return self.get(key)
@@ -246,6 +250,10 @@ class CacheManager:
                     del self.memory_cache[old_key]
         
         return True
+    
+    def set_sync(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
+        """設置緩存值（同步版本，別名）"""
+        return self.set(key, value, ttl)
     
     async def set_async(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
         """设置缓存值（异步版本）"""

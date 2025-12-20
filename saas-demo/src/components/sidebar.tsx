@@ -22,6 +22,8 @@ import {
   Sparkles,
   Heart,
   TrendingUp,
+  Clock,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -133,6 +135,27 @@ const navigationConfig: NavItem[] = [
     icon: Zap,
     step: 5,
     descKey: "automationTasks",
+  },
+  {
+    nameKey: "keywordTriggers",
+    href: "/group-ai/keyword-triggers",
+    icon: Zap,
+    step: null,
+    descKey: "keywordTriggers",
+  },
+  {
+    nameKey: "scheduledMessages",
+    href: "/group-ai/scheduled-messages",
+    icon: Clock,
+    step: null,
+    descKey: "scheduledMessages",
+  },
+  {
+    nameKey: "groupManagement",
+    href: "/group-ai/group-management",
+    icon: Users,
+    step: null,
+    descKey: "groupManagement",
   },
   {
     nameKey: "groupMonitor",

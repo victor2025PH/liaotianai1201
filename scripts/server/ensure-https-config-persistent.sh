@@ -66,45 +66,30 @@ echo ""
 echo "[4/6] 创建完整的配置文件..."
 echo "----------------------------------------"
 
-# 读取当前 HTTP server 块的内容（保留所有 location 配置）
-HTTP_SERVER_BLOCK=$(sudo awk '/^server {/,/^}$/' "$NGINX_CONFIG" | grep -A 1000 "listen 80" | head -n -1 2>/dev/null || echo "")
-
-# 如果当前配置有 HTTP 块，提取 location 配置
-if [ -n "$HTTP_SERVER_BLOCK" ]; then
-    echo "✅ 找到现有 HTTP 配置，将保留所有 location 块"
-    LOCATION_BLOCKS=$(echo "$HTTP_SERVER_BLOCK" | awk '/location /,/^    }/' 2>/dev/null || echo "")
+# 直接使用模板文件（避免动态生成导致的语法错误）
+if [ -f "$CONFIG_TEMPLATE" ]; then
+    echo "✅ 使用配置模板: $CONFIG_TEMPLATE"
+    sudo cp "$CONFIG_TEMPLATE" "$NGINX_CONFIG"
+    echo "✅ 配置文件已从模板创建"
 else
-    echo "⚠️  未找到现有 HTTP 配置，将使用模板"
-    if [ -f "$CONFIG_TEMPLATE" ]; then
-        HTTP_SERVER_BLOCK=$(grep -A 1000 "listen 80" "$CONFIG_TEMPLATE" | head -n -1 2>/dev/null || echo "")
-        LOCATION_BLOCKS=$(grep -A 1000 "location /" "$CONFIG_TEMPLATE" | head -n -100 2>/dev/null || echo "")
-    fi
-fi
-
-# 创建新的配置文件
-TEMP_CONFIG=$(mktemp)
-
-# HTTP server 块（重定向到 HTTPS，但保留 ACME 验证）
-cat > "$TEMP_CONFIG" << 'HTTP_BLOCK'
+    echo "⚠️  配置模板不存在，使用默认配置..."
+    # 使用 fix-http-https-complete.sh 中的默认配置逻辑
+    sudo tee "$NGINX_CONFIG" > /dev/null << 'NGINX_EOF'
 # HTTP to HTTPS redirect
 server {
     listen 80;
     server_name aikz.usdt2026.cc;
     
-    # Let's Encrypt 验证路径（Certbot 需要）
+    # Let's Encrypt 验证路径
     location /.well-known/acme-challenge/ {
         root /var/www/html;
     }
     
-    # 重定向所有其他请求到 HTTPS
+    # 重定向所有 HTTP 请求到 HTTPS
     location / {
         return 301 https://$server_name$request_uri;
     }
 }
-HTTP_BLOCK
-
-# HTTPS server 块
-cat >> "$TEMP_CONFIG" << HTTPS_BLOCK_HEADER
 
 # HTTPS server
 server {
@@ -138,15 +123,7 @@ server {
     add_header Referrer-Policy "no-referrer-when-downgrade" always;
 
     client_max_body_size 50M;
-HTTPS_BLOCK_HEADER
 
-# 如果有现有的 location 块，使用它们；否则使用默认配置
-if [ -n "$LOCATION_BLOCKS" ] && [ ${#LOCATION_BLOCKS} -gt 100 ]; then
-    echo "使用现有的 location 配置..."
-    echo "$LOCATION_BLOCKS" >> "$TEMP_CONFIG"
-else
-    echo "使用默认 location 配置..."
-    cat >> "$TEMP_CONFIG" << 'DEFAULT_LOCATIONS'
     # WebSocket 支持 - 通知服务
     location /api/v1/notifications/ws {
         proxy_pass http://127.0.0.1:8000/api/v1/notifications/ws;
@@ -227,23 +204,9 @@ else
         proxy_cache_bypass $http_upgrade;
         proxy_read_timeout 86400;
     }
-DEFAULT_LOCATIONS
-fi
-
-# 关闭 HTTPS server 块
-echo "}" >> "$TEMP_CONFIG"
-
-# 测试配置
-if sudo nginx -t -c "$TEMP_CONFIG" 2>&1; then
-    echo "✅ 新配置语法正确"
-    sudo cp "$TEMP_CONFIG" "$NGINX_CONFIG"
-    echo "✅ 配置文件已更新"
-    rm -f "$TEMP_CONFIG"
-else
-    echo "❌ 新配置有语法错误"
-    echo "保留备份，不更新配置"
-    rm -f "$TEMP_CONFIG"
-    exit 1
+}
+NGINX_EOF
+    echo "✅ 默认配置文件已创建"
 fi
 echo ""
 

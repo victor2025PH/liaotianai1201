@@ -26,7 +26,7 @@ fi
 # 1. 检查后端服务
 echo "[1/7] 检查后端服务..."
 echo "----------------------------------------"
-if pm2 list | grep -q "backend.*online"; then
+if sudo -u ubuntu pm2 list 2>/dev/null | grep -q "backend.*online"; then
     echo "✅ 后端服务正在运行"
     BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/health || echo "000")
     if [ "$BACKEND_STATUS" = "200" ]; then
@@ -34,13 +34,17 @@ if pm2 list | grep -q "backend.*online"; then
     else
         echo "⚠️  后端健康检查失败 (状态码: $BACKEND_STATUS)"
         echo "   重启后端服务..."
-        pm2 restart backend
+        sudo -u ubuntu pm2 restart backend
         sleep 3
     fi
 else
     echo "❌ 后端服务未运行，启动..."
-    cd "$PROJECT_DIR/admin-backend"
-    pm2 start ecosystem.config.js --only backend || pm2 restart backend
+    cd "$PROJECT_DIR"
+    sudo -u ubuntu pm2 start ecosystem.config.js --only backend 2>/dev/null || sudo -u ubuntu pm2 restart backend 2>/dev/null || {
+        echo "   尝试删除旧进程后重新启动..."
+        sudo -u ubuntu pm2 delete backend 2>/dev/null || true
+        sudo -u ubuntu pm2 start ecosystem.config.js --only backend
+    }
     sleep 3
 fi
 echo ""
@@ -48,7 +52,7 @@ echo ""
 # 2. 检查前端服务
 echo "[2/7] 检查前端服务..."
 echo "----------------------------------------"
-if pm2 list | grep -q "next-server.*online"; then
+if sudo -u ubuntu pm2 list 2>/dev/null | grep -q "next-server.*online"; then
     echo "✅ 前端服务正在运行"
     FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000 || echo "000")
     if [ "$FRONTEND_STATUS" = "200" ] || [ "$FRONTEND_STATUS" = "301" ] || [ "$FRONTEND_STATUS" = "302" ]; then
@@ -56,13 +60,17 @@ if pm2 list | grep -q "next-server.*online"; then
     else
         echo "⚠️  前端服务响应异常 (状态码: $FRONTEND_STATUS)"
         echo "   重启前端服务..."
-        pm2 restart next-server
+        sudo -u ubuntu pm2 restart next-server
         sleep 3
     fi
 else
     echo "❌ 前端服务未运行，启动..."
-    cd "$PROJECT_DIR/saas-demo"
-    pm2 start ecosystem.config.js --only next-server || pm2 restart next-server
+    cd "$PROJECT_DIR"
+    sudo -u ubuntu pm2 start ecosystem.config.js --only next-server 2>/dev/null || sudo -u ubuntu pm2 restart next-server 2>/dev/null || {
+        echo "   尝试删除旧进程后重新启动..."
+        sudo -u ubuntu pm2 delete next-server 2>/dev/null || true
+        sudo -u ubuntu pm2 start ecosystem.config.js --only next-server
+    }
     sleep 3
 fi
 echo ""

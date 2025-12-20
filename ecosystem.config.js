@@ -17,32 +17,54 @@ module.exports = {
       out_file: "/home/ubuntu/telegram-ai-system/logs/backend-out.log",
       log_date_format: "YYYY-MM-DD HH:mm:ss Z",
       merge_logs: true,
+      // 自动重启配置
       autorestart: true,
       watch: false,
-      max_memory_restart: "1G",
+      // 资源限制（防止 CPU 100%）
+      max_memory_restart: "800M",  // 降低内存限制，更早重启防止内存泄漏
+      // 重启策略
+      min_uptime: "30s",           // 至少运行 30 秒才算成功
+      max_restarts: 15,            // 最多重启 15 次
+      restart_delay: 10000,        // 重启延迟 10 秒
+      // 进程管理
       instances: 1,
-      exec_mode: "fork"
+      exec_mode: "fork",
+      // 健康检查
+      kill_timeout: 5000,
+      wait_ready: false,
+      listen_timeout: 10000
     },
     {
-      name: "frontend",
+      name: "next-server",
       cwd: "/home/ubuntu/telegram-ai-system/saas-demo",
-      // Next.js 16 standalone 模式
-      script: "/usr/bin/node",
-      args: ".next/standalone/server.js",
+      script: "npm",
+      args: "start",
       env: {
         PORT: 3000,
         NODE_ENV: "production",
-        NODE_OPTIONS: "--max-old-space-size=1024"
+        // 限制 Node.js 内存使用（防止内存泄漏）
+        NODE_OPTIONS: "--max-old-space-size=1024 --max-semi-space-size=128"
       },
       error_file: "/home/ubuntu/telegram-ai-system/logs/frontend-error.log",
       out_file: "/home/ubuntu/telegram-ai-system/logs/frontend-out.log",
       log_date_format: "YYYY-MM-DD HH:mm:ss Z",
       merge_logs: true,
+      // 自动重启配置
       autorestart: true,
       watch: false,
-      max_memory_restart: "1G",
+      // 资源限制（防止 CPU 100%）
+      max_memory_restart: "800M",  // 降低内存限制
+      // 重启策略
+      min_uptime: "30s",           // 至少运行 30 秒才算成功
+      max_restarts: 15,            // 最多重启 15 次
+      restart_delay: 10000,        // 重启延迟 10 秒
+      // 进程管理
       instances: 1,
-      exec_mode: "fork"
+      exec_mode: "fork",
+      // 健康检查
+      kill_timeout: 5000,
+      wait_ready: false,
+      listen_timeout: 10000
     }
   ]
 };

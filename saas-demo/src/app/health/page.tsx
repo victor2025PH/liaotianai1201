@@ -136,7 +136,7 @@ export default function HealthCheckPage() {
       const interval = setInterval(() => {
         setRefreshing(true);
         fetchHealthData();
-      }, 10000); // 每10秒自动刷新（優化：減少 CPU 負載）
+      }, 30000); // 每30秒自动刷新（優化：減少 CPU 負載）
       setRefreshInterval(interval);
       return () => {
         if (interval) clearInterval(interval);

@@ -31,6 +31,11 @@ _worker_responses: Dict[str, Dict[str, Any]] = {}  # 存储 Worker 节点的响�
 _account_sync_counters: Dict[str, int] = {}  # node_id -> 心跳计数
 ACCOUNT_SYNC_INTERVAL = 3  # 每 3 次心跳才同步一次账号（约 90 秒）
 
+# 节点列表查询缓存（减少数据库查询压力）
+_workers_list_cache: Optional[Dict[str, Dict[str, Any]]] = None
+_workers_list_cache_time: Optional[datetime] = None
+WORKERS_LIST_CACHE_TTL = 60  # 缓存有效期：60 秒
+
 # Redis 客户端（如果可用）
 _redis_client = None
 _redis_pubsub = None
@@ -206,7 +211,38 @@ def _get_worker_status(node_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _get_all_workers() -> Dict[str, Dict[str, Any]]:
-    """获取所有 Worker 节点状态，并检查心跳超时"""
+    """
+    获取所有 Worker 节点状态，并检查心跳超时
+    
+    优化：使用内存缓存，如果 1 分钟内没有变化，直接返回缓存结果
+    """
+    # 检查缓存是否有效
+    global _workers_list_cache, _workers_list_cache_time
+    now = datetime.now()
+    
+    if _workers_list_cache is not None and _workers_list_cache_time is not None:
+        cache_age = (now - _workers_list_cache_time).total_seconds()
+        if cache_age < WORKERS_LIST_CACHE_TTL:
+            # 缓存有效，直接返回（但需要更新心跳超时状态）
+            logger.debug(f"使用缓存的节点列表（缓存年龄: {cache_age:.1f}秒）")
+            # 即使使用缓存，也需要检查心跳超时（因为时间在变化）
+            workers = _workers_list_cache.copy()
+            HEARTBEAT_TIMEOUT_SECONDS = 90
+            for node_id, status_data in workers.items():
+                last_heartbeat_str = status_data.get("last_heartbeat")
+                if last_heartbeat_str:
+                    try:
+                        last_heartbeat = datetime.fromisoformat(last_heartbeat_str.replace('Z', '+00:00'))
+                        if last_heartbeat.tzinfo is None:
+                            last_heartbeat = last_heartbeat.replace(tzinfo=now.astimezone().tzinfo)
+                        time_since_heartbeat = (now.astimezone() - last_heartbeat).total_seconds()
+                        if time_since_heartbeat > HEARTBEAT_TIMEOUT_SECONDS:
+                            status_data["status"] = "offline"
+                    except (ValueError, TypeError):
+                        status_data["status"] = "offline"
+            return workers
+    
+    # 缓存无效或不存在，重新查询
     workers = {}
     HEARTBEAT_TIMEOUT_SECONDS = 90  # 心跳超时时间：90秒
     
@@ -253,6 +289,10 @@ def _get_all_workers() -> Dict[str, Dict[str, Any]]:
         workers = _workers_memory_store.copy()
         # 对内存存储也进行超时检测
         _check_heartbeat_timeout(workers, HEARTBEAT_TIMEOUT_SECONDS)
+    
+    # 更新缓存
+    _workers_list_cache = workers.copy()
+    _workers_list_cache_time = now
     
     return workers
 

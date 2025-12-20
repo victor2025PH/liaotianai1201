@@ -167,8 +167,8 @@ export default function ServersPage() {
   useEffect(() => {
     // 初始加载时静默加载，不显示loading
     fetchServers(false);
-    // 每10秒自動刷新（静默，優化：減少 CPU 負載）
-    const interval = setInterval(() => fetchServers(false), 10000);
+    // 每30秒自動刷新（静默，優化：減少 CPU 負載）
+    const interval = setInterval(() => fetchServers(false), 30000);
     
     // 加载剧本列表
     const loadScripts = async () => {

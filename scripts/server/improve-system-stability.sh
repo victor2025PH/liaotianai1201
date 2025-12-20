@@ -209,7 +209,7 @@ echo "[6/7] 设置定时监控任务..."
 echo "----------------------------------------"
 CRON_JOB="*/10 * * * * /home/ubuntu/telegram-ai-system/scripts/server/monitor-system.sh"
 (crontab -u ubuntu -l 2>/dev/null | grep -v "monitor-system.sh"; echo "$CRON_JOB") | crontab -u ubuntu -
-echo "✅ 定时监控任务已设置（每 5 分钟检查一次）"
+echo "✅ 定时监控任务已设置（每 10 分钟检查一次）"
 echo ""
 
 # 7. 重启服务

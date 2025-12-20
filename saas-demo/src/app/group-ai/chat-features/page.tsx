@@ -665,8 +665,8 @@ export default function ChatFeaturesPage() {
     fetchAIProviderStatus()
     fetchNodeStats()
     
-    // 每10秒刷新一次節點統計（優化：減少 CPU 負載）
-    const interval = setInterval(fetchNodeStats, 10000)
+    // 每30秒刷新一次節點統計（優化：減少 CPU 負載）
+    const interval = setInterval(fetchNodeStats, 30000)
     return () => clearInterval(interval)
   }, [])
 

@@ -106,7 +106,7 @@ export default function GroupsPage() {
 
   useEffect(() => {
     fetchGroups()
-    const interval = setInterval(fetchGroups, 10000) // 優化：減少 CPU 負載
+    const interval = setInterval(fetchGroups, 30000) // 優化：減少 CPU 負載，延長到 30 秒
     return () => clearInterval(interval)
   }, [])
 

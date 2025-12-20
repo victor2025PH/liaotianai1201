@@ -64,7 +64,7 @@ export default function GroupAutomationPage() {
 
   useEffect(() => {
     fetchWorkers()
-    const interval = setInterval(fetchWorkers, 10000)
+    const interval = setInterval(fetchWorkers, 30000) // 優化：減少 CPU 負載，延長到 30 秒
     return () => clearInterval(interval)
   }, [])
 

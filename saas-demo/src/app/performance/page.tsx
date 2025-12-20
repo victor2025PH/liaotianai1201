@@ -83,7 +83,7 @@ export default function PerformancePage() {
       const interval = setInterval(() => {
         setRefreshing(true);
         loadData();
-      }, 10000); // 每10秒刷新（優化：減少 CPU 負載）
+      }, 30000); // 每30秒刷新（優化：減少 CPU 負載）
       return () => clearInterval(interval);
     }
   }, [autoRefresh]);

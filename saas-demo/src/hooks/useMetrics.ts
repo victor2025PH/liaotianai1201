@@ -33,11 +33,11 @@ export function useMetrics(): UseMetricsReturn {
       
       return result.data;
     },
-    staleTime: 10 * 1000, // 10 秒內數據被認為是新鮮的（指標數據更新較頻繁）
+    staleTime: 30 * 1000, // 30 秒內數據被認為是新鮮的（指標數據更新較頻繁）
     gcTime: 2 * 60 * 1000, // 2 分鐘後未使用的數據被垃圾回收
     retry: 1, // 失敗時重試 1 次
     refetchOnWindowFocus: false, // 窗口聚焦時不自動重新獲取
-    refetchInterval: 10 * 1000, // 每 10 秒自動刷新一次（優化：減少 CPU 負載）
+    refetchInterval: 30 * 1000, // 每 30 秒自動刷新一次（優化：減少 CPU 負載）
   };
 
   const { data, isLoading, error, refetch, isFetching } = useQuery(queryOptions);

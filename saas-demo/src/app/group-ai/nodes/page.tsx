@@ -141,8 +141,8 @@ export default function NodesPage() {
   useEffect(() => {
     fetchWorkers()
     checkDuplicates()
-    // 优化：延長輪詢間隔到 10 秒（減少 CPU 負載）
-    const interval = setInterval(fetchWorkers, 10000)
+    // 优化：延長輪詢間隔到 30 秒（減少 CPU 負載）
+    const interval = setInterval(fetchWorkers, 30000)
     return () => clearInterval(interval)
   }, [])
 

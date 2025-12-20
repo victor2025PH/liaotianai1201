@@ -99,12 +99,12 @@ export default function GroupAIMonitorPage() {
     fetchData()
     fetchHistory(selectedMetricType, selectedPeriod)
     fetchStatistics(selectedPeriod)
-    // 每 10 秒自动刷新（優化：減少 CPU 負載）
+    // 每 30 秒自动刷新（優化：減少 CPU 負載）
     const interval = setInterval(() => {
       fetchData()
       fetchHistory(selectedMetricType, selectedPeriod)
       fetchStatistics(selectedPeriod)
-    }, 10000)
+    }, 30000)
     return () => clearInterval(interval)
   }, [])
 

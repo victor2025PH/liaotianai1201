@@ -14,115 +14,167 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Debug - List files to verify deploy.sh exists
-        run: |
-          echo "=== Current working directory ==="
-          pwd
-          echo ""
-          echo "=== Listing scripts/server directory ==="
-          ls -la scripts/server/ || echo "scripts/server directory not found"
-          echo ""
-          echo "=== Checking if deploy.sh exists ==="
-          if [ -f "scripts/server/deploy.sh" ]; then
-            echo "✅ deploy.sh found at scripts/server/deploy.sh"
-            ls -lh scripts/server/deploy.sh
-          else
-            echo "❌ deploy.sh NOT found at scripts/server/deploy.sh"
-            echo "Searching for deploy.sh..."
-            find . -name "deploy.sh" -type f 2>/dev/null || echo "No deploy.sh found in repository"
-          fi
-
-      - name: Test SSH connection
-        uses: appleboy/ssh-action@v1.2.0
-        continue-on-error: true
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          timeout: 60s
-          script: |
-            echo "✅ SSH 連接測試成功"
-            echo "服務器信息:"
-            uname -a
-            echo "當前目錄:"
-            pwd
-
-      - name: Upload deploy script to server (optional)
-        uses: appleboy/scp-action@v0.1.7
-        continue-on-error: true
-        id: scp_upload
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: 22
-          timeout: 60s
-          source: "scripts/server/deploy.sh"
-          target: "/tmp"
-          strip_components: 0
-          debug: true
-
-      - name: Execute deploy script (with fallback)
-        uses: appleboy/ssh-action@v1.2.0
-        continue-on-error: false
-        timeout-minutes: 50
-        env:
-          GITHUB_REPO: ${{ github.repository }}
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: 22
-          timeout: 120s
-          command_timeout: 40m
+          timeout: '60s'
+          command_timeout: '30m'
+          use_insecure_cipher: true
           script_stop: true
           debug: true
-          envs: GITHUB_REPO,SERVER_HOST
           script: |
-            echo "=== Checking uploaded files in /tmp ==="
-            echo "Listing /tmp directory contents:"
-            ls -la /tmp/ | grep -E "(deploy|script)" || ls -la /tmp/ | head -20
+            set -e
+            
+            echo "=========================================="
+            echo "🚀 开始部署"
+            echo "时间: $(date)"
+            echo "=========================================="
             echo ""
-            echo "Searching for deploy.sh in /tmp:"
-            DEPLOY_FILE=$(find /tmp -name "deploy.sh" -type f 2>/dev/null | head -1)
-            if [ -n "$DEPLOY_FILE" ]; then
-              echo "✅ Found deploy.sh at: $DEPLOY_FILE"
-              ls -lh "$DEPLOY_FILE"
-              echo ""
-              echo "=== Copying to /tmp/deploy.sh ==="
-              cp "$DEPLOY_FILE" /tmp/deploy.sh
-              chmod +x /tmp/deploy.sh
-              echo "✅ File ready at /tmp/deploy.sh"
-            elif [ -f "/tmp/deploy.sh" ]; then
-              echo "✅ /tmp/deploy.sh already exists"
-              ls -lh /tmp/deploy.sh
-              chmod +x /tmp/deploy.sh
-            else
-              echo "⚠️ deploy.sh NOT found in /tmp, trying to download from GitHub..."
-              # 備用方案：直接從 GitHub 下載腳本
-              if command -v curl >/dev/null 2>&1; then
-                curl -o /tmp/deploy.sh -L "https://raw.githubusercontent.com/$GITHUB_REPO/main/scripts/server/deploy.sh" || {
-                  echo "❌ Failed to download deploy.sh from GitHub"
-                  echo "Full /tmp directory listing:"
-                  ls -la /tmp/
-                  exit 1
-                }
-              elif command -v wget >/dev/null 2>&1; then
-                wget -O /tmp/deploy.sh "https://raw.githubusercontent.com/$GITHUB_REPO/main/scripts/server/deploy.sh" || {
-                  echo "❌ Failed to download deploy.sh from GitHub"
-                  echo "Full /tmp directory listing:"
-                  ls -la /tmp/
-                  exit 1
-                }
-              else
-                echo "❌ Neither curl nor wget available, cannot download deploy.sh"
+            
+            # 项目目录
+            PROJECT_DIR="/home/ubuntu/aizkw20251219"
+            
+            # 检查项目目录是否存在
+            if [ ! -d "$PROJECT_DIR" ]; then
+              echo "❌ 项目目录不存在: $PROJECT_DIR"
+              echo "正在创建目录并克隆项目..."
+              mkdir -p "$(dirname "$PROJECT_DIR")"
+              cd "$(dirname "$PROJECT_DIR")"
+              git clone https://github.com/victor2025PH/liaotianai1201.git "$(basename "$PROJECT_DIR")" || {
+                echo "❌ Git clone 失败"
                 exit 1
-              fi
-              chmod +x /tmp/deploy.sh
-              echo "✅ Downloaded and prepared deploy.sh"
+              }
             fi
+            
+            # 进入项目目录
+            echo "📁 进入项目目录: $PROJECT_DIR"
+            cd "$PROJECT_DIR" || {
+              echo "❌ 无法进入项目目录"
+              exit 1
+            }
+            
+            echo "当前目录: $(pwd)"
             echo ""
-            echo "=== Running deploy script ==="
-            bash /tmp/deploy.sh
+            
+            # 检查是否是 git 仓库
+            if [ ! -d ".git" ]; then
+              echo "❌ 当前目录不是 git 仓库"
+              echo "正在初始化 git 仓库..."
+              git init
+              git remote add origin https://github.com/victor2025PH/liaotianai1201.git || true
+            fi
+            
+            # 拉取最新代码
+            echo "📥 [1/5] 拉取最新代码..."
+            echo "----------------------------------------"
+            
+            # 获取远程分支信息
+            git fetch origin main || git fetch origin || true
+            
+            # 强制重置到远程 main 分支
+            echo "强制同步到 origin/main..."
+            git reset --hard origin/main || {
+              echo "⚠️  git reset 失败，尝试 git pull..."
+              git pull origin main || {
+                echo "❌ Git pull 失败"
+                exit 1
+              }
+            }
+            
+            # 再次拉取确保最新
+            git pull origin main || {
+              echo "⚠️  Git pull 失败，但继续执行..."
+            }
+            
+            echo "✅ 代码同步完成"
+            echo "最新提交: $(git log -1 --oneline 2>/dev/null || echo 'N/A')"
+            echo ""
+            
+            # 检查前端目录
+            FRONTEND_DIR="$PROJECT_DIR/saas-demo"
+            if [ ! -d "$FRONTEND_DIR" ]; then
+              echo "❌ 前端目录不存在: $FRONTEND_DIR"
+              exit 1
+            fi
+            
+            # 进入前端目录
+            echo "📦 [2/5] 安装依赖..."
+            echo "----------------------------------------"
+            cd "$FRONTEND_DIR" || {
+              echo "❌ 无法进入前端目录"
+              exit 1
+            }
+            
+            # 安装依赖
+            npm install || {
+              echo "❌ npm install 失败"
+              exit 1
+            }
+            
+            echo "✅ 依赖安装完成"
+            echo ""
+            
+            # 构建前端
+            echo "🔨 [3/5] 构建前端..."
+            echo "----------------------------------------"
+            
+            # 设置 Node.js 内存限制
+            export NODE_OPTIONS="--max-old-space-size=3072"
+            
+            npm run build || {
+              echo "❌ npm run build 失败"
+              exit 1
+            }
+            
+            echo "✅ 前端构建完成"
+            echo ""
+            
+            # 检查构建输出
+            if [ ! -d ".next" ]; then
+              echo "⚠️  警告: .next 目录不存在，构建可能未成功"
+            else
+              echo "✅ 构建输出目录存在: .next"
+            fi
+            
+            # 重载 Nginx
+            echo "🔄 [4/5] 重载 Nginx..."
+            echo "----------------------------------------"
+            
+            sudo systemctl reload nginx || {
+              echo "⚠️  Nginx reload 失败，尝试 restart..."
+              sudo systemctl restart nginx || {
+                echo "❌ Nginx restart 失败"
+                exit 1
+              }
+            }
+            
+            echo "✅ Nginx 重载完成"
+            echo ""
+            
+            # 验证服务状态
+            echo "🔍 [5/5] 验证服务状态..."
+            echo "----------------------------------------"
+            
+            # 检查 Nginx 状态
+            if sudo systemctl is-active --quiet nginx; then
+              echo "✅ Nginx 服务运行中"
+            else
+              echo "⚠️  Nginx 服务未运行"
+            fi
+            
+            # 检查端口占用
+            if sudo lsof -i :80 >/dev/null 2>&1; then
+              echo "✅ 端口 80 已被占用（Nginx 可能正在运行）"
+            else
+              echo "⚠️  端口 80 未被占用"
+            fi
+            
+            echo ""
+            echo "=========================================="
+            echo "✅ 部署完成！"
+            echo "时间: $(date)"
+            echo "=========================================="

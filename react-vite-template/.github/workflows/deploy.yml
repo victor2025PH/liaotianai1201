@@ -1,0 +1,97 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          timeout: 300s
+          script: |
+            # 設置錯誤處理
+            set -e
+            
+            # 項目配置 - 請根據實際項目修改以下變量
+            PROJECT_NAME="aizkw"  # 修改為對應項目名稱：aizkw, tgmini, 或 hongbao
+            PROJECT_DIR="/home/ubuntu/${PROJECT_NAME}20251219"  # 修改為實際項目目錄
+            
+            echo "=========================================="
+            echo "開始部署項目: ${PROJECT_NAME}"
+            echo "項目目錄: ${PROJECT_DIR}"
+            echo "=========================================="
+            
+            # 檢查項目目錄是否存在
+            if [ ! -d "${PROJECT_DIR}" ]; then
+              echo "❌ 錯誤: 項目目錄不存在: ${PROJECT_DIR}"
+              echo "請檢查目錄路徑是否正確"
+              exit 1
+            fi
+            
+            # 進入項目目錄
+            cd "${PROJECT_DIR}"
+            echo "✅ 已進入項目目錄: $(pwd)"
+            
+            # 拉取最新代碼
+            echo "📥 拉取最新代碼..."
+            git pull origin main || {
+              echo "⚠️ 警告: git pull 失敗，繼續執行..."
+            }
+            
+            # 安裝依賴
+            echo "📦 安裝依賴..."
+            npm install --production=false || {
+              echo "❌ 錯誤: npm install 失敗"
+              exit 1
+            }
+            
+            # 構建項目
+            echo "🔨 構建項目..."
+            npm run build || {
+              echo "❌ 錯誤: 構建失敗"
+              exit 1
+            }
+            
+            # 檢查構建結果
+            if [ ! -d "dist" ]; then
+              echo "❌ 錯誤: dist 目錄不存在，構建可能失敗"
+              exit 1
+            fi
+            
+            echo "✅ 構建成功，dist 目錄已生成"
+            
+            # 重載 Nginx（如果需要）
+            echo "🔄 重載 Nginx 配置..."
+            sudo systemctl reload nginx || {
+              echo "⚠️ 警告: Nginx 重載失敗，但不影響部署"
+            }
+            
+            # 如果使用 PM2，重啟應用
+            if command -v pm2 &> /dev/null; then
+              echo "🔄 重啟 PM2 應用..."
+              pm2 restart ${PROJECT_NAME} || pm2 restart frontend || {
+                echo "⚠️ 警告: PM2 重啟失敗，應用可能未使用 PM2 管理"
+              }
+            fi
+            
+            echo "=========================================="
+            echo "✅ 部署完成！"
+            echo "項目: ${PROJECT_NAME}"
+            echo "目錄: ${PROJECT_DIR}"
+            echo "時間: $(date)"
+            echo "=========================================="

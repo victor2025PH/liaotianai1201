@@ -37,8 +37,9 @@ module.exports = {
     {
       name: "next-server",
       cwd: "/home/ubuntu/telegram-ai-system/saas-demo",
-      script: "npm",
-      args: "start",
+      // Next.js standalone 模式必须使用 node .next/standalone/server.js
+      script: "/usr/bin/node",
+      args: ".next/standalone/server.js",
       env: {
         PORT: 3000,
         NODE_ENV: "production",

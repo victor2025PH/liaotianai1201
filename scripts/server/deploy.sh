@@ -36,7 +36,7 @@ kill_port_process() {
 }
 
 # ====================================================
-# 1. 环境准备与 Swap 配置 (关键修复)
+# 1. 环境准备与 Swap 配置 (救命稻草 - 强制 4GB)
 # ====================================================
 echo "🚀 开始部署..."
 echo "时间: $(date)"
@@ -44,20 +44,53 @@ echo "时间: $(date)"
 # 遇到错误继续执行 (清理阶段)
 set +e
 
-# 检查并创建 Swap (如果不存在)
-if [ ! -f /swapfile ]; then
-    echo "🔧 检测到 Swap 文件不存在，正在创建 (2GB)..."
-    sudo fallocate -l 2G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
+# 🔧 第一步：强制配置至少 4GB Swap（针对 4GB 物理内存服务器）
+echo "🔧 [内存优化] 检查并配置 Swap..."
+SWAP_SIZE_MB=$(free -m | grep Swap | awk '{print $2}' || echo "0")
+
+if [ "$SWAP_SIZE_MB" -lt 4000 ]; then
+    echo "⚠️  检测到 Swap 不足 4GB (当前: ${SWAP_SIZE_MB}MB)，正在创建 4GB Swap 文件..."
+    
+    # 关闭现有 Swap
+    sudo swapoff -a 2>/dev/null || true
+    sudo swapoff /swapfile 2>/dev/null || true
+    
+    # 删除旧的 Swap 文件（如果太小）
+    if [ -f /swapfile ]; then
+        OLD_SIZE=$(stat -f%z /swapfile 2>/dev/null || stat -c%s /swapfile 2>/dev/null || echo "0")
+        OLD_SIZE_MB=$((OLD_SIZE / 1024 / 1024))
+        if [ "$OLD_SIZE_MB" -lt 4000 ]; then
+            echo "   删除旧的 Swap 文件 (${OLD_SIZE_MB}MB)..."
+            sudo rm -f /swapfile
+        fi
+    fi
+    
+    # 创建 4GB Swap 文件
+    echo "   正在创建 4GB Swap 文件（这可能需要几分钟）..."
+    sudo fallocate -l 4G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 2>/dev/null
+    
+    # 设置权限和格式
     sudo chmod 600 /swapfile
     sudo mkswap /swapfile
+    
+    # 启用 Swap
     sudo swapon /swapfile
-    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-    echo "✅ Swap 创建并启用成功"
+    
+    # 添加到 fstab（如果还没有）
+    if ! grep -q "/swapfile" /etc/fstab 2>/dev/null; then
+        echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+    fi
+    
+    echo "✅ 4GB Swap 创建并启用成功"
 else
-    echo "✅ Swap 文件已存在，尝试启用..."
+    echo "✅ Swap 已足够 (${SWAP_SIZE_MB}MB)，尝试启用..."
     sudo swapon /swapfile 2>/dev/null || true
+    sudo swapon -a 2>/dev/null || true
 fi
+
+echo "📊 当前内存和 Swap 使用情况："
 free -h
+echo ""
 
 # ====================================================
 # 2. 代码更新
@@ -86,28 +119,52 @@ sudo -u ubuntu git reset --hard origin/main
 # ====================================================
 echo "📦 构建前端..."
 
-# 🛑 关键步骤：停止所有服务以释放内存
-echo "🛑 停止服务以释放内存..."
+# 🛑 第二步：构建前"清场" - 强制停止所有应用进程
+echo "🛑 [内存优化] 停止所有服务以释放内存..."
 set +e
+
+# 停止 PM2 所有进程
+echo "   停止 PM2 进程..."
 sudo -u ubuntu pm2 stop all 2>/dev/null || true
+sudo -u ubuntu pm2 kill 2>/dev/null || true
+
+# 停止 Redis（腾出几十 MB）
+echo "   停止 Redis 服务..."
+sudo systemctl stop redis-server 2>/dev/null || true
+
 # 等待进程完全停止
-sleep 3
+echo "   等待进程完全停止..."
+sleep 5
+
 # 清理可能残留的进程
+echo "   清理残留进程..."
 kill_port_process 3000
 kill_port_process 8000
+
+# 强制杀死可能残留的 Node 和 Python 进程（保护系统进程）
+echo "   清理残留的 Node 和 Python 进程..."
+sudo pkill -9 node 2>/dev/null || true
+sudo pkill -9 python3 2>/dev/null || true
+sudo pkill -9 uvicorn 2>/dev/null || true
+
+# 再次等待
+sleep 3
+
 set -e
 
 # 显示当前内存使用情况
-echo "📊 当前内存使用情况："
+echo "📊 清场后内存使用情况："
 free -h
 echo ""
 
 cd saas-demo
 rm -f .next/lock
 
-# 限制 Node.js 内存使用（防止 OOM）
-export NODE_OPTIONS="--max-old-space-size=2048"
-echo "🔧 设置 Node.js 内存限制: 2048MB"
+# 🔧 第三步：限制 Node.js 堆内存（针对 4GB 物理内存）
+# 限制为 2.5GB，剩下的留给系统和 Swap
+export NODE_OPTIONS="--max-old-space-size=2560"
+echo "🔧 [内存优化] 设置 Node.js 内存限制: 2560MB (2.5GB)"
+echo "   物理内存: 4GB, Node.js: 2.5GB, 系统保留: ~1.5GB"
 
 # 安装依赖
 echo "📥 安装依赖..."
@@ -178,11 +235,21 @@ fi
 
 cd ..
 
-# 🚀 构建完成，准备重启服务
+# 🚀 第四步：构建完成，准备重启所有服务
 echo "✅ 前端构建完成"
 echo "📊 构建后内存使用情况："
 free -h
 echo ""
+
+echo "🚀 [内存优化] 构建完成，重启所有服务..."
+set +e
+
+# 启动 Redis
+echo "   启动 Redis 服务..."
+sudo systemctl start redis-server 2>/dev/null || true
+sleep 2
+
+set -e
 
 # ====================================================
 # 4. 后端环境准备
@@ -192,7 +259,8 @@ echo "🐍 准备后端..."
 set +e
 sudo DEBIAN_FRONTEND=noninteractive apt-get update -q
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv python3-pip redis-server psmisc net-tools
-sudo systemctl start redis-server
+# Redis 已经在前面启动了，这里只确保它运行
+sudo systemctl start redis-server 2>/dev/null || true
 set -e
 
 cd admin-backend
@@ -250,15 +318,22 @@ sudo chown -R ubuntu:ubuntu "$PROJECT_DIR"
 
 # 检查是否有 ecosystem.config.js，如果有则使用 PM2，否则使用 systemd
 if [ -f "$PROJECT_DIR/ecosystem.config.js" ]; then
-    # 使用 PM2 启动
-    sudo -u ubuntu bash -c "cd $PROJECT_DIR && pm2 start ecosystem.config.js"
+    # 使用 PM2 启动（Redis 已在前面启动）
+    echo "   启动 PM2 服务..."
+    sudo -u ubuntu bash -c "cd $PROJECT_DIR && pm2 start ecosystem.config.js" || sudo -u ubuntu bash -c "cd $PROJECT_DIR && pm2 restart all"
     sudo -u ubuntu bash -c "cd $PROJECT_DIR && pm2 save"
     
     echo "⏳ 等待服务初始化..."
     sleep 10
     
     # 检查状态
+    echo "📊 PM2 服务状态："
     sudo -u ubuntu pm2 list
+    
+    # 显示最终内存使用情况
+    echo ""
+    echo "📊 最终内存使用情况："
+    free -h
 else
     # 使用 systemd 启动
     echo "⚠️  未找到 ecosystem.config.js，使用 systemd 服务..."

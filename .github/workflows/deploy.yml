@@ -32,18 +32,37 @@ jobs:
             find . -name "deploy.sh" -type f 2>/dev/null || echo "No deploy.sh found in repository"
           fi
 
-      - name: Upload deploy script to server
-        uses: appleboy/scp-action@v0.1.7
+      - name: Test SSH connection
+        uses: appleboy/ssh-action@v1.2.0
+        continue-on-error: true
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          timeout: 300s
+          timeout: 60s
+          script: |
+            echo "✅ SSH 連接測試成功"
+            echo "服務器信息:"
+            uname -a
+            echo "當前目錄:"
+            pwd
+
+      - name: Upload deploy script to server
+        uses: appleboy/scp-action@v0.1.7
+        continue-on-error: false
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          timeout: 120s
           source: "scripts/server/deploy.sh"
           target: "/tmp"
+          strip_components: 0
+          debug: true
 
-      - name: Execute deploy script
+      - name: Execute deploy script (with fallback)
         uses: appleboy/ssh-action@v1.2.0
         continue-on-error: false
         timeout-minutes: 50
@@ -55,7 +74,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          timeout: 300s
+          timeout: 120s
           command_timeout: 40m
           script_stop: true
           debug: true
@@ -80,10 +99,28 @@ jobs:
               ls -lh /tmp/deploy.sh
               chmod +x /tmp/deploy.sh
             else
-              echo "❌ deploy.sh NOT found in /tmp"
-              echo "Full /tmp directory listing:"
-              ls -la /tmp/
-              exit 1
+              echo "⚠️ deploy.sh NOT found in /tmp, trying to download from GitHub..."
+              # 備用方案：直接從 GitHub 下載腳本
+              if command -v curl >/dev/null 2>&1; then
+                curl -o /tmp/deploy.sh -L "https://raw.githubusercontent.com/$GITHUB_REPO/main/scripts/server/deploy.sh" || {
+                  echo "❌ Failed to download deploy.sh from GitHub"
+                  echo "Full /tmp directory listing:"
+                  ls -la /tmp/
+                  exit 1
+                }
+              elif command -v wget >/dev/null 2>&1; then
+                wget -O /tmp/deploy.sh "https://raw.githubusercontent.com/$GITHUB_REPO/main/scripts/server/deploy.sh" || {
+                  echo "❌ Failed to download deploy.sh from GitHub"
+                  echo "Full /tmp directory listing:"
+                  ls -la /tmp/
+                  exit 1
+                }
+              else
+                echo "❌ Neither curl nor wget available, cannot download deploy.sh"
+                exit 1
+              fi
+              chmod +x /tmp/deploy.sh
+              echo "✅ Downloaded and prepared deploy.sh"
             fi
             echo ""
             echo "=== Running deploy script ==="

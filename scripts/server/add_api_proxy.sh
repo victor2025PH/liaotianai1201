@@ -79,7 +79,7 @@ try:
         # 如果存在，替换整个 location /api/ 块
         api_block_pattern = r'location\s+/api/\s*\{[^}]*\}'
         new_api_block = '''location /api/ {
-        proxy_pass http://127.0.0.1:8000/;
+        proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";

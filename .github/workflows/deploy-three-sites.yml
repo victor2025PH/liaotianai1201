@@ -201,22 +201,39 @@ jobs:
               sudo npm install -g serve
             fi
             
-            # 使用 PM2 启动 serve（使用更稳健的方式）
-            echo "使用 PM2 启动 serve..."
+            # 进入站点目录
             cd "$SITE_DIR" || {
               echo "❌ 无法进入站点目录: $SITE_DIR"
               exit 1
             }
             
-            # 使用 npx 方式启动，确保参数正确传递
-            pm2 start npx \
+            # 生成启动脚本（使用全局 serve，不经过 npx）
+            echo "生成启动脚本..."
+            START_SCRIPT="$SITE_DIR/start-frontend.sh"
+            cat > "$START_SCRIPT" << 'SCRIPT_EOF'
+#!/bin/bash
+# 前端服务启动脚本
+# 使用全局 serve 命令启动静态文件服务
+
+# 获取参数
+DIST_DIR="$1"
+PORT="$2"
+
+# 启动 serve
+exec serve -s "$DIST_DIR" -l "$PORT" --no-clipboard --no-open
+SCRIPT_EOF
+            
+            chmod +x "$START_SCRIPT"
+            echo "✅ 启动脚本已生成: $START_SCRIPT"
+            echo "启动脚本内容:"
+            cat "$START_SCRIPT"
+            echo ""
+            
+            # 使用 PM2 启动脚本
+            echo "使用 PM2 启动前端服务..."
+            pm2 start "$START_SCRIPT" \
               --name "$PM2_NAME" \
-              --interpreter none \
-              -- serve \
-              -s "$SITE_DIR/dist" \
-              -l $PORT \
-              --no-clipboard \
-              --no-open \
+              -- "$SITE_DIR/dist" "$PORT" \
               --error "$PROJECT_DIR/logs/${SITE_NAME}-error.log" \
               --output "$PROJECT_DIR/logs/${SITE_NAME}-out.log" \
               --merge-logs \
@@ -232,9 +249,9 @@ jobs:
             echo "✅ 服务已启动"
             echo ""
             
-            # 等待启动
+            # 等待启动（延长等待时间，给 Node.js 应用更多启动时间）
             echo "等待服务启动..."
-            sleep 5
+            sleep 15
             
             # 检查服务状态
             if sudo lsof -i :$PORT >/dev/null 2>&1; then
@@ -246,8 +263,30 @@ jobs:
                 echo "⚠️  服务响应异常 (HTTP $HTTP_CODE)"
               fi
             else
-              echo "❌ 端口 $PORT 未在监听"
-              pm2 logs "$PM2_NAME" --lines 20 --nostream 2>/dev/null || true
+              echo "❌ 端口 $PORT 未在监听，应用可能未成功启动"
+              echo "=========================================="
+              echo "🔍 详细错误诊断..."
+              echo "=========================================="
+              echo "PM2 进程状态:"
+              pm2 list || true
+              echo ""
+              echo "PM2 进程详情:"
+              pm2 describe "$PM2_NAME" || true
+              echo ""
+              echo "PM2 最新日志 (最后 50 行):"
+              pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
+              echo ""
+              echo "检查进程是否在运行:"
+              ps aux | grep -E "serve|$PM2_NAME" | grep -v grep || true
+              echo ""
+              echo "检查端口占用:"
+              sudo lsof -i :$PORT || echo "端口未被占用"
+              echo ""
+              echo "查看错误日志文件:"
+              tail -50 "$PROJECT_DIR/logs/${SITE_NAME}-error.log" 2>/dev/null || echo "错误日志文件不存在"
+              echo ""
+              echo "查看输出日志文件:"
+              tail -50 "$PROJECT_DIR/logs/${SITE_NAME}-out.log" 2>/dev/null || echo "输出日志文件不存在"
               exit 1
             fi
             echo ""

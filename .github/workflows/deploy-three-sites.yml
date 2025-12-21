@@ -176,6 +176,18 @@ jobs:
             # 确保日志目录存在
             mkdir -p "$PROJECT_DIR/logs"
             
+            # 确认当前目录和 dist 文件夹
+            echo "当前工作目录: $(pwd)"
+            echo "检查 dist 目录..."
+            if [ ! -d "$SITE_DIR/dist" ]; then
+              echo "❌ dist 目录不存在: $SITE_DIR/dist"
+              echo "当前目录内容:"
+              ls -la "$SITE_DIR" | head -20
+              exit 1
+            fi
+            echo "✅ dist 目录存在: $SITE_DIR/dist"
+            echo "dist 目录大小: $(du -sh $SITE_DIR/dist | cut -f1)"
+            
             # 检查并安装 PM2
             if ! command -v pm2 >/dev/null 2>&1; then
               echo "安装 PM2..."
@@ -189,21 +201,30 @@ jobs:
               sudo npm install -g serve
             fi
             
-            # 使用 PM2 启动 serve
-            pm2 start serve \
+            # 使用 PM2 启动 serve（使用更稳健的方式）
+            echo "使用 PM2 启动 serve..."
+            cd "$SITE_DIR" || {
+              echo "❌ 无法进入站点目录: $SITE_DIR"
+              exit 1
+            }
+            
+            # 使用 npx 方式启动，确保参数正确传递
+            pm2 start npx \
               --name "$PM2_NAME" \
-              -- "$SITE_DIR/dist" \
-              --listen $PORT \
-              --single \
+              --interpreter none \
+              -- serve \
+              -s "$SITE_DIR/dist" \
+              -l $PORT \
               --no-clipboard \
               --no-open \
-              --env NODE_ENV=production \
               --error "$PROJECT_DIR/logs/${SITE_NAME}-error.log" \
               --output "$PROJECT_DIR/logs/${SITE_NAME}-out.log" \
               --merge-logs \
               --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
               echo "⚠️  PM2 启动失败，查看错误..."
-              pm2 logs "$PM2_NAME" --lines 10 --nostream 2>/dev/null || true
+              pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
+              echo "查看 PM2 进程状态:"
+              pm2 list || true
               exit 1
             }
             
@@ -244,11 +265,11 @@ jobs:
             
             if [ -f "$SSL_CERT" ] && [ -f "$SSL_KEY" ]; then
               # SSL 证书存在，配置 HTTPS
-              cat > "$NGINX_CONFIG" << 'NGINX_EOF'
+              cat > "$NGINX_CONFIG" << NGINX_EOF
 # HTTP to HTTPS redirect
 server {
     listen 80;
-    server_name $DOMAIN;
+    server_name ${DOMAIN};
     
     # Let's Encrypt 验证路径
     location /.well-known/acme-challenge/ {
@@ -257,18 +278,18 @@ server {
     
     # 重定向所有 HTTP 请求到 HTTPS
     location / {
-        return 301 https://$server_name$request_uri;
+        return 301 https://\$server_name\$request_uri;
     }
 }
 
 # HTTPS server
 server {
     listen 443 ssl http2;
-    server_name $DOMAIN;
+    server_name ${DOMAIN};
 
     # SSL 证书配置（由 Certbot 自动管理）
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
     
     # SSL 安全配置
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -287,7 +308,7 @@ server {
 
     # 前端应用
     location / {
-        proxy_pass http://127.0.0.1:$PORT;
+        proxy_pass http://127.0.0.1:${PORT};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -303,33 +324,29 @@ NGINX_EOF
             else
               # SSL 证书不存在，只配置 HTTP
               echo "⚠️  SSL 证书不存在，配置 HTTP only"
-              cat > "$NGINX_CONFIG" << 'NGINX_EOF'
+              cat > "$NGINX_CONFIG" << NGINX_EOF
 # HTTP server (SSL certificate not found)
 server {
     listen 80;
-    server_name $DOMAIN;
+    server_name ${DOMAIN};
 
     client_max_body_size 50M;
 
     location / {
-        proxy_pass http://127.0.0.1:$PORT;
+        proxy_pass http://127.0.0.1:${PORT};
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
         proxy_read_timeout 86400;
     }
 }
 NGINX_EOF
             fi
-            
-            # 替换变量（使用 envsubst 或 sed）
-            sed -i "s|\\$DOMAIN|$DOMAIN|g" "$NGINX_CONFIG"
-            sed -i "s|\\$PORT|$PORT|g" "$NGINX_CONFIG"
             
             # 复制配置到 Nginx
             sudo cp "$NGINX_CONFIG" "/etc/nginx/sites-available/$DOMAIN"

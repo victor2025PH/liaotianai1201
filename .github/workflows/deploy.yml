@@ -378,15 +378,32 @@ jobs:
               # 确保日志目录存在
               mkdir -p "$PROJECT_DIR/logs"
               
-              # 使用 PM2 启动 serve
-              echo "使用 PM2 启动 serve..."
-              cd "$PROJECT_DIR"
+              # 确认当前目录和 dist 文件夹
+              echo "当前工作目录: $(pwd)"
+              echo "检查 dist 目录..."
+              if [ ! -d "$PROJECT_DIR/dist" ]; then
+                echo "❌ dist 目录不存在: $PROJECT_DIR/dist"
+                echo "当前目录内容:"
+                ls -la "$PROJECT_DIR" | head -20
+                exit 1
+              fi
+              echo "✅ dist 目录存在: $PROJECT_DIR/dist"
+              echo "dist 目录大小: $(du -sh $PROJECT_DIR/dist | cut -f1)"
               
-              pm2 start serve \
+              # 使用 PM2 启动 serve（使用更稳健的方式）
+              echo "使用 PM2 启动 serve..."
+              cd "$PROJECT_DIR" || {
+                echo "❌ 无法进入项目目录: $PROJECT_DIR"
+                exit 1
+              }
+              
+              # 使用 npx 方式启动，确保参数正确传递
+              pm2 start npx \
                 --name frontend \
-                -- "$PROJECT_DIR/dist" \
-                --listen $FRONTEND_PORT \
-                --single \
+                --interpreter none \
+                -- serve \
+                -s "$PROJECT_DIR/dist" \
+                -l $FRONTEND_PORT \
                 --no-clipboard \
                 --no-open \
                 --error "$PROJECT_DIR/logs/frontend-error.log" \
@@ -394,7 +411,9 @@ jobs:
                 --merge-logs \
                 --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
                 echo "⚠️  PM2 启动失败，查看错误..."
-                pm2 logs frontend --lines 10 --nostream 2>/dev/null || true
+                pm2 logs frontend --lines 50 --nostream 2>/dev/null || true
+                echo "查看 PM2 进程状态:"
+                pm2 list || true
                 exit 1
               }
               
@@ -409,6 +428,12 @@ jobs:
               # 检查端口是否在监听
               echo "检查端口 $FRONTEND_PORT..."
               sleep 2
+              # 验证端口号是有效数字
+              if ! [[ "$FRONTEND_PORT" =~ ^[0-9]+$ ]] || [ "$FRONTEND_PORT" -lt 1 ] || [ "$FRONTEND_PORT" -gt 65535 ]; then
+                echo "❌ 无效的端口号: $FRONTEND_PORT"
+                echo "使用默认端口 3000"
+                FRONTEND_PORT=3000
+              fi
               if sudo lsof -i :$FRONTEND_PORT >/dev/null 2>&1; then
                 echo "✅ 端口 $FRONTEND_PORT 正在监听"
                 # 测试连接
@@ -421,8 +446,29 @@ jobs:
                 fi
               else
                 echo "❌ 端口 $FRONTEND_PORT 未在监听，应用可能未成功启动"
-                echo "查看最新日志:"
-                pm2 logs frontend --lines 20 --nostream 2>/dev/null || true
+                echo "=========================================="
+                echo "🔍 详细错误诊断..."
+                echo "=========================================="
+                echo "PM2 进程状态:"
+                pm2 list || true
+                echo ""
+                echo "PM2 进程详情:"
+                pm2 describe frontend || true
+                echo ""
+                echo "PM2 最新日志 (最后 50 行):"
+                pm2 logs frontend --lines 50 --nostream 2>/dev/null || true
+                echo ""
+                echo "检查进程是否在运行:"
+                ps aux | grep -E "serve|frontend" | grep -v grep || true
+                echo ""
+                echo "检查端口占用:"
+                sudo lsof -i :$FRONTEND_PORT || echo "端口未被占用"
+                echo ""
+                echo "查看错误日志文件:"
+                tail -50 "$PROJECT_DIR/logs/frontend-error.log" 2>/dev/null || echo "错误日志文件不存在"
+                echo ""
+                echo "查看输出日志文件:"
+                tail -50 "$PROJECT_DIR/logs/frontend-out.log" 2>/dev/null || echo "输出日志文件不存在"
                 exit 1
               fi
               

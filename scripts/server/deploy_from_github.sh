@@ -175,10 +175,20 @@ echo ""
 # 6. 启动端口 3003 - aizkw
 echo "6. 启动端口 3003 - aizkw..."
 echo "----------------------------------------"
-AIZKW_DIR=$(find "$PROJECT_ROOT" -maxdepth 5 -type f -name "package.json" 2>/dev/null | \
-  grep -iE "(aizkw|liaotian)" | \
-  grep -v "/logs/" | \
-  head -1 | xargs dirname 2>/dev/null || echo "")
+# 优先查找主仓库中的标准路径
+AIZKW_DIR=""
+if [ -d "$PROJECT_ROOT/aizkw20251219" ] && [ -f "$PROJECT_ROOT/aizkw20251219/package.json" ]; then
+  AIZKW_DIR="$PROJECT_ROOT/aizkw20251219"
+elif [ -d "$PROJECT_ROOT/migrations/aizkw20251219" ] && [ -f "$PROJECT_ROOT/migrations/aizkw20251219/package.json" ]; then
+  AIZKW_DIR="$PROJECT_ROOT/migrations/aizkw20251219"
+else
+  # 如果上述路径都不存在，使用 find 查找，排除 logs 和 .git 目录
+  AIZKW_DIR=$(find "$PROJECT_ROOT" -maxdepth 5 -type f -name "package.json" 2>/dev/null | \
+    grep -iE "(aizkw|liaotian)" | \
+    grep -v "/logs/" | \
+    grep -v "/\.git/" | \
+    head -1 | xargs dirname 2>/dev/null || echo "")
+fi
 
 if [ -n "$AIZKW_DIR" ] && [ -f "$AIZKW_DIR/package.json" ]; then
   echo "找到 aizkw 目录: $AIZKW_DIR"

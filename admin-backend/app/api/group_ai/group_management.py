@@ -157,7 +157,7 @@ async def create_group_join_config(
 
 
 @router.get("/join-configs", response_model=List[GroupJoinConfigResponse])
-@cached(ttl=120, key_prefix="group_join_configs")  # 群組加入配置變化不頻繁，使用較長的緩存時間
+@cached(prefix="group_join_configs", ttl=120)  # 群組加入配置變化不頻繁，使用較長的緩存時間
 @monitor_query_performance(threshold=1.0)
 async def list_group_join_configs(
     enabled: Optional[bool] = Query(None, description="篩選啟用狀態"),

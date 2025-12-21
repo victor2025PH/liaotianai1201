@@ -191,7 +191,7 @@ async def create_scheduled_message(
 
 
 @router.get("", response_model=List[ScheduledMessageResponse])
-@cached(ttl=30, key_prefix="scheduled_messages")  # 定時消息任務狀態可能變化，使用較短的緩存時間
+@cached(prefix="scheduled_messages", ttl=30)  # 定時消息任務狀態可能變化，使用較短的緩存時間
 @monitor_query_performance(threshold=1.0)
 async def list_scheduled_messages(
     enabled: Optional[bool] = Query(None, description="篩選啟用狀態"),

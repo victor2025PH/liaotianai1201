@@ -161,7 +161,7 @@ async def create_keyword_trigger(
 
 
 @router.get("", response_model=List[KeywordTriggerResponse])
-@cached(ttl=60, key_prefix="keyword_triggers")
+@cached(prefix="keyword_triggers", ttl=60)
 async def list_keyword_triggers(
     enabled: Optional[bool] = Query(None, description="篩選啟用狀態"),
     skip: int = Query(0, ge=0),

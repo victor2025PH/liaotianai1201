@@ -45,9 +45,11 @@ echo "----------------------------------------"
 
 # 统计替换前的数量
 BEFORE_COUNT=$(grep -c "127.0.0.1:3003" "$AIKZ_CONFIG" 2>/dev/null || echo "0")
+# 确保 BEFORE_COUNT 是数字
+BEFORE_COUNT=${BEFORE_COUNT:-0}
 echo "找到 $BEFORE_COUNT 个需要替换的配置"
 
-if [ "$BEFORE_COUNT" -eq 0 ]; then
+if [ "$BEFORE_COUNT" -eq 0 ] 2>/dev/null; then
   echo "⚠️  未找到需要替换的配置（可能已经是 3000）"
   # 检查是否已经是 3000
   if grep -q "127.0.0.1:3000" "$AIKZ_CONFIG"; then
@@ -66,9 +68,13 @@ sudo sed -i 's|127.0.0.1:3003|127.0.0.1:3000|g' "$AIKZ_CONFIG"
 AFTER_COUNT=$(grep -c "127.0.0.1:3000" "$AIKZ_CONFIG" 2>/dev/null || echo "0")
 REMAINING_COUNT=$(grep -c "127.0.0.1:3003" "$AIKZ_CONFIG" 2>/dev/null || echo "0")
 
-if [ "$REMAINING_COUNT" -eq 0 ] && [ "$AFTER_COUNT" -gt 0 ]; then
+# 确保都是数字
+AFTER_COUNT=${AFTER_COUNT:-0}
+REMAINING_COUNT=${REMAINING_COUNT:-0}
+
+if [ "$REMAINING_COUNT" -eq 0 ] 2>/dev/null && [ "$AFTER_COUNT" -gt 0 ] 2>/dev/null; then
   echo "✅ 配置已修改：$BEFORE_COUNT 个配置已从 3003 改为 3000"
-elif [ "$REMAINING_COUNT" -gt 0 ]; then
+elif [ "$REMAINING_COUNT" -gt 0 ] 2>/dev/null; then
   echo "⚠️  仍有 $REMAINING_COUNT 个配置未替换，尝试再次替换..."
   sudo sed -i 's|3003|3000|g' "$AIKZ_CONFIG"
   echo "✅ 再次替换完成"

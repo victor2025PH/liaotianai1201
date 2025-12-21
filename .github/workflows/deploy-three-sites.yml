@@ -325,29 +325,80 @@ jobs:
             fi
             
             # 检查 Nginx 服务状态
-            if ! sudo systemctl is-active --quiet nginx; then
-              echo "⚠️  Nginx 服务未运行，启动 Nginx..."
-              sudo systemctl enable nginx
-              sudo systemctl start nginx || {
-                echo "❌ Nginx 启动失败"
-                exit 1
-              }
+            NGINX_STATUS=$(sudo systemctl is-active nginx 2>/dev/null || echo "inactive")
+            NGINX_IS_FAILED=$(sudo systemctl is-failed nginx 2>/dev/null || echo "unknown")
+            echo "Nginx 服务状态: $NGINX_STATUS"
+            if [ "$NGINX_IS_FAILED" = "failed" ]; then
+              echo "⚠️  Nginx 服务处于失败状态，重置失败状态..."
+              sudo systemctl reset-failed nginx || true
+            fi
+            
+            if [ "$NGINX_STATUS" != "active" ]; then
+              echo "⚠️  Nginx 服务未运行（状态: $NGINX_STATUS），尝试启动..."
+              
+              # 先测试 Nginx 配置
+              echo "测试 Nginx 配置..."
+              if sudo nginx -t 2>&1; then
+                echo "✅ Nginx 配置测试通过"
+              else
+                echo "⚠️  Nginx 配置测试失败，但继续尝试启动..."
+                sudo nginx -t 2>&1 || true
+              fi
+              
+              sudo systemctl enable nginx || true
+              if sudo systemctl start nginx 2>&1; then
+                echo "✅ Nginx 服务已启动"
+                sleep 2
+                if sudo systemctl is-active --quiet nginx; then
+                  echo "✅ Nginx 服务确认运行中"
+                else
+                  echo "⚠️  Nginx 启动后状态异常"
+                  sudo systemctl status nginx --no-pager -l || true
+                fi
+              else
+                echo "❌ Nginx 启动失败，查看详细状态..."
+                sudo systemctl status nginx --no-pager -l || true
+                echo "查看 Nginx 错误日志:"
+                sudo tail -30 /var/log/nginx/error.log 2>/dev/null || echo "错误日志不存在"
+                echo "尝试重置失败状态并重新启动..."
+                sudo systemctl reset-failed nginx || true
+                if sudo systemctl start nginx 2>&1; then
+                  echo "✅ Nginx 服务已启动（重置后）"
+                else
+                  echo "❌ Nginx 启动仍然失败"
+                  sudo journalctl -u nginx --no-pager -n 20 || true
+                  exit 1
+                fi
+              fi
+            else
+              echo "✅ Nginx 服务正在运行"
             fi
             
             # 测试 Nginx 配置
-            sudo nginx -t || {
+            echo "测试 Nginx 配置..."
+            if sudo nginx -t 2>&1; then
+              echo "✅ Nginx 配置测试通过"
+            else
               echo "❌ Nginx 配置测试失败"
+              sudo nginx -t 2>&1 || true
               exit 1
-            }
+            fi
             
             # 重载 Nginx
-            sudo systemctl reload nginx || {
+            echo "重载 Nginx..."
+            if sudo systemctl reload nginx 2>&1; then
+              echo "✅ Nginx reload 成功"
+            else
               echo "⚠️  Nginx reload 失败，尝试 restart..."
-              sudo systemctl restart nginx || {
+              if sudo systemctl restart nginx 2>&1; then
+                echo "✅ Nginx restart 成功"
+              else
                 echo "❌ Nginx restart 失败"
+                sudo systemctl status nginx --no-pager -l || true
+                sudo tail -20 /var/log/nginx/error.log 2>/dev/null || true
                 exit 1
-              }
-            }
+              fi
+            fi
             
             echo "✅ Nginx 配置完成"
             echo ""

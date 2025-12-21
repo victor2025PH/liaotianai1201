@@ -296,6 +296,23 @@ EOF
               sudo ln -s "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
             fi
             
+            # 检查 Nginx 是否安装
+            if ! command -v nginx >/dev/null 2>&1; then
+              echo "⚠️  Nginx 未安装，安装 Nginx..."
+              sudo apt-get update
+              sudo apt-get install -y nginx
+            fi
+            
+            # 检查 Nginx 服务状态
+            if ! sudo systemctl is-active --quiet nginx; then
+              echo "⚠️  Nginx 服务未运行，启动 Nginx..."
+              sudo systemctl enable nginx
+              sudo systemctl start nginx || {
+                echo "❌ Nginx 启动失败"
+                exit 1
+              }
+            fi
+            
             # 测试 Nginx 配置
             sudo nginx -t || {
               echo "❌ Nginx 配置测试失败"

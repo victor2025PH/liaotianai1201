@@ -328,11 +328,58 @@ jobs:
             echo "🔄 重载/重启 Nginx..."
             echo "----------------------------------------"
             
+            # 0. 清理无效的旧配置（证书不存在的 HTTPS 配置）
+            echo "0. 清理无效的旧配置..."
+            for config_file in /etc/nginx/sites-enabled/*; do
+              if [ -f "$config_file" ]; then
+                # 检查配置文件中是否引用了证书，但证书文件不存在
+                if grep -q "ssl_certificate" "$config_file" 2>/dev/null; then
+                  # 提取证书路径（更可靠的方法）
+                  CERT_PATH=$(grep "ssl_certificate" "$config_file" | grep -v "^[[:space:]]*#" | head -1 | sed 's/.*ssl_certificate[[:space:]]*\([^;]*\);.*/\1/' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+                  if [ -n "$CERT_PATH" ] && [ ! -f "$CERT_PATH" ]; then
+                    echo "⚠️  发现无效配置（证书不存在: $CERT_PATH）: $config_file，临时禁用..."
+                    sudo rm -f "$config_file" || true
+                  fi
+                fi
+              fi
+            done
+            
             # 1. 先做体检（确保配置文件没写错）
             echo "1. 测试 Nginx 配置文件..."
-            if ! sudo nginx -t; then
-              echo "❌ Nginx 配置文件有误！禁止重启，以免搞挂现有服务。"
-              exit 1
+            if ! sudo nginx -t 2>&1; then
+              echo "❌ Nginx 配置文件有误！"
+              echo "查看详细错误："
+              sudo nginx -t 2>&1 || true
+              echo ""
+              echo "尝试修复：删除所有可能无效的配置..."
+              # 列出所有启用的配置
+              echo "当前启用的配置："
+              ls -la /etc/nginx/sites-enabled/ || true
+              echo ""
+              echo "检查每个配置的证书..."
+              for config_file in /etc/nginx/sites-enabled/*; do
+                if [ -f "$config_file" ]; then
+                  echo "检查: $config_file"
+                  if grep -q "ssl_certificate" "$config_file" 2>/dev/null; then
+                    # 提取证书路径（更可靠的方法）
+                    CERT_PATH=$(grep "ssl_certificate" "$config_file" | grep -v "^[[:space:]]*#" | head -1 | sed 's/.*ssl_certificate[[:space:]]*\([^;]*\);.*/\1/' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+                    if [ -n "$CERT_PATH" ]; then
+                      if [ ! -f "$CERT_PATH" ]; then
+                        echo "  ❌ 证书不存在: $CERT_PATH，删除配置..."
+                        sudo rm -f "$config_file" || true
+                      else
+                        echo "  ✅ 证书存在: $CERT_PATH"
+                      fi
+                    fi
+                  fi
+                fi
+              done
+              echo ""
+              echo "再次测试配置..."
+              if ! sudo nginx -t 2>&1; then
+                echo "❌ 修复后配置测试仍然失败，禁止重启，以免搞挂现有服务。"
+                exit 1
+              fi
             fi
             echo "✅ Nginx 配置测试通过"
             

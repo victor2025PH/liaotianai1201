@@ -57,12 +57,12 @@ try {
     if ($TrackedEnvFiles.Count -eq 0) {
         Write-Host "  ✅ 没有 .env 文件被 Git 跟踪" -ForegroundColor Green
     } else {
-        Write-Host "  ⚠️  以下 .env 文件被 Git 跟踪（需要移除）：" -ForegroundColor Red
+        Write-Host "  WARNING: The following .env files are tracked by Git (need to remove):" -ForegroundColor Red
         foreach ($File in $TrackedEnvFiles) {
             Write-Host "    - $File" -ForegroundColor Yellow
         }
         Write-Host ""
-        Write-Host "  移除命令：" -ForegroundColor Cyan
+        Write-Host "  Remove commands:" -ForegroundColor Cyan
         foreach ($File in $TrackedEnvFiles) {
             Write-Host "    git rm --cached $File" -ForegroundColor Gray
         }

@@ -142,14 +142,99 @@ jobs:
             # 检查构建输出（Vite 项目通常是 dist 目录，Next.js 是 .next 目录）
             if [ -d "dist" ]; then
               echo "✅ 构建输出目录存在: dist"
+              IS_NEXTJS=false
             elif [ -d ".next" ]; then
               echo "✅ 构建输出目录存在: .next"
+              IS_NEXTJS=true
             else
               echo "⚠️  警告: 未找到 dist 或 .next 目录，但继续部署"
+              IS_NEXTJS=false
+            fi
+            
+            # 如果是 Next.js 项目，需要启动应用服务器
+            if [ "$IS_NEXTJS" = "true" ]; then
+              echo ""
+              echo "🚀 [4/5] 启动 Next.js 应用服务器..."
+              echo "----------------------------------------"
+              
+              # 停止可能运行在端口 3000 的进程
+              if sudo lsof -i :3000 >/dev/null 2>&1; then
+                echo "停止占用端口 3000 的进程..."
+                sudo lsof -ti :3000 | xargs sudo kill -9 2>/dev/null || true
+                sleep 2
+              fi
+              
+              # 设置环境变量
+              export NODE_ENV=production
+              export PORT=3000
+              export NODE_OPTIONS="--max-old-space-size=3072"
+              
+              # 检查 standalone 输出
+              if [ -f ".next/standalone/server.js" ]; then
+                echo "使用 standalone 模式启动..."
+                START_CMD="node .next/standalone/server.js"
+              else
+                echo "使用标准模式启动..."
+                START_CMD="npm start"
+              fi
+              
+              # 使用 PM2 启动（如果可用）
+              if command -v pm2 >/dev/null 2>&1; then
+                echo "使用 PM2 启动应用..."
+                
+                # 确保日志目录存在
+                mkdir -p "$PROJECT_DIR/logs"
+                
+                # 停止并删除旧进程
+                pm2 delete frontend 2>/dev/null || true
+                
+                # 启动应用
+                cd "$PROJECT_DIR"
+                pm2 start "$START_CMD" --name frontend -- \
+                  --port 3000 \
+                  --hostname 0.0.0.0 || {
+                  echo "⚠️  PM2 启动失败，尝试 nohup..."
+                  nohup $START_CMD > "$PROJECT_DIR/logs/frontend-out.log" 2> "$PROJECT_DIR/logs/frontend-error.log" &
+                  sleep 5
+                }
+                
+                pm2 save || true
+                echo "✅ PM2 应用已启动"
+                pm2 list | grep frontend || true
+              else
+                # 使用 nohup 后台启动
+                echo "使用 nohup 后台启动应用..."
+                mkdir -p "$PROJECT_DIR/logs"
+                cd "$PROJECT_DIR"
+                nohup $START_CMD > "$PROJECT_DIR/logs/frontend-out.log" 2> "$PROJECT_DIR/logs/frontend-error.log" &
+                APP_PID=$!
+                echo "应用进程 PID: $APP_PID"
+                sleep 5
+                
+                # 检查进程是否还在运行
+                if ps -p $APP_PID > /dev/null 2>&1; then
+                  echo "✅ 应用已启动（PID: $APP_PID）"
+                else
+                  echo "⚠️  应用启动可能失败，查看日志:"
+                  tail -20 "$PROJECT_DIR/logs/frontend-error.log" 2>/dev/null || true
+                fi
+              fi
+              
+              # 等待应用启动并检查端口
+              echo "等待应用启动..."
+              sleep 5
+              
+              if sudo lsof -i :3000 >/dev/null 2>&1; then
+                echo "✅ 端口 3000 正在监听"
+              else
+                echo "⚠️  警告: 端口 3000 未在监听，应用可能未成功启动"
+              fi
+              
+              echo ""
             fi
             
             # 重载 Nginx
-            echo "🔄 [4/4] 重载 Nginx..."
+            echo "🔄 [5/5] 重载 Nginx..."
             echo "----------------------------------------"
             
             sudo systemctl reload nginx || {

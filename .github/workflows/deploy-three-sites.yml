@@ -79,17 +79,31 @@ jobs:
             # 拉取最新代码
             echo "📥 [1/6] 拉取最新代码..."
             echo "----------------------------------------"
-            git fetch origin main || git fetch origin || true
-            git reset --hard origin/main || git pull origin main || {
-              echo "❌ Git pull 失败"
-              exit 1
-            }
+            
+            # 确保项目目录存在
+            if [ ! -d "$PROJECT_DIR" ]; then
+              echo "⚠️  项目目录不存在，创建目录..."
+              mkdir -p "$PROJECT_DIR"
+              cd "$PROJECT_DIR"
+              git clone https://github.com/victor2025PH/liaotianai1201.git . || {
+                echo "❌ Git clone 失败"
+                exit 1
+              }
+            else
+              cd "$PROJECT_DIR"
+              git fetch origin main || git fetch origin || true
+              git reset --hard origin/main || git pull origin main || {
+                echo "⚠️  Git pull 失败，尝试继续..."
+              }
+            fi
             echo "✅ 代码同步完成"
             echo ""
             
             # 检查站点目录是否存在
             if [ ! -d "$SITE_DIR" ]; then
               echo "❌ 站点目录不存在: $SITE_DIR"
+              echo "当前项目目录内容:"
+              ls -la "$PROJECT_DIR" | head -20
               exit 1
             fi
             
@@ -155,6 +169,13 @@ jobs:
             
             # 确保日志目录存在
             mkdir -p "$PROJECT_DIR/logs"
+            
+            # 检查并安装 PM2
+            if ! command -v pm2 >/dev/null 2>&1; then
+              echo "安装 PM2..."
+              sudo npm install -g pm2
+              pm2 startup systemd -u ubuntu --hp /home/ubuntu || true
+            fi
             
             # 安装 serve（如果未安装）
             if ! command -v serve >/dev/null 2>&1; then

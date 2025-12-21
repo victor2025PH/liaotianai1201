@@ -56,7 +56,7 @@ sudo grep "requirepass" /etc/redis/redis.conf
 ```
 
 **可能的结果：**
-- 如果显示 `requirepass GTjd0yP2uQSnHeEHTA8CnnEbu` → 密码正确，但 Redis 未重启
+- 如果显示 `requirepass YOUR_REDIS_PASSWORD` → 密码正确，但 Redis 未重启（将 YOUR_REDIS_PASSWORD 替换为实际密码）
 - 如果显示其他密码 → 密码不匹配
 - 如果显示 `# requirepass` → 密码被注释，需要取消注释
 
@@ -102,7 +102,7 @@ bind 127.0.0.1 ::1
 sudo systemctl restart redis-server
 
 # 7. 验证
-redis-cli -a GTjd0yP2uQSnHeEHTA8CnnEbu -h 127.0.0.1 PING
+redis-cli -a YOUR_REDIS_PASSWORD -h 127.0.0.1 PING
 ```
 
 #### 情况 C：使用 sed 快速修复（推荐）

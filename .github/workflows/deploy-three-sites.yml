@@ -332,11 +332,11 @@ jobs:
             NGINX_FAILED_EXIT=$?
             set -e
             
-            # 如果命令失败，使用默认值
-            if [ $NGINX_STATUS_EXIT -ne 0 ]; then
+            # 如果命令失败或返回空值，使用默认值
+            if [ $NGINX_STATUS_EXIT -ne 0 ] || [ -z "$NGINX_STATUS" ]; then
               NGINX_STATUS="inactive"
             fi
-            if [ $NGINX_FAILED_EXIT -ne 0 ]; then
+            if [ $NGINX_FAILED_EXIT -ne 0 ] || [ -z "$NGINX_IS_FAILED" ]; then
               NGINX_IS_FAILED="unknown"
             fi
             
@@ -350,7 +350,7 @@ jobs:
               NGINX_STATUS=$(sudo systemctl is-active nginx 2>/dev/null)
               NGINX_STATUS_EXIT=$?
               set -e
-              if [ $NGINX_STATUS_EXIT -ne 0 ]; then
+              if [ $NGINX_STATUS_EXIT -ne 0 ] || [ -z "$NGINX_STATUS" ]; then
                 NGINX_STATUS="inactive"
               fi
               echo "重置后 Nginx 服务状态: $NGINX_STATUS"

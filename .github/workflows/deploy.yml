@@ -139,13 +139,16 @@ jobs:
             echo "✅ 前端构建完成"
             echo ""
             
-            # 检查构建输出（Vite 项目通常是 dist 目录，Next.js 是 .next 目录）
-            if [ -d "dist" ]; then
-              echo "✅ 构建输出目录存在: dist"
-              IS_NEXTJS=false
-            elif [ -d ".next" ]; then
-              echo "✅ 构建输出目录存在: .next"
-              IS_NEXTJS=true
+# 检查构建输出（Vite 项目通常是 dist 目录，Next.js 是 .next 目录）
+if [ -d "dist" ]; then
+  echo "✅ 构建输出目录存在: dist"
+  echo "构建输出大小: $(du -sh dist | cut -f1)"
+  IS_NEXTJS=false
+  IS_VITE=true
+elif [ -d ".next" ]; then
+  echo "✅ 构建输出目录存在: .next"
+  IS_NEXTJS=true
+  IS_VITE=false
               
               # 验证 Next.js 构建完整性
               if [ -f ".next/BUILD_ID" ]; then
@@ -311,10 +314,105 @@ jobs:
                 exit 1
               fi
               
-              echo ""
-            fi
-            
-            # 重载 Nginx
+  echo ""
+fi
+
+# 如果是 Vite 项目，需要启动静态文件服务
+if [ "$IS_VITE" = "true" ]; then
+  echo ""
+  echo "🚀 [4/5] 启动 Vite 静态文件服务..."
+  echo "----------------------------------------"
+  
+  # 检查 serve 是否安装
+  if ! command -v serve >/dev/null 2>&1; then
+    echo "⚠️  serve 未安装，安装 serve..."
+    sudo npm install -g serve
+  fi
+  
+  # 检查 PM2 是否安装
+  if ! command -v pm2 >/dev/null 2>&1; then
+    echo "⚠️  PM2 未安装，安装 PM2..."
+    sudo npm install -g pm2
+    pm2 startup systemd -u ubuntu --hp /home/ubuntu || true
+  fi
+  
+  # 确定端口（从项目配置或使用默认 3000）
+  FRONTEND_PORT=3000
+  if [ -f "vite.config.ts" ] || [ -f "vite.config.js" ]; then
+    # 尝试从 vite.config 读取端口配置
+    CONFIG_PORT=$(grep -oP "port:\s*\K\d+" vite.config.ts vite.config.js 2>/dev/null | head -1 || echo "")
+    if [ -n "$CONFIG_PORT" ]; then
+      FRONTEND_PORT=$CONFIG_PORT
+    fi
+  fi
+  
+  echo "使用端口: $FRONTEND_PORT"
+  
+  # 停止可能运行在端口的进程
+  if sudo lsof -i :$FRONTEND_PORT >/dev/null 2>&1; then
+    echo "停止占用端口 $FRONTEND_PORT 的进程..."
+    sudo lsof -ti :$FRONTEND_PORT | xargs sudo kill -9 2>/dev/null || true
+    sleep 2
+  fi
+  
+  # 停止并删除 PM2 旧进程
+  pm2 delete frontend 2>/dev/null || true
+  
+  # 确保日志目录存在
+  mkdir -p "$PROJECT_DIR/logs"
+  
+  # 使用 PM2 启动 serve
+  echo "使用 PM2 启动 serve..."
+  cd "$PROJECT_DIR"
+  
+  pm2 start serve \
+    --name frontend \
+    -- "$PROJECT_DIR/dist" \
+    --listen $FRONTEND_PORT \
+    --single \
+    --no-clipboard \
+    --no-open \
+    --error "$PROJECT_DIR/logs/frontend-error.log" \
+    --output "$PROJECT_DIR/logs/frontend-out.log" \
+    --merge-logs \
+    --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
+    echo "⚠️  PM2 启动失败，查看错误..."
+    pm2 logs frontend --lines 10 --nostream 2>/dev/null || true
+    exit 1
+  }
+  
+  pm2 save || true
+  echo "✅ PM2 应用已启动"
+  pm2 list | grep frontend || true
+  
+  # 等待启动
+  echo "等待服务启动..."
+  sleep 5
+  
+  # 检查端口是否在监听
+  echo "检查端口 $FRONTEND_PORT..."
+  sleep 2
+  if sudo lsof -i :$FRONTEND_PORT >/dev/null 2>&1; then
+    echo "✅ 端口 $FRONTEND_PORT 正在监听"
+    # 测试连接
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$FRONTEND_PORT || echo "000")
+    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+      echo "✅ 应用响应正常 (HTTP $HTTP_CODE)"
+    else
+      echo "⚠️  应用响应异常 (HTTP $HTTP_CODE)"
+      pm2 logs frontend --lines 10 --nostream 2>/dev/null || true
+    fi
+  else
+    echo "❌ 端口 $FRONTEND_PORT 未在监听，应用可能未成功启动"
+    echo "查看最新日志:"
+    pm2 logs frontend --lines 20 --nostream 2>/dev/null || true
+    exit 1
+  fi
+  
+  echo ""
+fi
+
+# 重载 Nginx
             echo "🔄 [5/5] 重载 Nginx..."
             echo "----------------------------------------"
             
@@ -325,33 +423,54 @@ jobs:
               sudo apt-get install -y nginx
             fi
             
-            # 检查 Nginx 服务状态
-            if sudo systemctl is-active --quiet nginx; then
-              echo "✅ Nginx 服务正在运行，执行 reload..."
-              sudo systemctl reload nginx || {
-                echo "⚠️  Nginx reload 失败，尝试 restart..."
-                sudo systemctl restart nginx || {
-                  echo "❌ Nginx restart 失败"
-                  exit 1
-                }
-              }
-            else
-              echo "⚠️  Nginx 服务未运行，启动 Nginx..."
-              sudo systemctl enable nginx
-              sudo systemctl start nginx || {
-                echo "❌ Nginx start 失败，查看状态..."
-                sudo systemctl status nginx --no-pager -l || true
-                echo "尝试安装并启动 Nginx..."
-                sudo apt-get update
-                sudo apt-get install -y nginx
-                sudo systemctl enable nginx
-                sudo systemctl start nginx || {
-                  echo "❌ Nginx 启动失败"
-                  exit 1
-                }
-              }
-              echo "✅ Nginx 服务已启动"
-            fi
+# 检查 Nginx 服务状态
+NGINX_STATUS=$(sudo systemctl is-active nginx 2>/dev/null || echo "inactive")
+echo "Nginx 服务状态: $NGINX_STATUS"
+
+if [ "$NGINX_STATUS" = "active" ]; then
+  echo "✅ Nginx 服务正在运行，执行 reload..."
+  if sudo systemctl reload nginx; then
+    echo "✅ Nginx reload 成功"
+  else
+    echo "⚠️  Nginx reload 失败，尝试 restart..."
+    if sudo systemctl restart nginx; then
+      echo "✅ Nginx restart 成功"
+    else
+      echo "❌ Nginx restart 失败"
+      echo "查看 Nginx 状态:"
+      sudo systemctl status nginx --no-pager -l || true
+      echo "查看 Nginx 错误日志:"
+      sudo tail -20 /var/log/nginx/error.log 2>/dev/null || true
+      exit 1
+    fi
+  fi
+else
+  echo "⚠️  Nginx 服务未运行，启动 Nginx..."
+  sudo systemctl enable nginx || true
+  
+  if sudo systemctl start nginx; then
+    echo "✅ Nginx 服务已启动"
+  else
+    echo "❌ Nginx start 失败，查看状态..."
+    sudo systemctl status nginx --no-pager -l || true
+    echo "查看 Nginx 错误日志:"
+    sudo tail -20 /var/log/nginx/error.log 2>/dev/null || true
+    echo "尝试安装并启动 Nginx..."
+    sudo apt-get update -qq
+    sudo apt-get install -y nginx || {
+      echo "❌ Nginx 安装失败"
+      exit 1
+    }
+    sudo systemctl enable nginx
+    if sudo systemctl start nginx; then
+      echo "✅ Nginx 服务已启动"
+    else
+      echo "❌ Nginx 启动失败"
+      sudo systemctl status nginx --no-pager -l || true
+      exit 1
+    fi
+  fi
+fi
             
             echo "✅ Nginx 重载完成"
             echo ""

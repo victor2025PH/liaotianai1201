@@ -52,10 +52,24 @@ CORE_PACKAGES=(
 echo "使用系统 pip3 安装核心包..."
 for PACKAGE in "${CORE_PACKAGES[@]}"; do
   echo "安装 $PACKAGE..."
-  pip3 install "$PACKAGE" --user || {
-    echo "⚠️  $PACKAGE 安装失败，尝试使用 sudo..."
-    sudo pip3 install "$PACKAGE" || {
-      echo "⚠️  $PACKAGE 安装失败，但继续..."
+  # 尝试多种安装方式
+  pip3 install "$PACKAGE" --user --break-system-packages 2>/dev/null || {
+    echo "⚠️  使用 --user --break-system-packages 失败，尝试使用 sudo..."
+    sudo pip3 install "$PACKAGE" --break-system-packages 2>/dev/null || {
+      echo "⚠️  sudo 安装失败，尝试使用 apt..."
+      # 对于某些包，尝试使用 apt 安装
+      if [ "$PACKAGE" = "uvicorn" ] || [ "$PACKAGE" = "fastapi" ]; then
+        sudo apt-get update -qq && sudo apt-get install -y python3-$PACKAGE 2>/dev/null || {
+          echo "⚠️  apt 安装也失败，尝试强制 pip 安装..."
+          pip3 install "$PACKAGE" --break-system-packages --force-reinstall || {
+            echo "❌ $PACKAGE 安装完全失败"
+          }
+        }
+      else
+        pip3 install "$PACKAGE" --break-system-packages --force-reinstall || {
+          echo "⚠️  $PACKAGE 安装失败，但继续..."
+        }
+      fi
     }
   }
 done
@@ -68,9 +82,9 @@ echo "3. 安装 requirements.txt..."
 echo "----------------------------------------"
 if [ -f "requirements.txt" ]; then
   echo "找到 requirements.txt，开始安装..."
-  pip3 install -r requirements.txt --user || {
-    echo "⚠️  使用 --user 安装失败，尝试使用 sudo..."
-    sudo pip3 install -r requirements.txt || {
+  pip3 install -r requirements.txt --user --break-system-packages 2>/dev/null || {
+    echo "⚠️  使用 --user --break-system-packages 安装失败，尝试使用 sudo..."
+    sudo pip3 install -r requirements.txt --break-system-packages 2>/dev/null || {
       echo "⚠️  部分依赖安装失败，但继续..."
     }
   }
@@ -186,19 +200,24 @@ else
   
   # 查找后端启动文件
   if [ -f "$BACKEND_DIR/app/main.py" ]; then
-    pm2 start "uvicorn" \
+    PYTHON3_PATH=$(which python3)
+    echo "使用 Python: $PYTHON3_PATH"
+    pm2 start "$PYTHON3_PATH" \
       --name backend \
-      --interpreter python3 \
+      --interpreter none \
       --cwd "$BACKEND_DIR" \
-      -- app.main:app --host 0.0.0.0 --port 8000 || {
+      -- -m uvicorn app.main:app --host 0.0.0.0 --port 8000 || {
       echo "❌ 后端启动失败"
       exit 1
     }
   elif [ -f "$BACKEND_DIR/main.py" ]; then
-    pm2 start "$BACKEND_DIR/main.py" \
+    PYTHON3_PATH=$(which python3)
+    echo "使用 Python: $PYTHON3_PATH"
+    pm2 start "$PYTHON3_PATH" \
       --name backend \
-      --interpreter python3 \
-      --cwd "$BACKEND_DIR" || {
+      --interpreter none \
+      --cwd "$BACKEND_DIR" \
+      -- "$BACKEND_DIR/main.py" || {
       echo "❌ 后端启动失败"
       exit 1
     }

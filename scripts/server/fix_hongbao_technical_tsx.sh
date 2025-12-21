@@ -78,64 +78,63 @@ sed -i "s/{'>'}/{'\&gt;'}/g" "$TECHNICAL_FILE"
 
 # 方法 3: 检查是否有其他未转义的 > 符号在 JSX 元素中
 # 使用 Python 脚本进行更精确的修复
-python3 << 'PYTHON_SCRIPT'
+python3 << PYTHON_SCRIPT
 import re
-import sys
 
-file_path = sys.argv[1]
+file_path = "$TECHNICAL_FILE"
 
-with open(file_path, 'r', encoding='utf-8') as f:
-    content = f.read()
-
-# 修复第 72 行的问题：在 JSX 字符串中的 > 需要转义
-# 查找类似 require(<span className="text-yellow-400">{'remainingAmount > 0'}</span> 的模式
-# 将 > 替换为 &gt;
-
-# 修复模式1: {'remainingAmount > 0'} -> {'remainingAmount &gt; 0'}
-content = re.sub(
-    r"(\{'remainingAmount\s+)>(\s+0'\})",
-    r"\1&gt;\2",
-    content
-)
-
-# 修复模式2: 在 JSX 属性值中的 > 符号
-# 查找 className="text-yellow-400">{'...>...'} 的模式
-content = re.sub(
-    r"(className=\"text-yellow-400\">\{'[^']*)\s+>\s+([^']*'\})",
-    r"\1 &gt; \2",
-    content
-)
-
-# 修复模式3: 确保所有在 JSX 表达式中的 > 都被正确处理
-# 查找 {'...>...'} 模式，将 > 替换为 &gt;
-def fix_gt_in_jsx_expr(match):
-    expr = match.group(1)
-    # 如果包含 > 且不在引号中，替换为 &gt;
-    if '>' in expr and not ('"' in expr or "'" in expr):
-        expr = expr.replace('>', '&gt;')
-    return "{'" + expr + "'}"
-
-# 更精确的修复：只修复在 JSX 元素属性中的问题
-lines = content.split('\n')
-for i, line in enumerate(lines, 1):
-    if i == 72:  # 重点修复第 72 行
-        # 查找 require(<span className="...">{'...>...'}</span> 模式
-        if 'require(' in line and '>' in line and 'text-yellow-400' in line:
-            # 将 {'remainingAmount > 0'} 替换为 {'remainingAmount &gt; 0'}
-            lines[i-1] = re.sub(
-                r"(\{'remainingAmount\s+)>(\s+0'\})",
-                r"\1&gt;\2",
-                line
-            )
-
-content = '\n'.join(lines)
-
-with open(file_path, 'w', encoding='utf-8') as f:
-    f.write(content)
-
-print("✅ JSX 语法错误已修复")
+try:
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # 修复第 72 行的问题：在 JSX 字符串中的 > 需要转义
+    # 将 {'remainingAmount > 0'} 替换为 {'remainingAmount &gt; 0'}
+    content = re.sub(
+        r"(\{'remainingAmount\s+)>(\s+0'\})",
+        r"\1&gt;\2",
+        content
+    )
+    
+    # 修复其他可能的 > 符号问题
+    # 将 {'>'} 替换为 {'&gt;'}
+    content = re.sub(
+        r"\{'>'\}",
+        r"{'&gt;'}",
+        content
+    )
+    
+    # 更精确的修复：逐行检查
+    lines = content.split('\n')
+    for i in range(len(lines)):
+        line = lines[i]
+        # 检查第 72 行（索引 71）或附近的行
+        if i >= 70 and i <= 74:  # 第 71-75 行（0-based 索引）
+            # 如果包含 require( 和 > 符号
+            if 'require(' in line and '>' in line:
+                # 将字符串中的 > 替换为 &gt;
+                if "{'remainingAmount > 0'}" in line:
+                    lines[i] = line.replace("{'remainingAmount > 0'}", "{'remainingAmount &gt; 0'}")
+                elif "{'remainingAmount > 0'}" in line:
+                    lines[i] = line.replace("{'remainingAmount > 0'}", "{'remainingAmount &gt; 0'}")
+                # 更通用的替换
+                lines[i] = re.sub(
+                    r"(\{'[^']*)\s+>\s+([^']*'\})",
+                    r"\1 &gt; \2",
+                    lines[i]
+                )
+    
+    content = '\n'.join(lines)
+    
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+    
+    print("✅ JSX 语法错误已修复")
+except Exception as e:
+    print(f"❌ 修复失败: {e}")
+    import traceback
+    traceback.print_exc()
+    exit(1)
 PYTHON_SCRIPT
-"$TECHNICAL_FILE"
 
 echo "✅ Technical.tsx 已修复"
 echo ""

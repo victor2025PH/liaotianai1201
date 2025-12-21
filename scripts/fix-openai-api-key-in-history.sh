@@ -21,9 +21,17 @@ echo ""
 
 cd "$(git rev-parse --show-toplevel)"
 
-# 要替换的 API Key（从错误信息中获取）
-OLD_API_KEY="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"
+# 要替换的 API Key（从 GitHub 错误信息中获取）
+# 注意：将下面的占位符替换为 GitHub 错误信息中显示的完整 API Key
+OLD_API_KEY="<从 GitHub 错误信息中获取的完整 API Key>"
 NEW_PLACEHOLDER="YOUR_OPENAI_API_KEY"
+
+# 检查是否已设置 API Key
+if [ "$OLD_API_KEY" = "<从 GitHub 错误信息中获取的完整 API Key>" ]; then
+    echo "❌ 错误：请先设置 OLD_API_KEY 变量"
+    echo "   从 GitHub 推送错误信息中复制完整的 API Key，然后修改此脚本"
+    exit 1
+fi
 
 # 备份当前分支
 BACKUP_BRANCH="backup-before-api-key-fix-$(date +%Y%m%d-%H%M%S)"

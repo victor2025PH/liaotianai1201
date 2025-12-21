@@ -9,7 +9,7 @@
 - **提交**: `a76612b8abfd481e1a278779e1da2d3023429f0f`
 - **文件**: `AI_ROBOT_SETUP.md`
 - **位置**: 第 51 行和第 57 行
-- **API Key**: `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`
+- **API Key**: `<已检测到的 OpenAI API Key，需要从历史中移除>`
 
 ---
 
@@ -43,8 +43,10 @@ wget https://repo1.maven.org/maven2/com/madgag/bfg/1.14.0/bfg-1.14.0.jar
 创建 `passwords.txt` 文件：
 
 ```
-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==>YOUR_OPENAI_API_KEY
+<从 GitHub 错误信息中获取的完整 API Key>==>YOUR_OPENAI_API_KEY
 ```
+
+**注意**: 将 `<从 GitHub 错误信息中获取的完整 API Key>` 替换为 GitHub 错误信息中显示的完整 API Key。
 
 #### 步骤 3: 运行 BFG
 
@@ -75,11 +77,8 @@ cd d:\telegram-ai-system
 git branch backup-before-api-key-fix
 
 # 使用 filter-branch 替换
-git filter-branch --force --tree-filter \
-  "if [ -f AI_ROBOT_SETUP.md ]; then
-     sed -i 's|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|YOUR_OPENAI_API_KEY|g' AI_ROBOT_SETUP.md
-   fi" \
-  --prune-empty --tag-name-filter cat -- --all
+# 注意：在 Git Bash 中执行，不要在 PowerShell 中执行
+git filter-branch --force --tree-filter "if [ -f AI_ROBOT_SETUP.md ]; then sed -i 's|<从 GitHub 错误信息中获取的完整 API Key>|YOUR_OPENAI_API_KEY|g' AI_ROBOT_SETUP.md; fi" --prune-empty --tag-name-filter cat -- --all
 
 # 清理
 git reflog expire --expire=now --all

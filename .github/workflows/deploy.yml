@@ -587,12 +587,13 @@ jobs:
             echo "✅ Nginx 重载完成"
             echo ""
             
-            # 验证服务状态
+            # 验证服务状态（禁用 set -e 避免验证失败导致脚本退出）
+            set +e
             echo "🔍 验证服务状态..."
             echo "----------------------------------------"
             
             # 检查 Nginx 状态
-            if sudo systemctl is-active --quiet nginx; then
+            if sudo systemctl is-active --quiet nginx 2>/dev/null; then
               echo "✅ Nginx 服务运行中"
             else
               echo "⚠️  Nginx 服务未运行"
@@ -604,6 +605,9 @@ jobs:
             else
               echo "⚠️  端口 80 未被占用"
             fi
+            
+            # 恢复 set -e
+            set -e
             
             echo ""
             echo "=========================================="

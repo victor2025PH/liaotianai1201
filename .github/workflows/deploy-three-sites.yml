@@ -406,11 +406,14 @@ jobs:
             echo "✅ Nginx 配置完成"
             echo ""
             
-            # 验证部署
+            # 验证部署（禁用 set -e 避免验证失败导致脚本退出）
+            set +e
             echo "🔍 验证部署..."
             echo "----------------------------------------"
             pm2 list | grep "$PM2_NAME" || true
             echo ""
+            # 恢复 set -e
+            set -e
             
             echo "=========================================="
             echo "✅ $SITE_NAME 部署完成！"

@@ -318,13 +318,40 @@ jobs:
             echo "🔄 [5/5] 重载 Nginx..."
             echo "----------------------------------------"
             
-            sudo systemctl reload nginx || {
-              echo "⚠️  Nginx reload 失败，尝试 restart..."
-              sudo systemctl restart nginx || {
-                echo "❌ Nginx restart 失败"
-                exit 1
+            # 检查 Nginx 是否安装
+            if ! command -v nginx >/dev/null 2>&1; then
+              echo "⚠️  Nginx 未安装，安装 Nginx..."
+              sudo apt-get update
+              sudo apt-get install -y nginx
+            fi
+            
+            # 检查 Nginx 服务状态
+            if sudo systemctl is-active --quiet nginx; then
+              echo "✅ Nginx 服务正在运行，执行 reload..."
+              sudo systemctl reload nginx || {
+                echo "⚠️  Nginx reload 失败，尝试 restart..."
+                sudo systemctl restart nginx || {
+                  echo "❌ Nginx restart 失败"
+                  exit 1
+                }
               }
-            }
+            else
+              echo "⚠️  Nginx 服务未运行，启动 Nginx..."
+              sudo systemctl enable nginx
+              sudo systemctl start nginx || {
+                echo "❌ Nginx start 失败，查看状态..."
+                sudo systemctl status nginx --no-pager -l || true
+                echo "尝试安装并启动 Nginx..."
+                sudo apt-get update
+                sudo apt-get install -y nginx
+                sudo systemctl enable nginx
+                sudo systemctl start nginx || {
+                  echo "❌ Nginx 启动失败"
+                  exit 1
+                }
+              }
+              echo "✅ Nginx 服务已启动"
+            fi
             
             echo "✅ Nginx 重载完成"
             echo ""

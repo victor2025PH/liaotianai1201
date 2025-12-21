@@ -93,7 +93,7 @@ if (Test-Path ".gitignore") {
     
     if ($AllIgnored) {
         Write-Host ""
-        Write-Host "  ✅ .gitignore 配置正确" -ForegroundColor Green
+        Write-Host "  OK: .gitignore configuration is correct" -ForegroundColor Green
     } else {
         Write-Host ""
         Write-Host "  ⚠️  .gitignore 需要更新" -ForegroundColor Yellow

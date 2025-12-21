@@ -126,105 +126,65 @@ echo "5. 重启后端服务..."
 echo "----------------------------------------"
 cd "$PROJECT_ROOT" || exit 1
 
-if pm2 list | grep -q "backend"; then
-  echo "重启 PM2 backend 进程..."
-  pm2 restart backend || {
-    echo "⚠️  PM2 restart 失败，尝试删除后重新启动..."
-    pm2 delete backend 2>/dev/null || true
-    sleep 2
-    
-    # 查找后端启动文件
-    if [ -f "$BACKEND_DIR/main.py" ]; then
-      MAIN_FILE="$BACKEND_DIR/main.py"
-    elif [ -f "$BACKEND_DIR/app.py" ]; then
-      MAIN_FILE="$BACKEND_DIR/app.py"
-    elif [ -f "$BACKEND_DIR/run.py" ]; then
-      MAIN_FILE="$BACKEND_DIR/run.py"
-    elif [ -f "$BACKEND_DIR/app/main.py" ]; then
-      # 使用 uvicorn 启动
-      pm2 start "uvicorn" \
-        --name backend \
-        --interpreter python3 \
-        --cwd "$BACKEND_DIR" \
-        -- app.main:app --host 0.0.0.0 --port 8000 || {
-        echo "❌ 后端启动失败"
-        exit 1
-      }
-      echo "✅ 后端服务已重新启动（使用 uvicorn）"
-      cd "$PROJECT_ROOT" || exit 1
-      
-      # 等待并验证
-      echo ""
-      echo "6. 等待服务启动..."
-      echo "----------------------------------------"
-      sleep 5
-      
-      echo ""
-      echo "7. 验证服务状态..."
-      echo "----------------------------------------"
-      pm2 list
-      
-      echo ""
-      echo "后端日志（最近 20 行）："
-      echo "----------------------------------------"
-      pm2 logs backend --lines 20 --nostream || {
-        echo "⚠️  无法获取日志"
-      }
-      
-      echo ""
-      echo "=========================================="
-      echo "✅ 后端修复完成！"
-      echo "时间: $(date)"
-      echo "=========================================="
-      exit 0
-    else
-      MAIN_FILE=$(find "$BACKEND_DIR" -maxdepth 2 -name "*.py" -type f | head -1)
-    fi
-    
-    if [ -n "$MAIN_FILE" ] && [ -f "$MAIN_FILE" ]; then
-      echo "使用 $MAIN_FILE 启动后端..."
-      pm2 start "$MAIN_FILE" \
-        --name backend \
-        --interpreter python3 \
-        --cwd "$BACKEND_DIR" || {
-        echo "❌ 后端启动失败"
-        exit 1
-      }
-    else
-      echo "⚠️  无法确定后端启动方式"
-    fi
-  }
-  echo "✅ 后端服务已重启"
-else
-  echo "⚠️  PM2 中未找到 backend 进程，尝试启动..."
-  
-  # 查找后端启动文件
-  if [ -f "$BACKEND_DIR/app/main.py" ]; then
-    PYTHON3_PATH=$(which python3)
-    echo "使用 Python: $PYTHON3_PATH"
-    pm2 start "$PYTHON3_PATH" \
-      --name backend \
-      --interpreter none \
-      --cwd "$BACKEND_DIR" \
-      -- -m uvicorn app.main:app --host 0.0.0.0 --port 8000 || {
-      echo "❌ 后端启动失败"
-      exit 1
-    }
-  elif [ -f "$BACKEND_DIR/main.py" ]; then
-    PYTHON3_PATH=$(which python3)
-    echo "使用 Python: $PYTHON3_PATH"
-    pm2 start "$PYTHON3_PATH" \
-      --name backend \
-      --interpreter none \
-      --cwd "$BACKEND_DIR" \
-      -- "$BACKEND_DIR/main.py" || {
-      echo "❌ 后端启动失败"
-      exit 1
-    }
-  else
-    echo "⚠️  无法确定后端启动方式，请手动启动"
+# 获取系统 Python3 路径和用户 site-packages 路径
+PYTHON3_PATH=$(which python3)
+PYTHON_USER_SITE=$(python3 -c "import site; print(site.getusersitepackages())" 2>/dev/null || echo "")
+
+echo "Python3 路径: $PYTHON3_PATH"
+if [ -n "$PYTHON_USER_SITE" ]; then
+  echo "用户 site-packages: $PYTHON_USER_SITE"
+fi
+
+# 验证 uvicorn 在系统 Python 中可用
+if ! python3 -c "import uvicorn" 2>/dev/null; then
+  echo "❌ 系统 Python3 无法导入 uvicorn"
+  echo "尝试查找 uvicorn 位置..."
+  UVICORN_PATH=$(python3 -c "import sys; print([p for p in sys.path if 'uvicorn' in str(p)] or '')" 2>/dev/null || echo "")
+  if [ -z "$UVICORN_PATH" ]; then
+    echo "⚠️  无法找到 uvicorn，但继续尝试启动..."
   fi
-  echo "✅ 后端服务已启动"
+fi
+
+if pm2 list | grep -q "backend"; then
+  echo "删除现有 backend 进程以重新配置..."
+  pm2 delete backend 2>/dev/null || true
+  sleep 2
+fi
+
+# 查找后端启动文件并启动
+if [ -f "$BACKEND_DIR/app/main.py" ]; then
+  echo "使用 app.main:app 启动后端..."
+  pm2 start "$PYTHON3_PATH" \
+    --name backend \
+    --interpreter none \
+    --cwd "$BACKEND_DIR" \
+    --update-env \
+    --env PORT=8000 \
+    --env PYTHONPATH="$BACKEND_DIR" \
+    --env PYTHONUNBUFFERED=1 \
+    -- -m uvicorn app.main:app --host 0.0.0.0 --port 8000 || {
+    echo "❌ 后端启动失败"
+    exit 1
+  }
+  echo "✅ 后端服务已启动（使用 python3 -m uvicorn）"
+elif [ -f "$BACKEND_DIR/main.py" ]; then
+  echo "使用 main.py 启动后端..."
+  pm2 start "$PYTHON3_PATH" \
+    --name backend \
+    --interpreter none \
+    --cwd "$BACKEND_DIR" \
+    --update-env \
+    --env PORT=8000 \
+    --env PYTHONPATH="$BACKEND_DIR" \
+    --env PYTHONUNBUFFERED=1 \
+    -- "$BACKEND_DIR/main.py" || {
+    echo "❌ 后端启动失败"
+    exit 1
+  }
+  echo "✅ 后端服务已启动（使用 main.py）"
+else
+  echo "❌ 未找到后端启动文件（app/main.py 或 main.py）"
+  exit 1
 fi
 
 echo ""
@@ -232,7 +192,7 @@ echo ""
 # 6. 等待服务启动
 echo "6. 等待服务启动..."
 echo "----------------------------------------"
-sleep 5
+sleep 10
 
 # 7. 验证服务状态
 echo "7. 验证服务状态..."
@@ -240,11 +200,28 @@ echo "----------------------------------------"
 pm2 list
 
 echo ""
-echo "后端日志（最近 20 行）："
+echo "检查 PM2 backend 配置..."
+pm2 describe backend | grep -E "(interpreter|script|args|env)" || echo "⚠️  无法获取配置信息"
+
+echo ""
+echo "后端日志（最近 30 行）："
 echo "----------------------------------------"
-pm2 logs backend --lines 20 --nostream || {
+pm2 logs backend --lines 30 --nostream || {
   echo "⚠️  无法获取日志"
 }
+
+echo ""
+echo "检查后端错误日志..."
+if [ -f "/home/ubuntu/.pm2/logs/backend-error.log" ]; then
+  ERROR_COUNT=$(grep -c "ModuleNotFoundError.*uvicorn" /home/ubuntu/.pm2/logs/backend-error.log 2>/dev/null || echo "0")
+  if [ "$ERROR_COUNT" -gt 0 ]; then
+    echo "⚠️  错误日志中仍有 $ERROR_COUNT 个 uvicorn 导入错误"
+    echo "最后 5 个错误："
+    grep "ModuleNotFoundError.*uvicorn" /home/ubuntu/.pm2/logs/backend-error.log | tail -5
+  else
+    echo "✅ 错误日志中未发现 uvicorn 导入错误"
+  fi
+fi
 
 echo ""
 echo "=========================================="

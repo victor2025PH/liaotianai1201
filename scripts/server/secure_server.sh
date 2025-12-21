@@ -264,15 +264,28 @@ SUSPICIOUS_PATTERNS=(
 
 CLEANED_COUNT=0
 for pattern in "${SUSPICIOUS_PATTERNS[@]}"; do
-    for file in $pattern 2>/dev/null; do
-        if [ -f "$file" ] || [ -d "$file" ]; then
-            # 检查文件是否可疑（包含 base64, wget, curl 等）
-            if grep -qE "base64|wget.*http|curl.*http|\.update|startup" "$file" 2>/dev/null; then
-                echo "  🗑️  删除可疑文件: $file"
-                sudo rm -rf "$file" 2>/dev/null && ((CLEANED_COUNT++)) || true
+    # 使用 find 或直接检查文件
+    if [[ "$pattern" == *"*"* ]]; then
+        # 包含通配符的模式
+        for file in $pattern; do
+            if [ -f "$file" ] || [ -d "$file" ]; then
+                # 检查文件是否可疑（包含 base64, wget, curl 等）
+                if grep -qE "base64|wget.*http|curl.*http|\.update|startup" "$file" 2>/dev/null; then
+                    echo "  🗑️  删除可疑文件: $file"
+                    sudo rm -rf "$file" 2>/dev/null && ((CLEANED_COUNT++)) || true
+                fi
+            fi
+        done 2>/dev/null
+    else
+        # 直接路径
+        if [ -f "$pattern" ] || [ -d "$pattern" ]; then
+            # 检查文件是否可疑
+            if grep -qE "base64|wget.*http|curl.*http|\.update|startup" "$pattern" 2>/dev/null; then
+                echo "  🗑️  删除可疑文件: $pattern"
+                sudo rm -rf "$pattern" 2>/dev/null && ((CLEANED_COUNT++)) || true
             fi
         fi
-    done
+    fi
 done
 
 if [ $CLEANED_COUNT -gt 0 ]; then

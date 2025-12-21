@@ -68,6 +68,9 @@ class PermissionCode(str, Enum):
     AUTOMATION_TASK_RUN = "automation_task:run"
     AUTOMATION_TASK_LOG_VIEW = "automation_task:log:view"
     
+    # ============ 群組AI管理 ============
+    GROUP_AI_MANAGE = "group_ai:manage"  # 群組AI統一管理權限（關鍵詞觸發、定時消息、群組加入配置等）
+    
     # ============ 數據導出 ============
     EXPORT_ACCOUNT = "export:account"
     EXPORT_SCRIPT = "export:script"
@@ -167,6 +170,9 @@ PERMISSION_GROUPS = {
         PermissionCode.AUTOMATION_TASK_DELETE,
         PermissionCode.AUTOMATION_TASK_RUN,
         PermissionCode.AUTOMATION_TASK_LOG_VIEW,
+    ],
+    "group_ai_management": [
+        PermissionCode.GROUP_AI_MANAGE,
     ],
     "export_management": [
         PermissionCode.EXPORT_ACCOUNT,

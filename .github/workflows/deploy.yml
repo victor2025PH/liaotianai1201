@@ -399,7 +399,7 @@ jobs:
               # 生成启动脚本（直接在脚本中写入路径和端口，避免参数传递问题）
               echo "生成启动脚本..."
               START_SCRIPT="$PROJECT_DIR/start-frontend.sh"
-              printf '#!/bin/bash\n# 前端服务启动脚本\n# 使用全局 serve 命令启动静态文件服务\nset -e\nDIST_DIR="%s"\nPORT=%s\n# 检查 serve 命令是否存在\nif ! command -v serve >/dev/null 2>&1; then\n  echo "错误: serve 命令未找到，请先安装: npm install -g serve"\n  exit 1\nfi\n# 检查 dist 目录是否存在\nif [ ! -d "$DIST_DIR" ]; then\n  echo "错误: dist 目录不存在: $DIST_DIR"\n  exit 1\nfi\n# 启动 serve\nexec serve -s "$DIST_DIR" -l "$PORT" --no-clipboard --no-open\n' "$PROJECT_DIR/dist" "$FRONTEND_PORT" > "$START_SCRIPT"
+              printf '#!/bin/bash\n# 前端服务启动脚本\n# 使用全局 serve 命令启动静态文件服务\nset -e\nDIST_DIR="%s"\nPORT=%s\n# 检查 serve 命令是否存在\nif ! command -v serve >/dev/null 2>&1; then\n  echo "错误: serve 命令未找到，请先安装: npm install -g serve"\n  exit 1\nfi\n# 检查 dist 目录是否存在\nif [ ! -d "$DIST_DIR" ]; then\n  echo "错误: dist 目录不存在: $DIST_DIR"\n  exit 1\nfi\n# 启动 serve（移除不支持的 --no-open 选项）\nexec serve -s "$DIST_DIR" -l "$PORT" --no-clipboard\n' "$PROJECT_DIR/dist" "$FRONTEND_PORT" > "$START_SCRIPT"
               
               chmod +x "$START_SCRIPT"
               echo "✅ 启动脚本已生成: $START_SCRIPT"

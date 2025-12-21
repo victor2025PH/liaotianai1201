@@ -230,7 +230,7 @@ class UnifiedConfig(Base):
     chat_config = Column(JSON, default=dict)  # 聊天配置
     redpacket_config = Column(JSON, default=dict)  # 紅包配置
     keyword_config = Column(JSON, default=dict)  # 關鍵詞配置
-    metadata = Column(JSON, default=dict)  # 其他元數據
+    extra_metadata = Column(JSON, default=dict)  # 其他元數據（避免与 SQLAlchemy 的 metadata 冲突）
     
     # 元數據
     description = Column(Text, nullable=True)

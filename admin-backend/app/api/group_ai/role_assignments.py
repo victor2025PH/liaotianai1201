@@ -272,12 +272,12 @@ async def apply_assignment(
             
             account = service_manager.account_manager.accounts[account_id]
             
-            # 更新帳號配置（可以添加 role_id 到 metadata）
-            if not hasattr(account.config, 'metadata'):
-                account.config.metadata = {}
+            # 更新帳號配置（可以添加 role_id 到 extra_metadata）
+            if not hasattr(account.config, 'extra_metadata'):
+                account.config.extra_metadata = {}
             
-            account.config.metadata['assigned_role_id'] = role_id
-            account.config.metadata['script_id'] = script_id
+            account.config.extra_metadata['assigned_role_id'] = role_id
+            account.config.extra_metadata['script_id'] = script_id
             
             applied_count += 1
             logger.info(f"已為帳號 {account_id} 分配角色 {role_id}")

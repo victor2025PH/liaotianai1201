@@ -505,11 +505,11 @@ async def apply_scheme(
             account = service_manager.account_manager.accounts[account_id]
             
             # 更新賬號配置
-            if not hasattr(account.config, 'metadata'):
-                account.config.metadata = {}
+            if not hasattr(account.config, 'extra_metadata'):
+                account.config.extra_metadata = {}
             
-            account.config.metadata['assigned_role_id'] = role_id
-            account.config.metadata['script_id'] = scheme.script_id
+            account.config.extra_metadata['assigned_role_id'] = role_id
+            account.config.extra_metadata['script_id'] = scheme.script_id
             
             # 創建歷史記錄
             history = GroupAIRoleAssignmentHistory(

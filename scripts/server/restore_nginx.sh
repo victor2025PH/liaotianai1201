@@ -58,31 +58,46 @@ for site in "${!SITES[@]}"; do
   echo "=========================================="
   echo ""
   
-  # 检查 SSL 证书是否存在
+  # 检查 SSL 证书是否存在（使用 sudo 避免权限问题）
   SSL_CERT="/etc/letsencrypt/live/$domain/fullchain.pem"
   SSL_KEY="/etc/letsencrypt/live/$domain/privkey.pem"
   
-  # 处理证书路径（Certbot 可能使用 -0001 后缀）
-  if [ ! -f "$SSL_CERT" ]; then
-    # 尝试查找带 -0001 后缀的证书
+  # 首先检查标准路径（使用 sudo）
+  if sudo test -f "$SSL_CERT" && sudo test -f "$SSL_KEY"; then
+    echo "✅ SSL 证书存在（标准路径）: $SSL_CERT"
+    HAS_SSL=true
+  else
+    # 尝试查找带 -0001 后缀的证书（使用 sudo）
     CERT_DIR="/etc/letsencrypt/live/"
-    if [ -d "$CERT_DIR" ]; then
-      # 查找匹配的证书目录
-      MATCHING_CERT=$(find "$CERT_DIR" -name "${domain}*" -type d | head -1)
-      if [ -n "$MATCHING_CERT" ] && [ -f "$MATCHING_CERT/fullchain.pem" ]; then
-        SSL_CERT="$MATCHING_CERT/fullchain.pem"
-        SSL_KEY="$MATCHING_CERT/privkey.pem"
-        echo "✅ 找到证书（带后缀）: $SSL_CERT"
+    if sudo test -d "$CERT_DIR"; then
+      # 查找匹配的证书目录（使用 sudo find）
+      MATCHING_CERT=$(sudo find "$CERT_DIR" -name "${domain}*" -type d 2>/dev/null | head -1)
+      if [ -n "$MATCHING_CERT" ]; then
+        CERT_FULLCHAIN="$MATCHING_CERT/fullchain.pem"
+        CERT_PRIVKEY="$MATCHING_CERT/privkey.pem"
+        if sudo test -f "$CERT_FULLCHAIN" && sudo test -f "$CERT_PRIVKEY"; then
+          SSL_CERT="$CERT_FULLCHAIN"
+          SSL_KEY="$CERT_PRIVKEY"
+          echo "✅ 找到证书（带后缀）: $SSL_CERT"
+          HAS_SSL=true
+        else
+          echo "⚠️  证书目录存在但文件不完整: $MATCHING_CERT"
+          HAS_SSL=false
+        fi
+      else
+        echo "⚠️  未找到证书目录（域名: $domain）"
+        HAS_SSL=false
       fi
+    else
+      echo "⚠️  证书目录不存在: $CERT_DIR"
+      HAS_SSL=false
     fi
   fi
   
-  if [ -f "$SSL_CERT" ] && [ -f "$SSL_KEY" ]; then
+  if [ "$HAS_SSL" = "true" ]; then
     echo "✅ SSL 证书存在，配置 HTTPS"
-    HAS_SSL=true
   else
     echo "⚠️  SSL 证书不存在，配置 HTTP only"
-    HAS_SSL=false
   fi
   echo ""
   
@@ -244,16 +259,42 @@ echo ""
 # 检查端口监听
 echo "🔍 检查端口监听..."
 echo "----------------------------------------"
-if sudo netstat -tlnp 2>/dev/null | grep -E ":(80|443)" >/dev/null || sudo ss -tlnp 2>/dev/null | grep -E ":(80|443)" >/dev/null; then
-  echo "✅ Nginx 正在监听端口 80/443"
-  echo ""
-  echo "端口监听详情:"
-  sudo netstat -tlnp 2>/dev/null | grep -E ":(80|443)" || sudo ss -tlnp 2>/dev/null | grep -E ":(80|443)" || true
+PORT_80=$(sudo netstat -tlnp 2>/dev/null | grep ":80 " || sudo ss -tlnp 2>/dev/null | grep ":80 " || echo "")
+PORT_443=$(sudo netstat -tlnp 2>/dev/null | grep ":443 " || sudo ss -tlnp 2>/dev/null | grep ":443 " || echo "")
+
+if [ -n "$PORT_80" ]; then
+  echo "✅ 端口 80 正在监听"
+  echo "$PORT_80"
 else
-  echo "⚠️  未检测到端口 80/443 监听"
-  echo "检查 Nginx 进程:"
-  ps aux | grep nginx | grep -v grep || true
+  echo "❌ 端口 80 未监听"
 fi
+echo ""
+
+if [ -n "$PORT_443" ]; then
+  echo "✅ 端口 443 正在监听"
+  echo "$PORT_443"
+else
+  echo "❌ 端口 443 未监听"
+  echo "⚠️  这可能导致 HTTPS 无法访问"
+  echo "   可能原因："
+  echo "   1. 所有网站都配置为 HTTP only（缺少 SSL 证书）"
+  echo "   2. Nginx 配置中没有 HTTPS server 块"
+  echo "   3. 证书路径配置错误"
+fi
+echo ""
+
+# 检查前端服务端口
+echo "🔍 检查前端服务端口..."
+echo "----------------------------------------"
+for site in "${!SITES[@]}"; do
+  IFS=':' read -r domain port <<< "${SITES[$site]}"
+  PORT_STATUS=$(sudo netstat -tlnp 2>/dev/null | grep ":$port " || sudo ss -tlnp 2>/dev/null | grep ":$port " || echo "")
+  if [ -n "$PORT_STATUS" ]; then
+    echo "✅ 端口 $port ($domain) 正在监听"
+  else
+    echo "❌ 端口 $port ($domain) 未监听 - 前端服务可能未启动"
+  fi
+done
 echo ""
 
 # 列出已启用的配置

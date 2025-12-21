@@ -48,13 +48,17 @@ npm install
 
 **hbwy20251220/.env.local:**
 ```
-OPENAI_API_KEY=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
+# 注意：将 YOUR_OPENAI_API_KEY 替换为实际的 OpenAI API Key
+# 获取方式：https://platform.openai.com/api-keys
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 GEMINI_API_KEY=your_gemini_key_here
 ```
 
 **tgmini20251220/.env.local:**
 ```
-OPENAI_API_KEY=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
+# 注意：将 YOUR_OPENAI_API_KEY 替换为实际的 OpenAI API Key
+# 获取方式：https://platform.openai.com/api-keys
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 GEMINI_API_KEY=your_gemini_key_here
 ```
 

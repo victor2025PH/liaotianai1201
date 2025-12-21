@@ -231,7 +231,14 @@ jobs:
             
             # 创建 Nginx 配置
             NGINX_CONFIG="/tmp/${SITE_NAME}.conf"
-            cat > "$NGINX_CONFIG" << EOF
+            
+            # 检查 SSL 证书是否存在
+            SSL_CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+            SSL_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+            
+            if [ -f "$SSL_CERT" ] && [ -f "$SSL_KEY" ]; then
+              # SSL 证书存在，配置 HTTPS
+              cat > "$NGINX_CONFIG" << 'NGINX_EOF'
 # HTTP to HTTPS redirect
 server {
     listen 80;
@@ -244,7 +251,7 @@ server {
     
     # 重定向所有 HTTP 请求到 HTTPS
     location / {
-        return 301 https://\$server_name\$request_uri;
+        return 301 https://$server_name$request_uri;
     }
 }
 

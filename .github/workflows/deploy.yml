@@ -139,12 +139,12 @@ jobs:
             echo "✅ 前端构建完成"
             echo ""
             
-# 检查构建输出（Vite 项目通常是 dist 目录，Next.js 是 .next 目录）
-if [ -d "dist" ]; then
-  echo "✅ 构建输出目录存在: dist"
-  echo "构建输出大小: $(du -sh dist | cut -f1)"
-  IS_NEXTJS=false
-  IS_VITE=true
+            # 检查构建输出（Vite 项目通常是 dist 目录，Next.js 是 .next 目录）
+            if [ -d "dist" ]; then
+              echo "✅ 构建输出目录存在: dist"
+              echo "构建输出大小: $(du -sh dist | cut -f1)"
+              IS_NEXTJS=false
+              IS_VITE=true
 elif [ -d ".next" ]; then
   echo "✅ 构建输出目录存在: .next"
   IS_NEXTJS=true

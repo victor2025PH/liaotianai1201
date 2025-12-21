@@ -13,7 +13,7 @@ AUTH failed: WRONGPASS invalid username-password pair or user is disabled.
 ```
 
 **原因分析：**
-- 你使用的密码：`GTjd0yP2uQSnHeEHTA8CnnEbu`
+- 你使用的密码：`<从 secure_server.sh 输出中获取>`
 - Redis 服务器实际配置的密码：**可能不同**
 - `secure_server.sh` 脚本可能：
   1. 没有成功设置密码
@@ -75,7 +75,8 @@ sleep 2
 sudo systemctl status redis-server
 
 # 测试连接（使用脚本设置的密码）
-redis-cli -a GTjd0yP2uQSnHeEHTA8CnnEbu -h 127.0.0.1 PING
+# 注意：将 YOUR_REDIS_PASSWORD 替换为 secure_server.sh 输出的实际密码
+redis-cli -a YOUR_REDIS_PASSWORD -h 127.0.0.1 PING
 # 应该返回: PONG
 ```
 
@@ -89,7 +90,8 @@ sudo cp /etc/redis/redis.conf /etc/redis/redis.conf.backup.$(date +%Y%m%d_%H%M%S
 sudo nano /etc/redis/redis.conf
 
 # 3. 找到 requirepass 行，确保是：
-requirepass GTjd0yP2uQSnHeEHTA8CnnEbu
+# requirepass YOUR_REDIS_PASSWORD
+# 注意：将 YOUR_REDIS_PASSWORD 替换为 secure_server.sh 输出的实际密码
 
 # 4. 确保 bind 配置正确（只允许本地访问）
 bind 127.0.0.1 ::1
@@ -107,8 +109,10 @@ redis-cli -a GTjd0yP2uQSnHeEHTA8CnnEbu -h 127.0.0.1 PING
 
 ```bash
 # 一键修复脚本
-sudo sed -i 's/^# requirepass.*/requirepass GTjd0yP2uQSnHeEHTA8CnnEbu/' /etc/redis/redis.conf
-sudo sed -i 's/^requirepass.*/requirepass GTjd0yP2uQSnHeEHTA8CnnEbu/' /etc/redis/redis.conf
+# 注意：将 YOUR_REDIS_PASSWORD 替换为 secure_server.sh 输出的实际密码
+REDIS_PASSWORD="YOUR_REDIS_PASSWORD"  # 从 secure_server.sh 输出中获取
+sudo sed -i "s/^# requirepass.*/requirepass $REDIS_PASSWORD/" /etc/redis/redis.conf
+sudo sed -i "s/^requirepass.*/requirepass $REDIS_PASSWORD/" /etc/redis/redis.conf
 
 # 确保 bind 配置正确
 sudo sed -i 's/^# bind 127.0.0.1 ::1/bind 127.0.0.1 ::1/' /etc/redis/redis.conf
@@ -119,7 +123,7 @@ sudo systemctl restart redis-server
 
 # 测试连接
 sleep 2
-redis-cli -a GTjd0yP2uQSnHeEHTA8CnnEbu -h 127.0.0.1 PING
+redis-cli -a "$REDIS_PASSWORD" -h 127.0.0.1 PING
 ```
 
 ### 步骤 3：创建/更新 .env 文件（正确位置）
@@ -140,11 +144,12 @@ fi
 # 创建或更新 .env 文件
 cat >> "$ENV_FILE" << 'EOF'
 # Redis 配置
-REDIS_PASSWORD=GTjd0yP2uQSnHeEHTA8CnnEbu
+# 注意：将 YOUR_REDIS_PASSWORD 替换为 secure_server.sh 输出的实际密码
+REDIS_PASSWORD=YOUR_REDIS_PASSWORD
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
 REDIS_DB=0
-REDIS_URL=redis://:GTjd0yP2uQSnHeEHTA8CnnEbu@127.0.0.1:6379/0
+REDIS_URL=redis://:YOUR_REDIS_PASSWORD@127.0.0.1:6379/0
 EOF
 
 echo "✅ .env 文件已创建/更新: $ENV_FILE"
@@ -207,7 +212,9 @@ fi
 ```bash
 # 1. 验证 Redis 连接
 echo "测试 Redis 连接..."
-redis-cli -a GTjd0yP2uQSnHeEHTA8CnnEbu -h 127.0.0.1 PING
+# 注意：将 YOUR_REDIS_PASSWORD 替换为 secure_server.sh 输出的实际密码
+REDIS_PASSWORD="YOUR_REDIS_PASSWORD"  # 从 secure_server.sh 输出中获取
+redis-cli -a "$REDIS_PASSWORD" -h 127.0.0.1 PING
 # 应该返回: PONG
 
 # 2. 验证 .env 文件
@@ -267,7 +274,8 @@ echo ""
 # 2. 修复 Redis 配置
 echo "[2] 修复 Redis 配置..."
 echo "----------------------------------------"
-TARGET_PASSWORD="GTjd0yP2uQSnHeEHTA8CnnEbu"
+# 注意：将 YOUR_REDIS_PASSWORD 替换为 secure_server.sh 输出的实际密码
+TARGET_PASSWORD="YOUR_REDIS_PASSWORD"  # 从 secure_server.sh 输出中获取
 
 # 备份
 sudo cp "$REDIS_CONF" "${REDIS_CONF}.backup.$(date +%Y%m%d_%H%M%S)"

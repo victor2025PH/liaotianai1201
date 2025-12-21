@@ -349,10 +349,16 @@ jobs:
               
               # 确定端口（从项目配置或使用默认 3000）
               FRONTEND_PORT=3000
-              if [ -f "vite.config.ts" ] || [ -f "vite.config.js" ]; then
-                # 尝试从 vite.config 读取端口配置
-                CONFIG_PORT=$(grep -oP "port:\s*\K\d+" vite.config.ts vite.config.js 2>/dev/null | head -1 || echo "")
-                if [ -n "$CONFIG_PORT" ]; then
+              if [ -f "vite.config.ts" ]; then
+                # 尝试从 vite.config.ts 读取端口配置
+                CONFIG_PORT=$(grep -oP "port:\s*\K\d+" vite.config.ts 2>/dev/null | head -1 || echo "")
+                if [ -n "$CONFIG_PORT" ] && [ "$CONFIG_PORT" -gt 0 ] && [ "$CONFIG_PORT" -lt 65536 ]; then
+                  FRONTEND_PORT=$CONFIG_PORT
+                fi
+              elif [ -f "vite.config.js" ]; then
+                # 尝试从 vite.config.js 读取端口配置
+                CONFIG_PORT=$(grep -oP "port:\s*\K\d+" vite.config.js 2>/dev/null | head -1 || echo "")
+                if [ -n "$CONFIG_PORT" ] && [ "$CONFIG_PORT" -gt 0 ] && [ "$CONFIG_PORT" -lt 65536 ]; then
                   FRONTEND_PORT=$CONFIG_PORT
                 fi
               fi

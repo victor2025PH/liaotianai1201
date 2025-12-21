@@ -69,12 +69,12 @@ export const Technical = () => {
                <p><span className="text-purple-400">function</span> <span className="text-blue-400">claimRedEnvelope</span>(uint256 id) <span className="text-purple-400">external</span> <span className="text-purple-400">nonReentrant</span> {'{'}</p>
                <p className="pl-4 text-gray-500">// Verify Merkle Proof & Anti-Cheat</p>
                <p className="pl-4">require(<span className="text-yellow-400">{'!isBot(msg.sender)'}</span>, "Bot detected");</p>
-               <p className="pl-4">require(<span className="text-yellow-400">{'remainingAmount > 0'}</span>, "Empty");</p>
+               <p className="pl-4">require(<span className="text-yellow-400">{'remainingAmount &gt; 0'}</span>, "Empty");</p>
                <p className="pl-4 text-gray-500">// Atomic Transfer via TON/USDT</p>
                <p className="pl-4"><span className="text-blue-400">IERC20</span>(token).transfer(msg.sender, amount);</p>
                <p className="pl-4"><span className="text-blue-400">emit</span> <span className="text-blue-400">Claimed</span>(msg.sender, amount);</p>
                <p>{'}'}</p>
-               <p className="mt-6 text-green-500 font-bold bg-green-500/10 p-2 rounded border border-green-500/20 inline-block">// {'>'} AUDIT PASSED: 0 Critical Vulnerabilities</p>
+               <p className="mt-6 text-green-500 font-bold bg-green-500/10 p-2 rounded border border-green-500/20 inline-block">// {'&gt;'} AUDIT PASSED: 0 Critical Vulnerabilities</p>
              </div>
           </div>
           

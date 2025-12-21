@@ -94,15 +94,16 @@ fi
 # 确保日志目录存在
 mkdir -p "$SAAS_DEMO_DIR/logs"
 
-# 使用 PM2 启动
+# 使用 PM2 启动（确保在正确的目录下）
 echo "使用 PM2 启动 saas-demo..."
 pm2 start npm \
   --name saas-demo \
-  -- start \
+  --cwd "$SAAS_DEMO_DIR" \
   --error "$SAAS_DEMO_DIR/logs/saas-demo-error.log" \
   --output "$SAAS_DEMO_DIR/logs/saas-demo-out.log" \
   --merge-logs \
-  --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
+  --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+  -- start || {
   echo "⚠️  PM2 启动失败，查看错误..."
   pm2 logs saas-demo --lines 10 --nostream 2>/dev/null || true
   exit 1

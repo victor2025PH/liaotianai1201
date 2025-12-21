@@ -331,6 +331,10 @@ jobs:
             if [ "$NGINX_IS_FAILED" = "failed" ]; then
               echo "⚠️  Nginx 服务处于失败状态，重置失败状态..."
               sudo systemctl reset-failed nginx || true
+              echo "重置完成，重新检查状态..."
+              # 重置后重新检查状态
+              NGINX_STATUS=$(sudo systemctl is-active nginx 2>/dev/null || echo "inactive")
+              echo "重置后 Nginx 服务状态: $NGINX_STATUS"
             fi
             
             if [ "$NGINX_STATUS" != "active" ]; then

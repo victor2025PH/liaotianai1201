@@ -42,15 +42,18 @@
    
    # 2. 重写历史（替换 <API_KEY> 为从 GitHub 错误信息中获取的完整 API Key）
    # 从 GitHub 错误信息中复制完整的 API Key，替换下面的 <API_KEY>
+   # 注意：将 <API_KEY> 替换为从 GitHub 错误信息中获取的完整 API Key
+   API_KEY="<从 GitHub 错误信息中获取的完整 API Key>"
+   
    git filter-branch --force --tree-filter \
      "if [ -f AI_ROBOT_SETUP.md ]; then \
-        sed -i 's|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|YOUR_OPENAI_API_KEY|g' AI_ROBOT_SETUP.md; \
+        sed -i \"s|\$API_KEY|YOUR_OPENAI_API_KEY|g\" AI_ROBOT_SETUP.md; \
       fi; \
       if [ -f docs/FIX_OPENAI_API_KEY_IN_HISTORY.md ]; then \
-        sed -i 's|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|YOUR_OPENAI_API_KEY|g' docs/FIX_OPENAI_API_KEY_IN_HISTORY.md; \
+        sed -i \"s|\$API_KEY|YOUR_OPENAI_API_KEY|g\" docs/FIX_OPENAI_API_KEY_IN_HISTORY.md; \
       fi; \
       if [ -f scripts/fix-openai-api-key-in-history.sh ]; then \
-        sed -i 's|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|YOUR_OPENAI_API_KEY|g' scripts/fix-openai-api-key-in-history.sh; \
+        sed -i \"s|\$API_KEY|YOUR_OPENAI_API_KEY|g\" scripts/fix-openai-api-key-in-history.sh; \
       fi" \
      --prune-empty --tag-name-filter cat -- --all
    
@@ -73,7 +76,7 @@
 
 2. **创建替换文件** `passwords.txt`:
    ```
-   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==>YOUR_OPENAI_API_KEY
+   <从 GitHub 错误信息中获取的完整 API Key>==>YOUR_OPENAI_API_KEY
    ```
 
 3. **在 PowerShell 中执行**:

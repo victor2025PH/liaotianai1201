@@ -62,7 +62,7 @@
    git gc --prune=now --aggressive
    
    # 4. 验证
-   git log --all -p | grep -i "sk-proj-kwiU8PXvsuLe1PC1DqQ2E" || echo "✅ 没有找到 API Key"
+   git log --all -p | grep -i "<API_KEY>" || echo "✅ 没有找到 API Key"
    
    # 5. 强制推送
    git push origin --force --all
@@ -135,7 +135,7 @@
 
 ```bash
 # 在 Git Bash 中执行
-git log --all -p | grep -i "sk-proj-kwiU8PXvsuLe1PC1DqQ2E"
+git log --all -p | grep -i "<API_KEY>"
 
 # 应该没有输出（如果还有，需要继续修复）
 ```

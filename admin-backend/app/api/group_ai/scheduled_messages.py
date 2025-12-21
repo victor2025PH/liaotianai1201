@@ -12,7 +12,7 @@ from sqlalchemy import desc
 from app.db import get_db
 from app.models.unified_features import ScheduledMessageTask, ScheduledMessageLog
 from app.api.deps import get_current_active_user
-from app.middleware.permission import check_permission
+from app.middleware.permission import check_permission, check_permission_decorator
 from app.core.permissions import PermissionCode
 from app.models.user import User
 from app.core.cache import cached, invalidate_cache
@@ -135,7 +135,7 @@ class ScheduledMessageLogResponse(BaseModel):
 # ============ API 端點 ============
 
 @router.post("", response_model=ScheduledMessageResponse, status_code=status.HTTP_201_CREATED)
-@check_permission(PermissionCode.GROUP_AI_MANAGE)
+@check_permission_decorator(PermissionCode.GROUP_AI_MANAGE)
 async def create_scheduled_message(
     data: ScheduledMessageCreate,
     db: Session = Depends(get_db),
@@ -232,7 +232,7 @@ async def get_scheduled_message(
 
 
 @router.put("/{task_id}", response_model=ScheduledMessageResponse)
-@check_permission(PermissionCode.GROUP_AI_MANAGE)
+@check_permission_decorator(PermissionCode.GROUP_AI_MANAGE)
 async def update_scheduled_message(
     task_id: str,
     data: ScheduledMessageUpdate,
@@ -267,7 +267,7 @@ async def update_scheduled_message(
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-@check_permission(PermissionCode.GROUP_AI_MANAGE)
+@check_permission_decorator(PermissionCode.GROUP_AI_MANAGE)
 async def delete_scheduled_message(
     task_id: str,
     db: Session = Depends(get_db),

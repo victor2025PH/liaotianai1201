@@ -12,7 +12,7 @@ from sqlalchemy import desc
 from app.db import get_db
 from app.models.unified_features import KeywordTriggerRule
 from app.api.deps import get_current_active_user
-from app.middleware.permission import check_permission
+from app.middleware.permission import check_permission, check_permission_decorator, check_permission_decorator
 from app.core.permissions import PermissionCode
 from app.models.user import User
 from app.core.cache import cached, invalidate_cache
@@ -108,7 +108,7 @@ class KeywordTriggerResponse(BaseModel):
 # ============ API 端點 ============
 
 @router.post("", response_model=KeywordTriggerResponse, status_code=status.HTTP_201_CREATED)
-@check_permission(PermissionCode.GROUP_AI_MANAGE)
+@check_permission_decorator(PermissionCode.GROUP_AI_MANAGE)
 async def create_keyword_trigger(
     data: KeywordTriggerCreate,
     db: Session = Depends(get_db),
@@ -201,7 +201,7 @@ async def get_keyword_trigger(
 
 
 @router.put("/{rule_id}", response_model=KeywordTriggerResponse)
-@check_permission(PermissionCode.GROUP_AI_MANAGE)
+@check_permission_decorator(PermissionCode.GROUP_AI_MANAGE)
 async def update_keyword_trigger(
     rule_id: str,
     data: KeywordTriggerUpdate,
@@ -236,7 +236,7 @@ async def update_keyword_trigger(
 
 
 @router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
-@check_permission(PermissionCode.GROUP_AI_MANAGE)
+@check_permission_decorator(PermissionCode.GROUP_AI_MANAGE)
 async def delete_keyword_trigger(
     rule_id: str,
     db: Session = Depends(get_db),

@@ -12,7 +12,7 @@ from sqlalchemy import desc
 from app.db import get_db
 from app.models.unified_features import GroupJoinConfig, GroupJoinLog, GroupActivityMetrics
 from app.api.deps import get_current_active_user
-from app.middleware.permission import check_permission
+from app.middleware.permission import check_permission, check_permission_decorator
 from app.core.permissions import PermissionCode
 from app.models.user import User
 from app.core.cache import cached, invalidate_cache
@@ -109,7 +109,7 @@ class GroupActivityMetricsResponse(BaseModel):
 # ============ API 端點 ============
 
 @router.post("/join-configs", response_model=GroupJoinConfigResponse, status_code=status.HTTP_201_CREATED)
-@check_permission(PermissionCode.GROUP_AI_MANAGE)
+@check_permission_decorator(PermissionCode.GROUP_AI_MANAGE)
 async def create_group_join_config(
     data: GroupJoinConfigCreate,
     db: Session = Depends(get_db),
@@ -198,7 +198,7 @@ async def get_group_join_config(
 
 
 @router.put("/join-configs/{config_id}", response_model=GroupJoinConfigResponse)
-@check_permission(PermissionCode.GROUP_AI_MANAGE)
+@check_permission_decorator(PermissionCode.GROUP_AI_MANAGE)
 async def update_group_join_config(
     config_id: str,
     data: GroupJoinConfigUpdate,
@@ -233,7 +233,7 @@ async def update_group_join_config(
 
 
 @router.delete("/join-configs/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
-@check_permission(PermissionCode.GROUP_AI_MANAGE)
+@check_permission_decorator(PermissionCode.GROUP_AI_MANAGE)
 async def delete_group_join_config(
     config_id: str,
     db: Session = Depends(get_db),
@@ -278,7 +278,7 @@ async def get_group_activity_metrics(
 
 
 @router.post("/activity-metrics", response_model=GroupActivityMetricsResponse, status_code=status.HTTP_201_CREATED)
-@check_permission(PermissionCode.GROUP_AI_MANAGE)
+@check_permission_decorator(PermissionCode.GROUP_AI_MANAGE)
 async def create_group_activity_metrics(
     group_id: int,
     message_count_24h: int = 0,

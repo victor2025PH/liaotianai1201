@@ -89,6 +89,47 @@ def require_all_permissions(permission_codes: List[str]):
     return permission_checker
 
 
+def check_permission_decorator(permission_code):
+    """
+    權限檢查裝飾器（用於 FastAPI 路由）
+    
+    Usage:
+        @router.post("/endpoint")
+        @check_permission_decorator(PermissionCode.ACCOUNT_VIEW)
+        async def my_endpoint(
+            current_user: User = Depends(get_current_active_user),
+            db: Session = Depends(get_db)
+        ):
+            ...
+    """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # 從 kwargs 中獲取 current_user 和 db
+            current_user = kwargs.get('current_user')
+            db = kwargs.get('db')
+            
+            if not current_user or not db:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="需要認證"
+                )
+            
+            # 獲取權限代碼字符串
+            perm_code = permission_code.value if hasattr(permission_code, 'value') else str(permission_code)
+            
+            # 檢查權限
+            if not user_has_permission(db, user=current_user, permission_code=perm_code):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"沒有權限執行此操作，需要權限: {perm_code}"
+                )
+            
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
 def check_permission(
     user: User,
     permission_code: str,

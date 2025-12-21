@@ -130,7 +130,7 @@ grep -r "<API_KEY>" . --exclude-dir=.git
 # 应该没有输出（如果还有，需要继续修复）
 
 # 检查历史提交
-git log --all -p | grep -i "sk-proj-kwiU8PXvsuLe1PC1DqQ2E"
+git log --all -p | grep -i "<API_KEY>"
 
 # 如果重写历史后，应该没有输出
 ```

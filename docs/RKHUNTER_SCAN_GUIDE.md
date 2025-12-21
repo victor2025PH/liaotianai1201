@@ -7,19 +7,67 @@
 - 🔍 正在扫描进程...
 - 🔍 正在扫描 Linux 镜像...
 
-## 🔍 查看完整扫描结果
+## ⚠️ 为什么没有日志文件？
 
-### 1. 查看 Rkhunter 扫描报告
+如果看到 `No such file or directory` 错误，可能的原因：
+
+1. **首次运行**：Rkhunter 在完成第一次扫描后才会创建日志文件
+2. **扫描未完成**：扫描还在进行中，日志文件尚未生成
+3. **日志在其他位置**：某些系统配置可能将日志放在不同位置
+
+## 🔍 查找日志文件位置
 
 ```bash
-# 查看最后一次扫描的完整报告
-sudo cat /var/log/rkhunter.log | tail -100
+# 1. 检查日志文件是否存在（多个可能位置）
+ls -la /var/log/rkhunter.log 2>/dev/null && echo "✅ 找到日志文件" || echo "❌ 日志文件不存在"
+ls -la /var/log/rkhunter/rkhunter.log 2>/dev/null && echo "✅ 找到日志文件（备用位置）" || echo "❌ 备用位置也不存在"
+
+# 2. 查找所有 rkhunter 相关文件
+sudo find /var/log -name "*rkhunter*" -type f 2>/dev/null
+
+# 3. 检查 Rkhunter 配置中的日志路径
+sudo grep -E "LOGFILE|LOG_DIR" /etc/rkhunter.conf 2>/dev/null || \
+sudo grep -E "LOGFILE|LOG_DIR" /etc/rkhunter/rkhunter.conf 2>/dev/null || \
+echo "配置文件不存在"
+```
+
+## 🔍 查看完整扫描结果
+
+### 方法 1：等待扫描完成（推荐）
+
+```bash
+# 等待当前扫描完成（可能需要 5-10 分钟）
+# 扫描完成后，日志文件会自动创建
+
+# 然后查看日志
+sudo tail -100 /var/log/rkhunter.log
 
 # 或者查看警告和错误
-sudo grep -E "Warning|Error|Found" /var/log/rkhunter.log | tail -50
+sudo grep -E "Warning|Error|Found|Suspicious" /var/log/rkhunter.log | tail -50
+```
 
-# 查看扫描摘要
+### 方法 2：实时查看扫描输出
+
+```bash
+# 重新运行扫描，直接查看输出（不生成日志文件）
+sudo rkhunter --check --skip-keypress
+
+# 或者只显示警告
 sudo rkhunter --check --skip-keypress --report-warnings-only
+
+# 或者将输出保存到文件
+sudo rkhunter --check --skip-keypress 2>&1 | tee /tmp/rkhunter_output.txt
+cat /tmp/rkhunter_output.txt
+```
+
+### 方法 3：查看扫描摘要
+
+```bash
+# 查看最后一次扫描的摘要
+sudo rkhunter --check --skip-keypress --report-warnings-only
+
+# 查看所有检查项的状态
+sudo rkhunter --list
 ```
 
 ### 2. 查看 Rkhunter 属性数据库
@@ -218,3 +266,4 @@ No rootkits found
 3. **更新系统**：保持系统和安全工具更新
 4. **防火墙**：确保 UFW 或 iptables 正确配置
 5. **SSH 安全**：禁用密码登录，只使用密钥
+

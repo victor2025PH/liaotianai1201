@@ -330,7 +330,6 @@ jobs:
             NGINX_STATUS_EXIT=$?
             NGINX_IS_FAILED=$(sudo systemctl is-failed nginx 2>/dev/null)
             NGINX_FAILED_EXIT=$?
-            set -e
             
             # 如果命令失败或返回空值，使用默认值
             if [ $NGINX_STATUS_EXIT -ne 0 ] || [ -z "$NGINX_STATUS" ]; then
@@ -339,6 +338,9 @@ jobs:
             if [ $NGINX_FAILED_EXIT -ne 0 ] || [ -z "$NGINX_IS_FAILED" ]; then
               NGINX_IS_FAILED="unknown"
             fi
+            
+            # 恢复 set -e（在设置默认值之后）
+            set -e
             
             echo "Nginx 服务状态: $NGINX_STATUS"
             if [ "$NGINX_IS_FAILED" = "failed" ]; then

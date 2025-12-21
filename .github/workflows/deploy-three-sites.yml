@@ -10,6 +10,12 @@ on:
       - 'aizkw20251219/**'
       - '.github/workflows/deploy-three-sites.yml'
   workflow_dispatch:
+    inputs:
+      deploy_all:
+        description: '部署所有三个网站'
+        required: false
+        default: 'true'
+        type: boolean
 
 jobs:
   deploy:
@@ -293,7 +299,37 @@ server {
         proxy_read_timeout 86400;
     }
 }
-EOF
+NGINX_EOF
+            else
+              # SSL 证书不存在，只配置 HTTP
+              echo "⚠️  SSL 证书不存在，配置 HTTP only"
+              cat > "$NGINX_CONFIG" << 'NGINX_EOF'
+# HTTP server (SSL certificate not found)
+server {
+    listen 80;
+    server_name $DOMAIN;
+
+    client_max_body_size 50M;
+
+    location / {
+        proxy_pass http://127.0.0.1:$PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 86400;
+    }
+}
+NGINX_EOF
+            fi
+            
+            # 替换变量（使用 envsubst 或 sed）
+            sed -i "s|\\$DOMAIN|$DOMAIN|g" "$NGINX_CONFIG"
+            sed -i "s|\\$PORT|$PORT|g" "$NGINX_CONFIG"
             
             # 复制配置到 Nginx
             sudo cp "$NGINX_CONFIG" "/etc/nginx/sites-available/$DOMAIN"

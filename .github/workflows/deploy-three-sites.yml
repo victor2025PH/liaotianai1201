@@ -214,11 +214,9 @@ jobs:
 #!/bin/bash
 # 前端服务启动脚本
 # 使用全局 serve 命令启动静态文件服务
-
 # 获取参数
 DIST_DIR="$1"
 PORT="$2"
-
 # 启动 serve
 exec serve -s "$DIST_DIR" -l "$PORT" --no-clipboard --no-open
 SCRIPT_EOF

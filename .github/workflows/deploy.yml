@@ -69,7 +69,7 @@ jobs:
             fi
             
             # 拉取最新代码
-            echo "📥 [1/5] 拉取最新代码..."
+            echo "📥 [1/4] 拉取最新代码..."
             echo "----------------------------------------"
             
             # 获取远程分支信息
@@ -105,32 +105,8 @@ jobs:
             echo "✅ 找到 package.json"
             echo ""
             
-            # 停止可能运行的服务（PM2 或其他进程）
-            echo "🛑 [2/6] 停止现有服务..."
-            echo "----------------------------------------"
-            
-            # 停止 PM2 进程（如果存在）
-            if command -v pm2 >/dev/null 2>&1; then
-              echo "停止 PM2 进程..."
-              pm2 stop all 2>/dev/null || true
-              pm2 delete all 2>/dev/null || true
-              echo "✅ PM2 进程已停止"
-            else
-              echo "⚠️  PM2 未安装，跳过"
-            fi
-            
-            # 停止占用端口 3000 的进程
-            if sudo lsof -i :3000 >/dev/null 2>&1; then
-              echo "停止占用端口 3000 的进程..."
-              sudo lsof -ti :3000 | xargs sudo kill -9 2>/dev/null || true
-              sleep 2
-              echo "✅ 端口 3000 已释放"
-            fi
-            
-            echo ""
-            
             # 安装依赖（在项目根目录）
-            echo "📦 [3/6] 安装依赖..."
+            echo "📦 [2/4] 安装依赖..."
             echo "----------------------------------------"
             
             # 确保在项目根目录
@@ -149,7 +125,7 @@ jobs:
             echo ""
             
             # 构建前端（在项目根目录）
-            echo "🔨 [4/6] 构建前端..."
+            echo "🔨 [3/4] 构建前端..."
             echo "----------------------------------------"
             
             # 设置 Node.js 内存限制（防止内存溢出）
@@ -163,130 +139,17 @@ jobs:
             echo "✅ 前端构建完成"
             echo ""
             
-            # 检查构建输出
-            if [ ! -d ".next" ]; then
-              echo "⚠️  警告: .next 目录不存在，构建可能未成功"
-              exit 1
-            else
+            # 检查构建输出（Vite 项目通常是 dist 目录，Next.js 是 .next 目录）
+            if [ -d "dist" ]; then
+              echo "✅ 构建输出目录存在: dist"
+            elif [ -d ".next" ]; then
               echo "✅ 构建输出目录存在: .next"
-            fi
-            
-            # 检查 standalone 输出
-            if [ ! -f ".next/standalone/server.js" ]; then
-              echo "⚠️  警告: standalone/server.js 不存在，尝试使用标准启动方式..."
-              USE_STANDALONE=false
             else
-              echo "✅ standalone 输出存在"
-              USE_STANDALONE=true
+              echo "⚠️  警告: 未找到 dist 或 .next 目录，但继续部署"
             fi
-            
-            echo ""
-            
-            # 启动前端应用
-            echo "🚀 [5/7] 启动前端应用..."
-            echo "----------------------------------------"
-            
-            # 设置环境变量
-            export NODE_ENV=production
-            export PORT=3000
-            export NODE_OPTIONS="--max-old-space-size=3072"
-            
-            # 使用 PM2 启动（如果可用）
-            if command -v pm2 >/dev/null 2>&1; then
-              echo "使用 PM2 启动应用..."
-              
-              # 创建 PM2 ecosystem 配置（临时）
-              PM2_CONFIG="/tmp/pm2-frontend-$(date +%s).config.js"
-              cat > "$PM2_CONFIG" << EOF
-module.exports = {
-  apps: [{
-    name: "frontend",
-    cwd: "$PROJECT_DIR",
-    script: "$PROJECT_DIR/.next/standalone/server.js",
-    interpreter: "/usr/bin/node",
-    env: {
-      NODE_ENV: "production",
-      PORT: 3000,
-      NODE_OPTIONS: "--max-old-space-size=3072"
-    },
-    error_file: "$PROJECT_DIR/logs/frontend-error.log",
-    out_file: "$PROJECT_DIR/logs/frontend-out.log",
-    log_date_format: "YYYY-MM-DD HH:mm:ss Z",
-    merge_logs: true,
-    autorestart: true,
-    watch: false,
-    max_memory_restart: "2G",
-    instances: 1,
-    exec_mode: "fork"
-  }]
-};
-EOF
-              
-              # 确保日志目录存在
-              mkdir -p "$PROJECT_DIR/logs"
-              
-              # 启动应用
-              pm2 start "$PM2_CONFIG" --name frontend || {
-                echo "⚠️  PM2 启动失败，尝试直接启动..."
-                USE_PM2=false
-              }
-              
-              if [ "$USE_PM2" != "false" ]; then
-                pm2 save || true
-                echo "✅ PM2 应用已启动"
-                pm2 list
-              fi
-            else
-              USE_PM2=false
-            fi
-            
-            # 如果 PM2 不可用或启动失败，使用 nohup 后台启动
-            if [ "$USE_PM2" = "false" ]; then
-              echo "使用 nohup 后台启动应用..."
-              
-              # 确保日志目录存在
-              mkdir -p "$PROJECT_DIR/logs"
-              
-              if [ "$USE_STANDALONE" = "true" ]; then
-                # 使用 standalone 模式
-                nohup node .next/standalone/server.js > "$PROJECT_DIR/logs/frontend-out.log" 2> "$PROJECT_DIR/logs/frontend-error.log" &
-                APP_PID=$!
-              else
-                # 使用标准启动
-                nohup npm start > "$PROJECT_DIR/logs/frontend-out.log" 2> "$PROJECT_DIR/logs/frontend-error.log" &
-                APP_PID=$!
-              fi
-              
-              echo "应用进程 PID: $APP_PID"
-              sleep 3
-              
-              # 检查进程是否还在运行
-              if ps -p $APP_PID > /dev/null 2>&1; then
-                echo "✅ 应用已启动（PID: $APP_PID）"
-              else
-                echo "❌ 应用启动失败，查看日志:"
-                tail -20 "$PROJECT_DIR/logs/frontend-error.log" || true
-                exit 1
-              fi
-            fi
-            
-            # 等待应用启动
-            echo "等待应用启动..."
-            sleep 5
-            
-            # 检查端口 3000 是否在监听
-            if sudo lsof -i :3000 >/dev/null 2>&1; then
-              echo "✅ 端口 3000 正在监听"
-            else
-              echo "⚠️  警告: 端口 3000 未在监听，应用可能未成功启动"
-              echo "查看错误日志:"
-              tail -30 "$PROJECT_DIR/logs/frontend-error.log" 2>/dev/null || echo "无法读取日志"
-            fi
-            
-            echo ""
             
             # 重载 Nginx
-            echo "🔄 [6/7] 重载 Nginx..."
+            echo "🔄 [4/4] 重载 Nginx..."
             echo "----------------------------------------"
             
             sudo systemctl reload nginx || {
@@ -301,7 +164,7 @@ EOF
             echo ""
             
             # 验证服务状态
-            echo "🔍 [6/6] 验证服务状态..."
+            echo "🔍 验证服务状态..."
             echo "----------------------------------------"
             
             # 检查 Nginx 状态

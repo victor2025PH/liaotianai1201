@@ -113,16 +113,30 @@ for SITE_INFO in "${SITES[@]}"; do
     # 检查目录
     if [ ! -d "$SITE_DIR" ]; then
         echo "❌ 目录不存在: $SITE_DIR"
+        echo "当前项目目录内容:"
+        ls -la "$PROJECT_DIR" | grep -E "tgmini|hbwy|aizkw" || ls -la "$PROJECT_DIR" | head -20
         continue
     fi
     
-    cd "$SITE_DIR"
+    cd "$SITE_DIR" || {
+        echo "❌ 无法进入目录: $SITE_DIR"
+        continue
+    }
+    
+    # 显示当前目录
+    echo "当前目录: $(pwd)"
+    echo "目录内容:"
+    ls -la | head -10
     
     # 检查 package.json
     if [ ! -f "package.json" ]; then
         echo "❌ package.json 不存在"
+        echo "尝试查找 package.json..."
+        find . -name "package.json" -type f 2>/dev/null | head -5
         continue
     fi
+    
+    echo "✅ 找到 package.json"
     
     # 清理旧的构建
     echo "🧹 清理旧的构建..."
@@ -223,7 +237,14 @@ for SITE_INFO in "${SITES[@]}"; do
     echo "配置 Nginx: $DOMAIN -> 端口 $PORT"
     
     NGINX_CONFIG="/tmp/${DIR}.conf"
-    cat > "$NGINX_CONFIG" << EOF
+    
+    # 检查 SSL 证书是否存在
+    SSL_CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+    SSL_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+    
+    if [ -f "$SSL_CERT" ] && [ -f "$SSL_KEY" ]; then
+        # SSL 证书存在，配置 HTTPS
+        cat > "$NGINX_CONFIG" << EOF
 # HTTP to HTTPS redirect
 server {
     listen 80;
@@ -243,8 +264,8 @@ server {
     listen 443 ssl http2;
     server_name $DOMAIN;
 
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_certificate $SSL_CERT;
+    ssl_certificate_key $SSL_KEY;
     
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384';
@@ -273,6 +294,32 @@ server {
     }
 }
 EOF
+    else
+        # SSL 证书不存在，只配置 HTTP
+        echo "⚠️  SSL 证书不存在，配置 HTTP only"
+        cat > "$NGINX_CONFIG" << EOF
+# HTTP server (SSL certificate not found)
+server {
+    listen 80;
+    server_name $DOMAIN;
+
+    client_max_body_size 50M;
+
+    location / {
+        proxy_pass http://127.0.0.1:$PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 86400;
+    }
+}
+EOF
+    fi
     
     # 复制配置
     sudo cp "$NGINX_CONFIG" "/etc/nginx/sites-available/$DOMAIN"
@@ -285,15 +332,22 @@ done
 
 # 测试 Nginx 配置
 echo "测试 Nginx 配置..."
-sudo nginx -t || {
-    echo "⚠️  Nginx 配置测试失败，但继续..."
-}
-
-# 重载 Nginx
-echo "重载 Nginx..."
-sudo systemctl reload nginx || sudo systemctl restart nginx || {
-    echo "⚠️  Nginx reload 失败"
-}
+if sudo nginx -t; then
+    echo "✅ Nginx 配置测试通过"
+    # 重载 Nginx
+    echo "重载 Nginx..."
+    sudo systemctl reload nginx || sudo systemctl restart nginx || {
+        echo "⚠️  Nginx reload 失败，查看状态..."
+        sudo systemctl status nginx --no-pager -l || true
+    }
+else
+    echo "❌ Nginx 配置测试失败"
+    echo "查看详细错误..."
+    sudo nginx -t 2>&1 | tail -20
+    echo ""
+    echo "⚠️  跳过 Nginx 配置，但服务已在端口上运行"
+    echo "你可以手动配置 Nginx 或使用 Certbot 获取 SSL 证书"
+fi
 
 echo "✅ Nginx 配置完成"
 echo ""

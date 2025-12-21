@@ -62,8 +62,11 @@ cd /d/telegram-ai-system
 git branch backup-before-history-rewrite
 
 # 2. 重写历史（替换所有文件中的 API Key）
+# 注意：将 <API_KEY> 替换为从 GitHub 错误信息中获取的完整 API Key
+API_KEY="<从 GitHub 错误信息中获取的完整 API Key>"
+
 git filter-branch --force --tree-filter \
-  "find . -type f \( -name '*.md' -o -name '*.sh' \) -exec sed -i 's|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|YOUR_OPENAI_API_KEY|g' {} \;" \
+  "find . -type f \( -name '*.md' -o -name '*.sh' \) -exec sed -i \"s|\$API_KEY|YOUR_OPENAI_API_KEY|g\" {} \;" \
   --prune-empty --tag-name-filter cat -- --all
 
 # 3. 清理
@@ -122,7 +125,7 @@ git push origin main
 
 ```bash
 # 检查当前文件
-grep -r "sk-proj-kwiU8PXvsuLe1PC1DqQ2E" . --exclude-dir=.git
+grep -r "<API_KEY>" . --exclude-dir=.git
 
 # 应该没有输出（如果还有，需要继续修复）
 

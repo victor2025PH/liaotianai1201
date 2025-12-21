@@ -207,10 +207,10 @@ jobs:
               exit 1
             }
             
-            # 生成启动脚本（使用全局 serve，不经过 npx）
+            # 生成启动脚本（直接在脚本中写入路径和端口，避免参数传递问题）
             echo "生成启动脚本..."
             START_SCRIPT="$SITE_DIR/start-frontend.sh"
-            printf '#!/bin/bash\n# 前端服务启动脚本\n# 使用全局 serve 命令启动静态文件服务\n# 获取参数\nDIST_DIR="$1"\nPORT="$2"\n# 启动 serve\nexec serve -s "$DIST_DIR" -l "$PORT" --no-clipboard --no-open\n' > "$START_SCRIPT"
+            printf '#!/bin/bash\n# 前端服务启动脚本\n# 使用全局 serve 命令启动静态文件服务\nset -e\nDIST_DIR="%s"\nPORT=%s\n# 检查 serve 命令是否存在\nif ! command -v serve >/dev/null 2>&1; then\n  echo "错误: serve 命令未找到，请先安装: npm install -g serve"\n  exit 1\nfi\n# 检查 dist 目录是否存在\nif [ ! -d "$DIST_DIR" ]; then\n  echo "错误: dist 目录不存在: $DIST_DIR"\n  exit 1\nfi\n# 启动 serve\nexec serve -s "$DIST_DIR" -l "$PORT" --no-clipboard --no-open\n' "$SITE_DIR/dist" "$PORT" > "$START_SCRIPT"
             
             chmod +x "$START_SCRIPT"
             echo "✅ 启动脚本已生成: $START_SCRIPT"
@@ -218,11 +218,10 @@ jobs:
             cat "$START_SCRIPT"
             echo ""
             
-            # 使用 PM2 启动脚本
+            # 使用 PM2 启动脚本（不需要传递参数，路径已写入脚本）
             echo "使用 PM2 启动前端服务..."
             pm2 start "$START_SCRIPT" \
               --name "$PM2_NAME" \
-              -- "$SITE_DIR/dist" "$PORT" \
               --error "$PROJECT_DIR/logs/${SITE_NAME}-error.log" \
               --output "$PROJECT_DIR/logs/${SITE_NAME}-out.log" \
               --merge-logs \
@@ -238,9 +237,19 @@ jobs:
             echo "✅ 服务已启动"
             echo ""
             
+            # 立即检查 PM2 状态
+            echo "检查 PM2 进程状态..."
+            sleep 2
+            PM2_STATUS=$(pm2 describe "$PM2_NAME" 2>/dev/null | grep -E "status|restarts" || echo "")
+            echo "PM2 状态: $PM2_STATUS"
+            if echo "$PM2_STATUS" | grep -q "errored\|stopped"; then
+              echo "⚠️  PM2 进程状态异常，查看日志..."
+              pm2 logs "$PM2_NAME" --lines 30 --nostream 2>/dev/null || true
+            fi
+            
             # 等待启动（延长等待时间，给 Node.js 应用更多启动时间）
             echo "等待服务启动..."
-            sleep 15
+            sleep 13
             
             # 检查服务状态
             if sudo lsof -i :$PORT >/dev/null 2>&1; then

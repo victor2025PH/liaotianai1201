@@ -139,20 +139,50 @@ start_frontend() {
   
   # 启动服务
   if [ "$KEYWORD" = "saas-demo" ]; then
-    # saas-demo 使用 npm start
+    # saas-demo 优先使用 standalone 模式
     mkdir -p "$PROJECT_DIR/logs"
-    pm2 start npm \
-      --name "$PM2_NAME" \
-      --cwd "$PROJECT_DIR" \
-      --error "$PROJECT_DIR/logs/${PM2_NAME}-error.log" \
-      --output "$PROJECT_DIR/logs/${PM2_NAME}-out.log" \
-      --merge-logs \
-      --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-      -- start || {
-      echo "❌ $PM2_NAME 启动失败"
-      cd "$PROJECT_ROOT" || exit 1
-      return 1
-    }
+    
+    if [ -f "$PROJECT_DIR/.next/standalone/server.js" ]; then
+      echo "使用 standalone 模式启动..."
+      pm2 start ".next/standalone/server.js" \
+        --name "$PM2_NAME" \
+        --interpreter node \
+        --cwd "$PROJECT_DIR" \
+        --env PORT=3000 \
+        --env NODE_ENV=production \
+        --error "$PROJECT_DIR/logs/${PM2_NAME}-error.log" \
+        --output "$PROJECT_DIR/logs/${PM2_NAME}-out.log" \
+        --merge-logs \
+        --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
+        echo "⚠️  standalone 启动失败，尝试使用 npm start..."
+        pm2 start npm \
+          --name "$PM2_NAME" \
+          --cwd "$PROJECT_DIR" \
+          --error "$PROJECT_DIR/logs/${PM2_NAME}-error.log" \
+          --output "$PROJECT_DIR/logs/${PM2_NAME}-out.log" \
+          --merge-logs \
+          --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+          -- start || {
+          echo "❌ $PM2_NAME 启动失败"
+          cd "$PROJECT_ROOT" || exit 1
+          return 1
+        }
+      }
+    else
+      echo "使用 npm start 启动..."
+      pm2 start npm \
+        --name "$PM2_NAME" \
+        --cwd "$PROJECT_DIR" \
+        --error "$PROJECT_DIR/logs/${PM2_NAME}-error.log" \
+        --output "$PROJECT_DIR/logs/${PM2_NAME}-out.log" \
+        --merge-logs \
+        --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+        -- start || {
+        echo "❌ $PM2_NAME 启动失败"
+        cd "$PROJECT_ROOT" || exit 1
+        return 1
+      }
+    fi
   elif [ "$BUILD_DIR" = "dist" ] || [ "$BUILD_DIR" = "build" ]; then
     # 使用 serve 启动静态文件
     pm2 start serve \

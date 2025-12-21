@@ -114,7 +114,7 @@ git branch backup-before-api-key-fix
 bash scripts/fix-openai-api-key-in-history.sh
 
 # 3. 验证修复
-git log --all -p | Select-String -Pattern "sk-proj-kwiU8PXvsuLe1PC1DqQ2E" -Context 2
+git log --all -p | Select-String -Pattern "<API_KEY>" -Context 2
 
 # 4. 如果确认无误，强制推送
 git push origin --force --all
@@ -146,12 +146,12 @@ git push origin --force --all
 
 ```bash
 # 检查历史中是否还有 API Key
-git log --all -p | grep -i "sk-proj-kwiU8PXvsuLe1PC1DqQ2E"
+git log --all -p | grep -i "<API_KEY>"
 
 # 应该没有输出（如果还有，需要继续修复）
 
 # 检查当前文件
-grep -r "sk-proj-kwiU8PXvsuLe1PC1DqQ2E" . --exclude-dir=.git
+grep -r "<API_KEY>" . --exclude-dir=.git
 
 # 应该没有输出
 ```

@@ -116,7 +116,7 @@ bash scripts/fix-openai-api-key-in-history.sh
 
 ```powershell
 # 检查历史中是否还有 API Key
-git log --all -p | Select-String -Pattern "sk-proj-kwiU8PXvsuLe1PC1DqQ2E"
+git log --all -p | Select-String -Pattern "<API_KEY>"
 
 # 应该没有输出（如果还有，需要继续修复）
 ```

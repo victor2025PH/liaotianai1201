@@ -87,8 +87,10 @@ git push origin --force --all
 
 2. **创建替换文件** `passwords.txt`:
    ```
-   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==>YOUR_OPENAI_API_KEY
+   <从 GitHub 错误信息中获取的完整 API Key>==>YOUR_OPENAI_API_KEY
    ```
+   
+   **注意**: 将 `<从 GitHub 错误信息中获取的完整 API Key>` 替换为 GitHub 错误信息中显示的完整 API Key。
 
 3. **执行 BFG**:
    ```bash

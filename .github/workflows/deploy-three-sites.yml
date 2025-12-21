@@ -304,7 +304,7 @@ SCRIPT_EOF
             
             if [ -f "$SSL_CERT" ] && [ -f "$SSL_KEY" ]; then
               # SSL 证书存在，配置 HTTPS
-              cat > "$NGINX_CONFIG" << NGINX_EOF
+              cat > "$NGINX_CONFIG" << 'NGINX_EOF'
 # HTTP to HTTPS redirect
 server {
     listen 80;
@@ -317,7 +317,7 @@ server {
     
     # 重定向所有 HTTP 请求到 HTTPS
     location / {
-        return 301 https://\$server_name\$request_uri;
+        return 301 https://$server_name$request_uri;
     }
 }
 
@@ -349,21 +349,24 @@ server {
     location / {
         proxy_pass http://127.0.0.1:${PORT};
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
         proxy_read_timeout 86400;
     }
 }
 NGINX_EOF
+              # 替换变量
+              sed -i "s|\${DOMAIN}|$DOMAIN|g" "$NGINX_CONFIG"
+              sed -i "s|\${PORT}|$PORT|g" "$NGINX_CONFIG"
             else
               # SSL 证书不存在，只配置 HTTP
               echo "⚠️  SSL 证书不存在，配置 HTTP only"
-              cat > "$NGINX_CONFIG" << NGINX_EOF
+              cat > "$NGINX_CONFIG" << 'NGINX_EOF'
 # HTTP server (SSL certificate not found)
 server {
     listen 80;
@@ -374,17 +377,20 @@ server {
     location / {
         proxy_pass http://127.0.0.1:${PORT};
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
         proxy_read_timeout 86400;
     }
 }
 NGINX_EOF
+              # 替换变量
+              sed -i "s|\${DOMAIN}|$DOMAIN|g" "$NGINX_CONFIG"
+              sed -i "s|\${PORT}|$PORT|g" "$NGINX_CONFIG"
             fi
             
             # 复制配置到 Nginx

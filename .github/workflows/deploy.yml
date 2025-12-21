@@ -14,7 +14,7 @@ on:
       deploy_single:
         description: '部署单个 aizkw 项目'
         required: false
-        default: 'true'
+        default: true
         type: boolean
 
 jobs:

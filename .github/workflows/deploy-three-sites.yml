@@ -14,7 +14,7 @@ on:
       deploy_all:
         description: '部署所有三个网站'
         required: false
-        default: 'true'
+        default: true
         type: boolean
 
 jobs:
@@ -292,94 +292,12 @@ jobs:
             SSL_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
             
             if [ -f "$SSL_CERT" ] && [ -f "$SSL_KEY" ]; then
-              # SSL 证书存在，配置 HTTPS
-              cat > "$NGINX_CONFIG" << 'NGINX_EOF'
-# HTTP to HTTPS redirect
-server {
-    listen 80;
-    server_name ${DOMAIN};
-    
-    # Let's Encrypt 验证路径
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
-    
-    # 重定向所有 HTTP 请求到 HTTPS
-    location / {
-        return 301 https://$server_name$request_uri;
-    }
-}
-
-# HTTPS server
-server {
-    listen 443 ssl http2;
-    server_name ${DOMAIN};
-
-    # SSL 证书配置（由 Certbot 自动管理）
-    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
-    
-    # SSL 安全配置
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384';
-    ssl_prefer_server_ciphers off;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 10m;
-    
-    # 安全头
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-
-    client_max_body_size 50M;
-
-    # 前端应用
-    location / {
-        proxy_pass http://127.0.0.1:${PORT};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        proxy_read_timeout 86400;
-    }
-}
-NGINX_EOF
-              # 替换变量
-              sed -i "s|\${DOMAIN}|$DOMAIN|g" "$NGINX_CONFIG"
-              sed -i "s|\${PORT}|$PORT|g" "$NGINX_CONFIG"
+              # SSL 证书存在，配置 HTTPS（使用 printf 避免 YAML 解析问题）
+              printf '# HTTP to HTTPS redirect\nserver {\n    listen 80;\n    server_name %s;\n    \n    # Let'\''s Encrypt 验证路径\n    location /.well-known/acme-challenge/ {\n        root /var/www/html;\n    }\n    \n    # 重定向所有 HTTP 请求到 HTTPS\n    location / {\n        return 301 https://$server_name$request_uri;\n    }\n}\n\n# HTTPS server\nserver {\n    listen 443 ssl http2;\n    server_name %s;\n\n    # SSL 证书配置（由 Certbot 自动管理）\n    ssl_certificate /etc/letsencrypt/live/%s/fullchain.pem;\n    ssl_certificate_key /etc/letsencrypt/live/%s/privkey.pem;\n    \n    # SSL 安全配置\n    ssl_protocols TLSv1.2 TLSv1.3;\n    ssl_ciphers '\''ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384'\'';\n    ssl_prefer_server_ciphers off;\n    ssl_session_cache shared:SSL:10m;\n    ssl_session_timeout 10m;\n    \n    # 安全头\n    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;\n    add_header X-Frame-Options "SAMEORIGIN" always;\n    add_header X-Content-Type-Options "nosniff" always;\n    add_header X-XSS-Protection "1; mode=block" always;\n\n    client_max_body_size 50M;\n\n    # 前端应用\n    location / {\n        proxy_pass http://127.0.0.1:%s;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_cache_bypass $http_upgrade;\n        proxy_read_timeout 86400;\n    }\n}\n' "$DOMAIN" "$DOMAIN" "$DOMAIN" "$DOMAIN" "$PORT" > "$NGINX_CONFIG"
             else
-              # SSL 证书不存在，只配置 HTTP
+              # SSL 证书不存在，只配置 HTTP（使用 printf 避免 YAML 解析问题）
               echo "⚠️  SSL 证书不存在，配置 HTTP only"
-              cat > "$NGINX_CONFIG" << 'NGINX_EOF'
-# HTTP server (SSL certificate not found)
-server {
-    listen 80;
-    server_name ${DOMAIN};
-
-    client_max_body_size 50M;
-
-    location / {
-        proxy_pass http://127.0.0.1:${PORT};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        proxy_read_timeout 86400;
-    }
-}
-NGINX_EOF
-              # 替换变量
-              sed -i "s|\${DOMAIN}|$DOMAIN|g" "$NGINX_CONFIG"
-              sed -i "s|\${PORT}|$PORT|g" "$NGINX_CONFIG"
+              printf '# HTTP server (SSL certificate not found)\nserver {\n    listen 80;\n    server_name %s;\n\n    client_max_body_size 50M;\n\n    location / {\n        proxy_pass http://127.0.0.1:%s;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_cache_bypass $http_upgrade;\n        proxy_read_timeout 86400;\n    }\n}\n' "$DOMAIN" "$PORT" > "$NGINX_CONFIG"
             fi
             
             # 复制配置到 Nginx

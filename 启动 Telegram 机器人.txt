@@ -5,6 +5,9 @@
 ssh ubuntu@165.154.242.60
 JPYzwdaTmxd3nbcP
 
+🔑 Redis 密码已生成
+==========================================
+密码: GTjdOyP2uQSnHeEHTA8CnnEbU
 
 洛杉矶 红包游戏
 ssh ubuntu@165.154.254.99
@@ -13,16 +16,22 @@ ubuntu
 
 ----------------------------------------------------------------
  进入项目目录拉取最新代码
+
 cd /home/ubuntu/telegram-ai-system
 git pull origin main
 ----------------------------------------------------------------
 https://usdt2026.cc/webhook
 https://usdt2026.cc/grafana
 ----------------------------------------------------------------
-自动修复502错误
-cd /home/ubuntu/telegram-ai-system
-chmod +x scripts/server/fix-502-frequent.sh
-bash scripts/server/fix-502-frequent.sh
+https://aizkw.usdt2026.cc
+https://tgmini.usdt2026.cc
+https://hongbao.usdt2026.cc
+https://aikz.usdt2026.cc
+
+D:\telegram-ai-system
+D:\telegram-ai-system\aizkw20251219
+D:\telegram-ai-system\hbwy20251220
+D:\telegram-ai-system\tgmini20251220
 
 取目录树
 tree /F /A

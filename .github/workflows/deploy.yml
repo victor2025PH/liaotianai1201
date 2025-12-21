@@ -4,7 +4,18 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'tgmini20251220/**'
+      - 'hbwy20251220/**'
+      - 'aizkw20251219/**'
+      - '.github/workflows/deploy-three-sites.yml'
   workflow_dispatch:
+    inputs:
+      deploy_single:
+        description: '部署单个 aizkw 项目'
+        required: false
+        default: 'true'
+        type: boolean
 
 jobs:
   deploy:
@@ -145,10 +156,10 @@ jobs:
               echo "构建输出大小: $(du -sh dist | cut -f1)"
               IS_NEXTJS=false
               IS_VITE=true
-elif [ -d ".next" ]; then
-  echo "✅ 构建输出目录存在: .next"
-  IS_NEXTJS=true
-  IS_VITE=false
+            elif [ -d ".next" ]; then
+              echo "✅ 构建输出目录存在: .next"
+              IS_NEXTJS=true
+              IS_VITE=false
               
               # 验证 Next.js 构建完整性
               if [ -f ".next/BUILD_ID" ]; then
@@ -314,103 +325,103 @@ elif [ -d ".next" ]; then
                 exit 1
               fi
               
-  echo ""
-fi
+              echo ""
+            fi
 
-# 如果是 Vite 项目，需要启动静态文件服务
-if [ "$IS_VITE" = "true" ]; then
-  echo ""
-  echo "🚀 [4/5] 启动 Vite 静态文件服务..."
-  echo "----------------------------------------"
-  
-  # 检查 serve 是否安装
-  if ! command -v serve >/dev/null 2>&1; then
-    echo "⚠️  serve 未安装，安装 serve..."
-    sudo npm install -g serve
-  fi
-  
-  # 检查 PM2 是否安装
-  if ! command -v pm2 >/dev/null 2>&1; then
-    echo "⚠️  PM2 未安装，安装 PM2..."
-    sudo npm install -g pm2
-    pm2 startup systemd -u ubuntu --hp /home/ubuntu || true
-  fi
-  
-  # 确定端口（从项目配置或使用默认 3000）
-  FRONTEND_PORT=3000
-  if [ -f "vite.config.ts" ] || [ -f "vite.config.js" ]; then
-    # 尝试从 vite.config 读取端口配置
-    CONFIG_PORT=$(grep -oP "port:\s*\K\d+" vite.config.ts vite.config.js 2>/dev/null | head -1 || echo "")
-    if [ -n "$CONFIG_PORT" ]; then
-      FRONTEND_PORT=$CONFIG_PORT
-    fi
-  fi
-  
-  echo "使用端口: $FRONTEND_PORT"
-  
-  # 停止可能运行在端口的进程
-  if sudo lsof -i :$FRONTEND_PORT >/dev/null 2>&1; then
-    echo "停止占用端口 $FRONTEND_PORT 的进程..."
-    sudo lsof -ti :$FRONTEND_PORT | xargs sudo kill -9 2>/dev/null || true
-    sleep 2
-  fi
-  
-  # 停止并删除 PM2 旧进程
-  pm2 delete frontend 2>/dev/null || true
-  
-  # 确保日志目录存在
-  mkdir -p "$PROJECT_DIR/logs"
-  
-  # 使用 PM2 启动 serve
-  echo "使用 PM2 启动 serve..."
-  cd "$PROJECT_DIR"
-  
-  pm2 start serve \
-    --name frontend \
-    -- "$PROJECT_DIR/dist" \
-    --listen $FRONTEND_PORT \
-    --single \
-    --no-clipboard \
-    --no-open \
-    --error "$PROJECT_DIR/logs/frontend-error.log" \
-    --output "$PROJECT_DIR/logs/frontend-out.log" \
-    --merge-logs \
-    --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
-    echo "⚠️  PM2 启动失败，查看错误..."
-    pm2 logs frontend --lines 10 --nostream 2>/dev/null || true
-    exit 1
-  }
-  
-  pm2 save || true
-  echo "✅ PM2 应用已启动"
-  pm2 list | grep frontend || true
-  
-  # 等待启动
-  echo "等待服务启动..."
-  sleep 5
-  
-  # 检查端口是否在监听
-  echo "检查端口 $FRONTEND_PORT..."
-  sleep 2
-  if sudo lsof -i :$FRONTEND_PORT >/dev/null 2>&1; then
-    echo "✅ 端口 $FRONTEND_PORT 正在监听"
-    # 测试连接
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$FRONTEND_PORT || echo "000")
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
-      echo "✅ 应用响应正常 (HTTP $HTTP_CODE)"
-    else
-      echo "⚠️  应用响应异常 (HTTP $HTTP_CODE)"
-      pm2 logs frontend --lines 10 --nostream 2>/dev/null || true
-    fi
-  else
-    echo "❌ 端口 $FRONTEND_PORT 未在监听，应用可能未成功启动"
-    echo "查看最新日志:"
-    pm2 logs frontend --lines 20 --nostream 2>/dev/null || true
-    exit 1
-  fi
-  
-  echo ""
-fi
+            # 如果是 Vite 项目，需要启动静态文件服务
+            if [ "$IS_VITE" = "true" ]; then
+              echo ""
+              echo "🚀 [4/5] 启动 Vite 静态文件服务..."
+              echo "----------------------------------------"
+              
+              # 检查 serve 是否安装
+              if ! command -v serve >/dev/null 2>&1; then
+                echo "⚠️  serve 未安装，安装 serve..."
+                sudo npm install -g serve
+              fi
+              
+              # 检查 PM2 是否安装
+              if ! command -v pm2 >/dev/null 2>&1; then
+                echo "⚠️  PM2 未安装，安装 PM2..."
+                sudo npm install -g pm2
+                pm2 startup systemd -u ubuntu --hp /home/ubuntu || true
+              fi
+              
+              # 确定端口（从项目配置或使用默认 3000）
+              FRONTEND_PORT=3000
+              if [ -f "vite.config.ts" ] || [ -f "vite.config.js" ]; then
+                # 尝试从 vite.config 读取端口配置
+                CONFIG_PORT=$(grep -oP "port:\s*\K\d+" vite.config.ts vite.config.js 2>/dev/null | head -1 || echo "")
+                if [ -n "$CONFIG_PORT" ]; then
+                  FRONTEND_PORT=$CONFIG_PORT
+                fi
+              fi
+              
+              echo "使用端口: $FRONTEND_PORT"
+              
+              # 停止可能运行在端口的进程
+              if sudo lsof -i :$FRONTEND_PORT >/dev/null 2>&1; then
+                echo "停止占用端口 $FRONTEND_PORT 的进程..."
+                sudo lsof -ti :$FRONTEND_PORT | xargs sudo kill -9 2>/dev/null || true
+                sleep 2
+              fi
+              
+              # 停止并删除 PM2 旧进程
+              pm2 delete frontend 2>/dev/null || true
+              
+              # 确保日志目录存在
+              mkdir -p "$PROJECT_DIR/logs"
+              
+              # 使用 PM2 启动 serve
+              echo "使用 PM2 启动 serve..."
+              cd "$PROJECT_DIR"
+              
+              pm2 start serve \
+                --name frontend \
+                -- "$PROJECT_DIR/dist" \
+                --listen $FRONTEND_PORT \
+                --single \
+                --no-clipboard \
+                --no-open \
+                --error "$PROJECT_DIR/logs/frontend-error.log" \
+                --output "$PROJECT_DIR/logs/frontend-out.log" \
+                --merge-logs \
+                --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
+                echo "⚠️  PM2 启动失败，查看错误..."
+                pm2 logs frontend --lines 10 --nostream 2>/dev/null || true
+                exit 1
+              }
+              
+              pm2 save || true
+              echo "✅ PM2 应用已启动"
+              pm2 list | grep frontend || true
+              
+              # 等待启动
+              echo "等待服务启动..."
+              sleep 5
+              
+              # 检查端口是否在监听
+              echo "检查端口 $FRONTEND_PORT..."
+              sleep 2
+              if sudo lsof -i :$FRONTEND_PORT >/dev/null 2>&1; then
+                echo "✅ 端口 $FRONTEND_PORT 正在监听"
+                # 测试连接
+                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$FRONTEND_PORT || echo "000")
+                if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+                  echo "✅ 应用响应正常 (HTTP $HTTP_CODE)"
+                else
+                  echo "⚠️  应用响应异常 (HTTP $HTTP_CODE)"
+                  pm2 logs frontend --lines 10 --nostream 2>/dev/null || true
+                fi
+              else
+                echo "❌ 端口 $FRONTEND_PORT 未在监听，应用可能未成功启动"
+                echo "查看最新日志:"
+                pm2 logs frontend --lines 20 --nostream 2>/dev/null || true
+                exit 1
+              fi
+              
+              echo ""
+            fi
 
 # 重载 Nginx
             echo "🔄 [5/5] 重载 Nginx..."

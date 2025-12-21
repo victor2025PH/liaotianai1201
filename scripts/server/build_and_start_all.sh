@@ -95,16 +95,25 @@ for site in "${!SITES[@]}"; do
   
   cd "$SITE_DIR"
   
-  # 检查 package.json
-  if [ ! -f "package.json" ]; then
-    echo "⚠️  package.json 不存在，检查是否有其他位置..."
+  # 检查 package.json（支持多种路径）
+  PACKAGE_JSON_FOUND=""
+  PACKAGE_JSON_PATH=""
+  
+  # 1. 首先检查当前目录
+  if [ -f "package.json" ]; then
+    PACKAGE_JSON_FOUND="current"
+    PACKAGE_JSON_PATH="package.json"
+    echo "✅ package.json 存在（当前目录）"
+  else
+    echo "⚠️  当前目录没有 package.json，搜索其他位置..."
     
-    # 检查是否有子目录包含 package.json
+    # 2. 检查子目录（最多 2 层）
     FOUND_PACKAGE=$(find . -maxdepth 2 -name "package.json" -type f 2>/dev/null | head -1)
     
     if [ -n "$FOUND_PACKAGE" ]; then
-      echo "✅ 找到 package.json: $FOUND_PACKAGE"
-      # 如果 package.json 在子目录，切换到该目录
+      PACKAGE_JSON_FOUND="subdir"
+      PACKAGE_JSON_PATH="$FOUND_PACKAGE"
+      echo "✅ 在子目录中找到 package.json: $FOUND_PACKAGE"
       PACKAGE_DIR=$(dirname "$FOUND_PACKAGE")
       if [ "$PACKAGE_DIR" != "." ]; then
         echo "   切换到目录: $PACKAGE_DIR"
@@ -112,10 +121,36 @@ for site in "${!SITES[@]}"; do
         SITE_DIR="$SITE_DIR/$PACKAGE_DIR"
       fi
     else
-      echo "❌ 未找到 package.json，跳过此网站"
-      echo "   请确保项目文件已上传到服务器"
-      FAILED_SITES+=("$site (package.json 不存在)")
-      continue
+      # 3. 检查项目根目录（可能用户直接上传到了根目录）
+      ROOT_PACKAGE="$PROJECT_DIR/package.json"
+      if [ -f "$ROOT_PACKAGE" ]; then
+        echo "⚠️  在项目根目录找到 package.json，但这不是预期的位置"
+        echo "   建议将文件上传到子目录: $SITE_DIR"
+        echo "   继续尝试使用根目录的 package.json..."
+        PACKAGE_JSON_FOUND="root"
+        PACKAGE_JSON_PATH="$ROOT_PACKAGE"
+        cd "$PROJECT_DIR"
+        SITE_DIR="$PROJECT_DIR"
+      else
+        # 4. 在整个项目目录中递归搜索（最多 5 层）
+        echo "   在整个项目目录中搜索..."
+        FOUND_PACKAGE=$(find "$PROJECT_DIR" -maxdepth 5 -name "package.json" -type f 2>/dev/null | grep -iE "(tgmini|hongbao|aizkw|hbwy)" | head -1)
+        
+        if [ -n "$FOUND_PACKAGE" ]; then
+          echo "✅ 在项目目录中找到 package.json: $FOUND_PACKAGE"
+          PACKAGE_JSON_FOUND="project"
+          PACKAGE_JSON_PATH="$FOUND_PACKAGE"
+          PACKAGE_DIR=$(dirname "$FOUND_PACKAGE")
+          cd "$PACKAGE_DIR"
+          SITE_DIR="$PACKAGE_DIR"
+        else
+          echo "❌ 未找到 package.json，跳过此网站"
+          echo "   请确保项目文件已上传到服务器"
+          echo "   预期位置: $SITE_DIR"
+          FAILED_SITES+=("$site (package.json 不存在)")
+          continue
+        fi
+      fi
     fi
   fi
   

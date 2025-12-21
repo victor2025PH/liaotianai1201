@@ -69,7 +69,7 @@ jobs:
             fi
             
             # 拉取最新代码
-            echo "📥 [1/4] 拉取最新代码..."
+            echo "📥 [1/5] 拉取最新代码..."
             echo "----------------------------------------"
             
             # 获取远程分支信息
@@ -106,7 +106,7 @@ jobs:
             echo ""
             
             # 安装依赖（在项目根目录）
-            echo "📦 [2/4] 安装依赖..."
+            echo "📦 [2/5] 安装依赖..."
             echo "----------------------------------------"
             
             # 确保在项目根目录
@@ -125,7 +125,7 @@ jobs:
             echo ""
             
             # 构建前端（在项目根目录）
-            echo "🔨 [3/4] 构建前端..."
+            echo "🔨 [3/5] 构建前端..."
             echo "----------------------------------------"
             
             # 设置 Node.js 内存限制（防止内存溢出）
@@ -146,9 +146,28 @@ jobs:
             elif [ -d ".next" ]; then
               echo "✅ 构建输出目录存在: .next"
               IS_NEXTJS=true
+              
+              # 验证 Next.js 构建完整性
+              if [ -f ".next/BUILD_ID" ]; then
+                BUILD_ID=$(cat .next/BUILD_ID)
+                echo "✅ BUILD_ID: $BUILD_ID"
+              else
+                echo "⚠️  警告: BUILD_ID 不存在，构建可能不完整"
+              fi
+              
+              # 检查 standalone 输出
+              if [ -f ".next/standalone/server.js" ]; then
+                echo "✅ standalone/server.js 存在"
+              else
+                echo "⚠️  警告: standalone/server.js 不存在"
+                echo "检查 standalone 目录..."
+                ls -la .next/standalone/ 2>/dev/null | head -10 || echo "standalone 目录不存在"
+              fi
             else
-              echo "⚠️  警告: 未找到 dist 或 .next 目录，但继续部署"
-              IS_NEXTJS=false
+              echo "❌ 错误: 未找到 dist 或 .next 目录，构建可能失败"
+              echo "检查当前目录内容:"
+              ls -la | head -20
+              exit 1
             fi
             
             # 如果是 Next.js 项目，需要启动应用服务器
@@ -164,70 +183,132 @@ jobs:
                 sleep 2
               fi
               
-              # 设置环境变量
-              export NODE_ENV=production
-              export PORT=3000
-              export NODE_OPTIONS="--max-old-space-size=3072"
+              # 停止并删除 PM2 旧进程
+              pm2 delete frontend 2>/dev/null || true
+              
+              # 确保日志目录存在
+              mkdir -p "$PROJECT_DIR/logs"
               
               # 检查 standalone 输出
               if [ -f ".next/standalone/server.js" ]; then
-                echo "使用 standalone 模式启动..."
-                START_CMD="node .next/standalone/server.js"
+                echo "✅ 检测到 standalone 模式，使用 node .next/standalone/server.js"
+                USE_STANDALONE=true
               else
-                echo "使用标准模式启动..."
-                START_CMD="npm start"
+                echo "⚠️  standalone/server.js 不存在，检查是否有 .next 目录..."
+                if [ -d ".next" ]; then
+                  echo "✅ .next 目录存在，但 standalone 输出可能未生成"
+                  echo "检查构建输出..."
+                  ls -la .next/ | head -10
+                  USE_STANDALONE=false
+                else
+                  echo "❌ .next 目录不存在，构建可能失败"
+                  exit 1
+                fi
               fi
               
               # 使用 PM2 启动（如果可用）
               if command -v pm2 >/dev/null 2>&1; then
                 echo "使用 PM2 启动应用..."
-                
-                # 确保日志目录存在
-                mkdir -p "$PROJECT_DIR/logs"
-                
-                # 停止并删除旧进程
-                pm2 delete frontend 2>/dev/null || true
-                
-                # 启动应用
                 cd "$PROJECT_DIR"
-                pm2 start "$START_CMD" --name frontend -- \
-                  --port 3000 \
-                  --hostname 0.0.0.0 || {
-                  echo "⚠️  PM2 启动失败，尝试 nohup..."
-                  nohup $START_CMD > "$PROJECT_DIR/logs/frontend-out.log" 2> "$PROJECT_DIR/logs/frontend-error.log" &
-                  sleep 5
-                }
+                
+                if [ "$USE_STANDALONE" = "true" ]; then
+                  # standalone 模式：使用环境变量，不要传递命令行参数
+                  pm2 start "node .next/standalone/server.js" \
+                    --name frontend \
+                    --interpreter node \
+                    --env NODE_ENV=production \
+                    --env PORT=3000 \
+                    --env HOSTNAME=0.0.0.0 \
+                    --env NODE_OPTIONS="--max-old-space-size=3072" \
+                    --error "$PROJECT_DIR/logs/frontend-error.log" \
+                    --output "$PROJECT_DIR/logs/frontend-out.log" \
+                    --merge-logs \
+                    --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
+                    echo "⚠️  PM2 启动失败，查看错误..."
+                    pm2 logs frontend --lines 10 --nostream 2>/dev/null || true
+                    exit 1
+                  }
+                else
+                  # 标准模式：使用 npm start
+                  pm2 start npm \
+                    --name frontend \
+                    -- start \
+                    --env NODE_ENV=production \
+                    --env PORT=3000 \
+                    --env NODE_OPTIONS="--max-old-space-size=3072" \
+                    --error "$PROJECT_DIR/logs/frontend-error.log" \
+                    --output "$PROJECT_DIR/logs/frontend-out.log" \
+                    --merge-logs \
+                    --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
+                    echo "⚠️  PM2 启动失败，查看错误..."
+                    pm2 logs frontend --lines 10 --nostream 2>/dev/null || true
+                    exit 1
+                  }
+                fi
                 
                 pm2 save || true
                 echo "✅ PM2 应用已启动"
                 pm2 list | grep frontend || true
+                
+                # 等待启动
+                echo "等待应用启动..."
+                sleep 8
+                
+                # 检查 PM2 状态
+                pm2 describe frontend | grep -E "status|pid|uptime" || true
+                
               else
                 # 使用 nohup 后台启动
                 echo "使用 nohup 后台启动应用..."
-                mkdir -p "$PROJECT_DIR/logs"
                 cd "$PROJECT_DIR"
-                nohup $START_CMD > "$PROJECT_DIR/logs/frontend-out.log" 2> "$PROJECT_DIR/logs/frontend-error.log" &
+                
+                # 设置环境变量
+                export NODE_ENV=production
+                export PORT=3000
+                export HOSTNAME=0.0.0.0
+                export NODE_OPTIONS="--max-old-space-size=3072"
+                
+                if [ "$USE_STANDALONE" = "true" ]; then
+                  nohup node .next/standalone/server.js > "$PROJECT_DIR/logs/frontend-out.log" 2> "$PROJECT_DIR/logs/frontend-error.log" &
+                else
+                  nohup npm start > "$PROJECT_DIR/logs/frontend-out.log" 2> "$PROJECT_DIR/logs/frontend-error.log" &
+                fi
+                
                 APP_PID=$!
                 echo "应用进程 PID: $APP_PID"
-                sleep 5
+                sleep 8
                 
                 # 检查进程是否还在运行
                 if ps -p $APP_PID > /dev/null 2>&1; then
                   echo "✅ 应用已启动（PID: $APP_PID）"
                 else
-                  echo "⚠️  应用启动可能失败，查看日志:"
-                  tail -20 "$PROJECT_DIR/logs/frontend-error.log" 2>/dev/null || true
+                  echo "❌ 应用启动失败，查看日志:"
+                  tail -30 "$PROJECT_DIR/logs/frontend-error.log" 2>/dev/null || true
+                  exit 1
                 fi
               fi
               
-              # 等待应用启动并检查端口
-              echo "等待应用启动..."
-              sleep 5
-              
+              # 检查端口 3000 是否在监听
+              echo "检查端口 3000..."
+              sleep 2
               if sudo lsof -i :3000 >/dev/null 2>&1; then
                 echo "✅ 端口 3000 正在监听"
+                # 测试连接
+                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000 || echo "000")
+                if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+                  echo "✅ 应用响应正常 (HTTP $HTTP_CODE)"
+                else
+                  echo "⚠️  应用响应异常 (HTTP $HTTP_CODE)"
+                fi
               else
-                echo "⚠️  警告: 端口 3000 未在监听，应用可能未成功启动"
+                echo "❌ 端口 3000 未在监听，应用可能未成功启动"
+                echo "查看最新日志:"
+                if command -v pm2 >/dev/null 2>&1; then
+                  pm2 logs frontend --lines 20 --nostream 2>/dev/null || true
+                else
+                  tail -30 "$PROJECT_DIR/logs/frontend-error.log" 2>/dev/null || true
+                fi
+                exit 1
               fi
               
               echo ""

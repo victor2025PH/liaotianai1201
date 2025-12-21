@@ -390,22 +390,39 @@ jobs:
               echo "✅ dist 目录存在: $PROJECT_DIR/dist"
               echo "dist 目录大小: $(du -sh $PROJECT_DIR/dist | cut -f1)"
               
-              # 使用 PM2 启动 serve（使用更稳健的方式）
-              echo "使用 PM2 启动 serve..."
+              # 进入项目目录
               cd "$PROJECT_DIR" || {
                 echo "❌ 无法进入项目目录: $PROJECT_DIR"
                 exit 1
               }
               
-              # 使用 npx 方式启动，确保参数正确传递
-              pm2 start npx \
+              # 生成启动脚本（使用全局 serve，不经过 npx）
+              echo "生成启动脚本..."
+              START_SCRIPT="$PROJECT_DIR/start-frontend.sh"
+              cat > "$START_SCRIPT" << 'SCRIPT_EOF'
+#!/bin/bash
+# 前端服务启动脚本
+# 使用全局 serve 命令启动静态文件服务
+
+# 获取参数
+DIST_DIR="$1"
+PORT="$2"
+
+# 启动 serve
+exec serve -s "$DIST_DIR" -l "$PORT" --no-clipboard --no-open
+SCRIPT_EOF
+              
+              chmod +x "$START_SCRIPT"
+              echo "✅ 启动脚本已生成: $START_SCRIPT"
+              echo "启动脚本内容:"
+              cat "$START_SCRIPT"
+              echo ""
+              
+              # 使用 PM2 启动脚本
+              echo "使用 PM2 启动前端服务..."
+              pm2 start "$START_SCRIPT" \
                 --name frontend \
-                --interpreter none \
-                -- serve \
-                -s "$PROJECT_DIR/dist" \
-                -l $FRONTEND_PORT \
-                --no-clipboard \
-                --no-open \
+                -- "$PROJECT_DIR/dist" "$FRONTEND_PORT" \
                 --error "$PROJECT_DIR/logs/frontend-error.log" \
                 --output "$PROJECT_DIR/logs/frontend-out.log" \
                 --merge-logs \
@@ -421,9 +438,9 @@ jobs:
               echo "✅ PM2 应用已启动"
               pm2 list | grep frontend || true
               
-              # 等待启动
+              # 等待启动（延长等待时间，给 Node.js 应用更多启动时间）
               echo "等待服务启动..."
-              sleep 5
+              sleep 15
               
               # 检查端口是否在监听
               echo "检查端口 $FRONTEND_PORT..."

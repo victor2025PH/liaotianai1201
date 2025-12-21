@@ -127,8 +127,19 @@ echo ""
 # 5. 启动端口 3002 - hbwy/hongbao
 echo "5. 启动端口 3002 - hbwy/hongbao..."
 echo "----------------------------------------"
-HBWY_DIR=$(find "$PROJECT_ROOT" -maxdepth 5 -type f -name "package.json" 2>/dev/null | \
-  grep -iE "(hbwy|hongbao)" | head -1 | xargs dirname 2>/dev/null || echo "")
+# 优先查找主仓库中的路径
+HBWY_DIR=""
+if [ -d "$PROJECT_ROOT/react-vite-template/hbwy20251220" ] && [ -f "$PROJECT_ROOT/react-vite-template/hbwy20251220/package.json" ]; then
+  HBWY_DIR="$PROJECT_ROOT/react-vite-template/hbwy20251220"
+elif [ -d "$PROJECT_ROOT/hbwy20251220" ] && [ -f "$PROJECT_ROOT/hbwy20251220/package.json" ]; then
+  HBWY_DIR="$PROJECT_ROOT/hbwy20251220"
+else
+  # 如果上述路径都不存在，使用 find 查找
+  HBWY_DIR=$(find "$PROJECT_ROOT" -maxdepth 5 -type f -name "package.json" 2>/dev/null | \
+    grep -iE "(hbwy|hongbao)" | \
+    grep -v "/\.git/" | \
+    head -1 | xargs dirname 2>/dev/null || echo "")
+fi
 
 if [ -n "$HBWY_DIR" ] && [ -f "$HBWY_DIR/package.json" ]; then
   echo "找到 hbwy 目录: $HBWY_DIR"

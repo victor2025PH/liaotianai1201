@@ -184,7 +184,7 @@ export function ExecutionDialog({
                             </SelectItem>
                           ) : (
                             onlineAgents.map((agentId) => {
-                              const agent = agents[agentId]
+                              const agent = agents ? agents[agentId] : undefined
                               return (
                                 <SelectItem key={agentId} value={agentId}>
                                   <div className="flex items-center gap-2">
@@ -214,7 +214,7 @@ export function ExecutionDialog({
               </div>
             )}
             
-            {onlineAgents.length === 0 && (
+            {(!onlineAgents || onlineAgents.length === 0) && (
               <div className="text-sm text-amber-600 p-3 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800">
                 ⚠️ 当前没有在线 Agent，无法执行场景
               </div>

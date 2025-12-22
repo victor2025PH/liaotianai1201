@@ -35,6 +35,10 @@ from app.models.theater import (
     TheaterScenario,
     TheaterExecution,
 )
+from app.models.agent_api import (
+    Agent,
+    AgentTask,
+)
 from app.models.unified_features import (
     KeywordTriggerRule,
     ScheduledMessageTask,

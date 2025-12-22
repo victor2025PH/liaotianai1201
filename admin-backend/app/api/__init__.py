@@ -10,6 +10,7 @@ from app.api import redpacket
 from app.api import agents
 from app.api import strategies
 from app.api import theater
+from app.api import agent_api
 
 router = APIRouter()
 router.include_router(auth.router)
@@ -29,4 +30,5 @@ router.include_router(redpacket.router)
 router.include_router(agents.router)
 router.include_router(strategies.router)
 router.include_router(theater.router)
+router.include_router(agent_api.router)  # Phase 7: Agent REST API
 

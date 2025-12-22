@@ -5,19 +5,24 @@
 # ============================================================
 
 set -e
-set -x  # 启用调试模式，显示所有执行的命令
 
 # 禁用输出缓冲，确保实时输出
 export PYTHONUNBUFFERED=1
-exec > >(tee -a /tmp/deploy.log) 2>&1  # 同时输出到文件和控制台
+
+# 定义进度输出函数（定期输出，保持SSH连接活跃）
+progress_echo() {
+  echo "[$(date '+%H:%M:%S')] $*"
+  # 强制刷新输出缓冲区
+  sync 2>/dev/null || true
+}
+
+PROJECT_ROOT="/home/ubuntu/telegram-ai-system"
 
 progress_echo "=========================================="
 progress_echo "🚀 全栈部署 - 智能健康检查版"
 progress_echo "时间: $(date)"
 progress_echo "=========================================="
 progress_echo ""
-
-PROJECT_ROOT="/home/ubuntu/telegram-ai-system"
 
 # ============================================
 # 智能端口等待函数
@@ -55,8 +60,8 @@ fi
 # ============================================
 # Step A: 配置 Swap 虚拟内存
 # ============================================
-progress_echo "🔧 [Step A] 配置 Swap 虚拟内存..."
-progress_echo "----------------------------------------"
+echo "🔧 [Step A] 配置 Swap 虚拟内存..."
+echo "----------------------------------------"
 if [ -f "$PROJECT_ROOT/scripts/server/setup_swap.sh" ]; then
   bash "$PROJECT_ROOT/scripts/server/setup_swap.sh"
 else
@@ -68,8 +73,8 @@ echo ""
 # Step B: 部署后端 (admin-backend)
 # ============================================
 if [ -d "$PROJECT_ROOT/admin-backend" ]; then
-  echo "🔧 [Step B] 部署后端服务..."
-  echo "----------------------------------------"
+  progress_echo "🔧 [Step B] 部署后端服务..."
+  progress_echo "----------------------------------------"
   
   cd "$PROJECT_ROOT/admin-backend"
   

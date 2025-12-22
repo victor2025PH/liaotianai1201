@@ -39,8 +39,13 @@ echo ""
 echo "[3/5] 检查其他重复进程..."
 echo "----------------------------------------"
 # 检查是否有多个 frontend 进程
-FRONTEND_COUNT=$(pm2 list | grep -c "frontend" || echo "0")
-if [ "$FRONTEND_COUNT" -gt 1 ]; then
+FRONTEND_COUNT=$(pm2 list 2>/dev/null | grep -c "frontend" || echo "0")
+# 确保 FRONTEND_COUNT 是数字
+if [ -z "$FRONTEND_COUNT" ] || [ "$FRONTEND_COUNT" = "" ]; then
+  FRONTEND_COUNT=0
+fi
+# 使用数值比较（需要确保是数字）
+if [ "$FRONTEND_COUNT" -gt 1 ] 2>/dev/null; then
   echo "⚠️  发现多个 frontend 进程，保留最新的..."
   # 保留最新的，删除旧的
   pm2 delete frontend 2>/dev/null || true

@@ -1,0 +1,3 @@
+# Agent 依赖
+aiohttp>=3.9.0
+websockets>=12.0

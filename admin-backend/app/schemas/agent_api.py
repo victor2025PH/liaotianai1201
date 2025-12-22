@@ -91,7 +91,7 @@ class AgentInfo(BaseModel):
     status: str
     current_task_id: Optional[str] = None
     last_active_time: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
+    agent_metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
     

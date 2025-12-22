@@ -54,7 +54,7 @@ async def register_agent(
             agent.phone_number = request.phone_number or agent.phone_number
             agent.device_info = request.device_info or agent.device_info
             agent.proxy_url = request.proxy_url or agent.proxy_url
-            agent.metadata = request.metadata or agent.metadata
+            agent.agent_metadata = request.metadata or agent.agent_metadata
             agent.status = "online"
             agent.last_active_time = datetime.now()
             
@@ -81,7 +81,7 @@ async def register_agent(
                 phone_number=request.phone_number,
                 device_info=request.device_info,
                 proxy_url=request.proxy_url,
-                metadata=request.metadata or {},
+                agent_metadata=request.metadata or {},
                 status="online",
                 api_key=api_key,
                 last_active_time=datetime.now()

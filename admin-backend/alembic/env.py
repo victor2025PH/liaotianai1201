@@ -19,6 +19,8 @@ from app.db import Base
 # 導入所有模型，確保 Alembic 能夠檢測到它們
 from app.models import user, role, permission, user_role, role_permission
 from app.models import group_ai
+from app.models import theater  # Phase 3: 智能剧场模型
+from app.models import agent_api  # Phase 7: Agent API 模型
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

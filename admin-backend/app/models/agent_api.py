@@ -28,7 +28,7 @@ class Agent(Base):
     status = Column(String(20), nullable=False, default="offline", index=True)  # online, offline, busy, error
     current_task_id = Column(String(36), nullable=True, index=True)  # 当前执行的任务ID
     api_key = Column(String(100), nullable=True)  # API 密钥（用于鉴权）
-    metadata = Column(JSON, nullable=True, default=dict)  # 元数据（版本、平台等）
+    agent_metadata = Column(JSON, nullable=True, default=dict)  # 元数据（版本、平台等）
     last_active_time = Column(DateTime, nullable=True, index=True)  # 最后活跃时间
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)

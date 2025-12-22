@@ -139,8 +139,13 @@ export function useCrud<T extends { id?: string | number }, CreateT, UpdateT>(
   }, [])
   
   // 设置分页
-  const setPagination = useCallback((newPagination: Partial<PaginationInfo>) => {
-    setPaginationState(prev => ({ ...prev, ...newPagination }))
+  const setPagination = useCallback((
+    newPagination: Partial<PaginationInfo> | ((prev: PaginationInfo) => Partial<PaginationInfo>)
+  ) => {
+    setPaginationState(prev => {
+      const updated = typeof newPagination === "function" ? newPagination(prev) : newPagination
+      return { ...prev, ...updated }
+    })
   }, [])
   
   // 设置过滤
@@ -175,14 +180,14 @@ export function useCrud<T extends { id?: string | number }, CreateT, UpdateT>(
       // 处理不同的返回格式
       if (Array.isArray(result)) {
         setItems(result)
-        setPagination(prev => ({
+        setPagination((prev: PaginationInfo) => ({
           ...prev,
           total: result.length,
           totalPages: Math.ceil(result.length / prev.pageSize)
         }))
       } else {
         setItems(result.items || [])
-        setPagination(prev => ({
+        setPagination((prev: PaginationInfo) => ({
           ...prev,
           total: result.total || result.items?.length || 0,
           totalPages: result.total 

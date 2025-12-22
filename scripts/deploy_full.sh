@@ -451,10 +451,11 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
         exit 1
       fi
       
-      # 启动服务（使用导出的 PORT 环境变量）
-      pm2 start server.js \
+      # 启动服务（使用导出的 PORT 环境变量，并在命令中显式传递以确保 PM2 接收）
+      PORT=3005 pm2 start server.js \
         --name saas-demo-frontend \
         --max-memory-restart 1G \
+        --update-env \
         --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
         --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
         --merge-logs \

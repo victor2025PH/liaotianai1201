@@ -280,7 +280,7 @@ export default function TheaterPage() {
           </Button>
           <Button
             size="sm"
-            onClick={() => crud.setCreateDialogOpen(true)}
+            onClick={crud.handleCreate}
           >
             <Plus className="h-4 w-4 mr-2" />
             创建剧本
@@ -329,22 +329,22 @@ export default function TheaterPage() {
       
       {/* 创建/编辑对话框 */}
       <CrudDialog
-        open={crud.createDialogOpen || crud.editDialogOpen}
+        open={crud.dialogOpen}
         onOpenChange={(open) => {
           if (!open) {
-            crud.setCreateDialogOpen(false)
-            crud.setEditDialogOpen(false)
+            crud.setDialogOpen(false)
+            crud.setEditingItem(null)
           }
         }}
-        mode={crud.editDialogOpen ? "edit" : "create"}
-        title={crud.editDialogOpen ? "编辑剧本" : "创建剧本"}
+        mode={crud.editingItem ? "edit" : "create"}
+        title={crud.editingItem ? "编辑剧本" : "创建剧本"}
         description={
-          crud.editDialogOpen
+          crud.editingItem
             ? "修改剧本信息、角色和时间轴"
             : "创建一个新的剧场场景剧本"
         }
         fields={formFields}
-        initialData={crud.editDialogOpen ? crud.item : undefined}
+        initialData={crud.editingItem || undefined}
         onSubmit={handleSave}
         loading={crud.loading}
         maxWidth="2xl"

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3005",
     "start:standalone": "NODE_ENV=production PORT=3005 node .next/standalone/server.js",
-    "start:smart": "if [ -d '.next/standalone' ]; then node .next/standalone/server.js; else next start; fi",
+    "start:smart": "if [ -d '.next/standalone' ]; then PORT=3005 node .next/standalone/server.js; else next start -p 3005; fi",
     "lint": "eslint",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",

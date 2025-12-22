@@ -349,11 +349,11 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     # ============================================
     # 5. 再次确认端口已释放（构建后再次检查）
     # ============================================
-    echo "🔍 构建后再次检查端口 3000..."
-    if nc -z 127.0.0.1 3000 2>/dev/null || sudo lsof -i :3000 >/dev/null 2>&1; then
-      echo "  ⚠️  端口 3000 在构建后被占用，清理中..."
-      sudo lsof -ti :3000 | xargs sudo kill -9 2>/dev/null || true
-      sudo fuser -k 3000/tcp 2>/dev/null || true
+    echo "🔍 构建后再次检查端口 3005..."
+    if nc -z 127.0.0.1 3005 2>/dev/null || sudo lsof -i :3005 >/dev/null 2>&1; then
+      echo "  ⚠️  端口 3005 在构建后被占用，清理中..."
+      sudo lsof -ti :3005 | xargs sudo kill -9 2>/dev/null || true
+      sudo fuser -k 3005/tcp 2>/dev/null || true
       sleep 2
     fi
     
@@ -363,8 +363,8 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     # 确保日志目录存在
     mkdir -p "$PROJECT_ROOT/logs"
     
-    # 使用 PM2 启动前端（确保使用 --name saas-demo-frontend）
-    echo "启动前端服务 (端口 3000)..."
+    # 使用 PM2 启动前端（确保使用 --name saas-demo-frontend，端口 3005）
+    echo "启动前端服务 (端口 3005，避开 3000 冲突)..."
     if [ -d ".next/standalone" ]; then
       # Next.js standalone 模式 - 需要手动复制静态文件
       echo "准备 standalone 模式启动..."
@@ -432,9 +432,9 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
       
       echo "✅ standalone 目录准备完成"
       
-      # 启动 Next.js standalone 模式
-      echo "启动 Next.js 服务..."
-      pm2 start node \
+      # 启动 Next.js standalone 模式（使用 PORT=3005 环境变量）
+      echo "启动 Next.js 服务（端口 3005）..."
+      PORT=3005 pm2 start node \
         --name saas-demo-frontend \
         --max-memory-restart 1G \
         --cwd "$(pwd)/$STANDALONE_DIR" \
@@ -453,8 +453,8 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
       sleep 3
       
       # 验证服务是否真正启动成功（检查端口和进程）
-      if ! sudo lsof -i :3000 >/dev/null 2>&1; then
-        echo "⚠️  警告：服务启动后端口 3000 未监听"
+      if ! sudo lsof -i :3005 >/dev/null 2>&1; then
+        echo "⚠️  警告：服务启动后端口 3005 未监听"
         echo "检查 PM2 状态:"
         pm2 list | grep saas-demo-frontend || echo "进程不存在"
         echo "检查错误日志:"
@@ -463,13 +463,13 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
         # 检查是否是 EADDRINUSE 错误
         if grep -q "EADDRINUSE" "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null; then
           echo "❌ 检测到端口冲突错误 (EADDRINUSE)，重新清理端口..."
-          sudo lsof -ti :3000 | xargs sudo kill -9 2>/dev/null || true
+          sudo lsof -ti :3005 | xargs sudo kill -9 2>/dev/null || true
           sleep 3
           pm2 restart saas-demo-frontend || {
             echo "❌ 重启失败，尝试删除后重新启动..."
             pm2 delete saas-demo-frontend 2>/dev/null || true
             sleep 2
-            pm2 start node \
+            PORT=3005 pm2 start node \
               --name saas-demo-frontend \
               --max-memory-restart 1G \
               --cwd "$(pwd)/$STANDALONE_DIR" \
@@ -490,22 +490,23 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
       fi
       
       # 最终验证
-      if sudo lsof -i :3000 >/dev/null 2>&1; then
-        echo "✅ Next.js 服务已成功启动并监听端口 3000"
+      if sudo lsof -i :3005 >/dev/null 2>&1; then
+        echo "✅ Next.js 服务已成功启动并监听端口 3005"
       else
-        echo "❌ 服务启动失败：端口 3000 未监听"
+        echo "❌ 服务启动失败：端口 3005 未监听"
         exit 1
       fi
     else
-      # 使用 npm start
-      pm2 start npm \
+      # 使用 npm start（通过环境变量 PORT=3005 启动）
+      echo "使用 npm start 启动（端口 3005）..."
+      PORT=3005 pm2 start npm \
         --name saas-demo-frontend \
         --max-memory-restart 1G \
         --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
         --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
         --merge-logs \
         --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-        -- start || {
+        -- start -- --port 3005 || {
         echo "⚠️  PM2 启动失败"
         exit 1
       }
@@ -752,7 +753,7 @@ pm2 list
 echo ""
 
 echo "端口监听状态:"
-sudo lsof -i :8000 -i :3000 -i :3001 -i :3002 -i :3003 2>/dev/null || echo "无法检查端口状态"
+sudo lsof -i :8000 -i :3005 -i :3001 -i :3002 -i :3003 2>/dev/null || echo "无法检查端口状态"
 echo ""
 
 # ============================================
@@ -787,7 +788,7 @@ echo ""
 echo "验证命令:"
 echo "  pm2 list"
 echo "  curl -I http://127.0.0.1:8000/health"
-echo "  curl -I http://127.0.0.1:3000"
+echo "  curl -I http://127.0.0.1:3005"
 echo "  curl -I http://127.0.0.1:3001"
 echo "  curl -I http://127.0.0.1:3002"
 echo "  curl -I http://127.0.0.1:3003"

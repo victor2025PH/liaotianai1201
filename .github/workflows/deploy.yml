@@ -9,6 +9,8 @@ on:
       - 'admin-backend/**'
       - 'agent/**'
       - 'aizkw20251219/**'
+      - 'hbwy20251220/**'
+      - 'tgmini20251220/**'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
     inputs:
@@ -325,21 +327,151 @@ jobs:
             fi
             
             # ============================================
+            # 部署 hongbao (端口 3002)
+            # ============================================
+            if [ -d "hbwy20251220" ]; then
+              echo "📦 [6/10] 部署 hongbao 项目..."
+              echo "----------------------------------------"
+              
+              SITE_DIR="hbwy20251220"
+              PROJECT_DIR="$PROJECT_ROOT/$SITE_DIR"
+              TARGET_PORT=3002
+              PM2_NAME="hongbao-frontend"
+              
+              cd "$PROJECT_DIR" || {
+                echo "❌ 无法进入项目子目录"
+                exit 1
+              }
+              
+              # 安装依赖
+              echo "安装依赖..."
+              npm install --quiet || {
+                echo "⚠️  依赖安装失败"
+                exit 1
+              }
+              
+              # 构建项目
+              echo "构建项目..."
+              export NODE_OPTIONS="--max-old-space-size=3072"
+              npm run build || {
+                echo "❌ 构建失败"
+                exit 1
+              }
+              
+              if [ ! -d "dist" ]; then
+                echo "❌ dist 目录不存在"
+                exit 1
+              fi
+              
+              echo "✅ 构建完成"
+              
+              # 停止旧进程
+              pm2 delete "$PM2_NAME" 2>/dev/null || true
+              if sudo lsof -i :$TARGET_PORT >/dev/null 2>&1; then
+                sudo lsof -ti :$TARGET_PORT | xargs sudo kill -9 2>/dev/null || true
+                sleep 2
+              fi
+              
+              # 启动服务
+              mkdir -p "$PROJECT_ROOT/logs"
+              pm2 start serve \
+                --name "$PM2_NAME" \
+                --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
+                --output "$PROJECT_ROOT/logs/${PM2_NAME}-out.log" \
+                --merge-logs \
+                --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+                -- -s "$PROJECT_DIR/dist" -l $TARGET_PORT || {
+                echo "⚠️  PM2 启动失败，查看错误..."
+                pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
+                exit 1
+              }
+              
+              pm2 save || true
+              echo "✅ hongbao 服务已启动"
+              echo ""
+            fi
+            
+            # ============================================
+            # 部署 tgmini (端口 3001)
+            # ============================================
+            if [ -d "tgmini20251220" ]; then
+              echo "📦 [7/10] 部署 tgmini 项目..."
+              echo "----------------------------------------"
+              
+              SITE_DIR="tgmini20251220"
+              PROJECT_DIR="$PROJECT_ROOT/$SITE_DIR"
+              TARGET_PORT=3001
+              PM2_NAME="tgmini-frontend"
+              
+              cd "$PROJECT_DIR" || {
+                echo "❌ 无法进入项目子目录"
+                exit 1
+              }
+              
+              # 安装依赖
+              echo "安装依赖..."
+              npm install --quiet || {
+                echo "⚠️  依赖安装失败"
+                exit 1
+              }
+              
+              # 构建项目
+              echo "构建项目..."
+              export NODE_OPTIONS="--max-old-space-size=3072"
+              npm run build || {
+                echo "❌ 构建失败"
+                exit 1
+              }
+              
+              if [ ! -d "dist" ]; then
+                echo "❌ dist 目录不存在"
+                exit 1
+              fi
+              
+              echo "✅ 构建完成"
+              
+              # 停止旧进程
+              pm2 delete "$PM2_NAME" 2>/dev/null || true
+              if sudo lsof -i :$TARGET_PORT >/dev/null 2>&1; then
+                sudo lsof -ti :$TARGET_PORT | xargs sudo kill -9 2>/dev/null || true
+                sleep 2
+              fi
+              
+              # 启动服务
+              mkdir -p "$PROJECT_ROOT/logs"
+              pm2 start serve \
+                --name "$PM2_NAME" \
+                --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
+                --output "$PROJECT_ROOT/logs/${PM2_NAME}-out.log" \
+                --merge-logs \
+                --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+                -- -s "$PROJECT_DIR/dist" -l $TARGET_PORT || {
+                echo "⚠️  PM2 启动失败，查看错误..."
+                pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
+                exit 1
+              }
+              
+              pm2 save || true
+              echo "✅ tgmini 服务已启动"
+              echo ""
+            fi
+            
+            # ============================================
             # 验证所有服务
             # ============================================
-            echo "🔍 [6/8] 验证所有服务..."
+            echo "🔍 [8/10] 验证所有服务..."
             echo "----------------------------------------"
             pm2 list
             echo ""
             
             echo "端口监听状态:"
-            sudo lsof -i :8000 -i :3000 -i :3003 2>/dev/null || echo "无法检查端口状态"
+            sudo lsof -i :8000 -i :3000 -i :3001 -i :3002 -i :3003 2>/dev/null || echo "无法检查端口状态"
             echo ""
             
             # ============================================
             # 重启 Nginx
             # ============================================
-            echo "🌐 [7/8] 重启 Nginx..."
+            echo "🌐 [9/10] 重启 Nginx..."
             echo "----------------------------------------"
             sudo nginx -t && sudo systemctl restart nginx || {
               echo "⚠️  Nginx 重启失败"
@@ -357,7 +489,9 @@ jobs:
             echo ""
             echo "服务状态:"
             echo "  后端: http://127.0.0.1:8000"
-            echo "  前端: http://127.0.0.1:3000"
+            echo "  aikz (saas-demo): http://127.0.0.1:3000"
+            echo "  tgmini: http://127.0.0.1:3001"
+            echo "  hongbao: http://127.0.0.1:3002"
             echo "  aizkw: http://127.0.0.1:3003"
             echo ""
             echo "PM2 状态:"

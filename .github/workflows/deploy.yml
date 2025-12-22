@@ -113,14 +113,16 @@ jobs:
             echo "🚀 开始执行部署脚本..."
             echo "=========================================="
             echo "当前时间: $(date)"
+            echo "脚本路径: $(pwd)/scripts/deploy_full.sh"
+            echo "脚本存在: $([ -f scripts/deploy_full.sh ] && echo '是' || echo '否')"
             echo ""
             
-            # 使用 unbuffered 模式执行脚本，确保输出实时刷新
-            if bash -c 'set -e; export PYTHONUNBUFFERED=1; exec bash scripts/deploy_full.sh'; then
-              EXIT_CODE=0
-            else
-              EXIT_CODE=$?
-            fi
+            # 设置脚本为可执行
+            chmod +x scripts/deploy_full.sh
+            
+            # 直接执行脚本（脚本内部会定期输出进度，保持SSH连接活跃）
+            bash scripts/deploy_full.sh
+            EXIT_CODE=$?
             
             echo ""
             echo "=========================================="
@@ -145,13 +147,15 @@ jobs:
                 fi
               done
               echo ""
+              echo "⏳ 等待 SSH 连接优雅关闭..."
+              sleep 3
               exit 0
             else
               echo "❌ 部署脚本执行失败 (退出码: $EXIT_CODE)"
               echo "查看最近日志:"
               pm2 logs --lines 30 --nostream 2>/dev/null || true
               echo ""
-              echo "查看部署日志文件（如果存在）:"
-              tail -n 50 /tmp/deploy.log 2>/dev/null || echo "日志文件不存在"
+              echo "⏳ 等待 SSH 连接优雅关闭..."
+              sleep 3
               exit $EXIT_CODE
             fi

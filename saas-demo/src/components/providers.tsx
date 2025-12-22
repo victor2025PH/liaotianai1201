@@ -3,6 +3,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { QueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { WebSocketProvider } from "@/hooks/useWebSocket";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // 在客戶端創建 QueryClient 實例，避免序列化問題
@@ -26,7 +27,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <WebSocketProvider>
+        {children}
+      </WebSocketProvider>
+    </QueryClientProvider>
   );
 }
 

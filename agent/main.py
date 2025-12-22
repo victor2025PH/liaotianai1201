@@ -9,10 +9,18 @@ import signal
 import sys
 from pathlib import Path
 
-from agent.config import get_agent_id, get_server_url, get_metadata
+from agent.config import (
+    get_agent_id, 
+    get_server_url, 
+    get_metadata,
+    get_proxy,
+    get_expected_ip
+)
 from agent.websocket import WebSocketClient, MessageHandler, MessageType
 from agent.modules.redpacket import RedPacketHandler, RedPacketStrategy
 from agent.modules.theater import TheaterHandler
+from agent.utils.device_fingerprint import get_or_create_device_fingerprint
+from agent.utils.proxy_checker import validate_proxy_binding
 
 # 配置日志
 logging.basicConfig(
@@ -99,6 +107,51 @@ async def main():
     """主函数"""
     global client
     
+    # ============================================
+    # Phase 4: 风控与指纹管理
+    # ============================================
+    
+    # 1. 检查 Proxy IP 绑定（如果配置了 Proxy）
+    proxy_url = get_proxy()
+    expected_ip = get_expected_ip()
+    
+    if proxy_url:
+        logger.info("=" * 60)
+        logger.info("Phase 4: Proxy IP 绑定检查")
+        logger.info("=" * 60)
+        logger.info(f"Proxy URL: {proxy_url}")
+        if expected_ip:
+            logger.info(f"期望 IP: {expected_ip}")
+        
+        try:
+            await validate_proxy_binding(proxy_url, expected_ip)
+            logger.info("✅ Proxy IP 绑定检查通过")
+        except RuntimeError as e:
+            logger.error(f"❌ {e}")
+            logger.error("拒绝启动，请检查 Proxy 配置")
+            sys.exit(1)
+        logger.info("")
+    
+    # 2. 获取或创建设备指纹
+    logger.info("=" * 60)
+    logger.info("Phase 4: 设备指纹管理")
+    logger.info("=" * 60)
+    
+    device_fingerprint = get_or_create_device_fingerprint()
+    logger.info(f"设备型号: {device_fingerprint.device_model}")
+    logger.info(f"系统版本: {device_fingerprint.system_version}")
+    logger.info(f"App 版本: {device_fingerprint.app_version}")
+    logger.info(f"语言代码: {device_fingerprint.lang_code}")
+    logger.info(f"平台: {device_fingerprint.platform}")
+    if device_fingerprint.manufacturer:
+        logger.info(f"制造商: {device_fingerprint.manufacturer}")
+    logger.info("=" * 60)
+    logger.info("")
+    
+    # ============================================
+    # 原有启动逻辑
+    # ============================================
+    
     # 打印启动信息
     agent_id = get_agent_id()
     server_url = get_server_url()
@@ -113,6 +166,24 @@ async def main():
     logger.info("=" * 60)
     logger.info("")
     
+    # TODO: 初始化 Telethon 客户端（使用设备指纹）
+    # 示例代码（需要安装 telethon）:
+    # from telethon import TelegramClient
+    # from telethon.sessions import StringSession
+    # 
+    # device_params = device_fingerprint.to_telethon_params()
+    # telegram_client = TelegramClient(
+    #     session=StringSession(session_string),
+    #     api_id=api_id,
+    #     api_hash=api_hash,
+    #     device_model=device_params["device_model"],
+    #     system_version=device_params["system_version"],
+    #     app_version=device_params["app_version"],
+    #     lang_code=device_params["lang_code"],
+    #     proxy=proxy_url  # 如果配置了 Proxy
+    # )
+    # await telegram_client.start()
+    
     # 创建客户端
     client = WebSocketClient()
     
@@ -120,6 +191,13 @@ async def main():
     # 目前先创建，后续集成 Telethon 时再传入真实的 client
     global redpacket_handler
     redpacket_handler = RedPacketHandler(
+        client=None,  # TODO: 传入 Telethon 客户端
+        websocket_client=client
+    )
+    
+    # 初始化 Theater 处理器（TODO: 需要传入 Telethon 客户端）
+    global theater_handler
+    theater_handler = TheaterHandler(
         client=None,  # TODO: 传入 Telethon 客户端
         websocket_client=client
     )

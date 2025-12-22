@@ -160,3 +160,25 @@ def get_metadata() -> Dict[str, Any]:
             metadata["hostname"] = "unknown"
     
     return metadata
+
+
+def get_proxy() -> Optional[str]:
+    """
+    获取 Proxy URL
+    
+    Returns:
+        Proxy URL 或 None
+    """
+    config = load_config()
+    return config.get("proxy")
+
+
+def get_expected_ip() -> Optional[str]:
+    """
+    获取期望的出口 IP
+    
+    Returns:
+        期望的 IP 地址或 None
+    """
+    config = load_config()
+    return config.get("expected_ip")

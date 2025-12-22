@@ -184,39 +184,134 @@ async def main():
     logger.info("=" * 60)
     logger.info("")
     
-    # TODO: 初始化 Telethon 客户端（使用设备指纹）
-    # 示例代码（需要安装 telethon）:
-    # from telethon import TelegramClient
-    # from telethon.sessions import StringSession
-    # 
-    # # 从 Session 或配置中获取手机号（用于加载对应的设备指纹）
-    # phone_number = "+1234567890"  # 从配置或 Session 文件获取
-    # 
-    # # 获取或创建该手机号对应的设备指纹（每个 Session 唯一）
-    # device_fingerprint = get_or_create_device_fingerprint(phone_number=phone_number)
-    # 
-    # # 转换为 Telethon 参数
-    # device_params = device_fingerprint.to_telethon_params()
-    # 
-    # # 初始化 TelegramClient，注入设备指纹
-    # telegram_client = TelegramClient(
-    #     session=StringSession(session_string),
-    #     api_id=api_id,
-    #     api_hash=api_hash,
-    #     device_model=device_params["device_model"],
-    #     system_version=device_params["system_version"],
-    #     app_version=device_params["app_version"],
-    #     lang_code=device_params["lang_code"],
-    #     proxy=proxy_url  # 如果配置了 Proxy
-    # )
-    # await telegram_client.start()
-    # 
-    # 注意：
-    # - 每个 Session（手机号）对应唯一的设备指纹
-    # - 指纹保存在 data/fingerprints/{phone_number}.json
-    # - 一旦生成，绝对不能修改，否则会触发 Telegram 风控
+    # ============================================
+    # Phase 5: 初始化 Telethon 客户端（使用设备指纹）
+    # ============================================
+    telegram_client = None
     
-    # 创建客户端
+    # 从配置获取 Telegram API 凭据
+    api_id = get_telegram_api_id()
+    api_hash = get_telegram_api_hash()
+    session_string = get_telegram_session_string()
+    session_path = get_telegram_session_path()
+    
+    if api_id and api_hash:
+        try:
+            from telethon import TelegramClient
+            from telethon.sessions import StringSession
+            
+            # 转换为 Telethon 参数
+            device_params = device_fingerprint.to_telethon_params()
+            
+            logger.info("=" * 60)
+            logger.info("Phase 5: 初始化 Telethon 客户端")
+            logger.info("=" * 60)
+            logger.info(f"使用设备指纹: {device_fingerprint.device_model}")
+            logger.info(f"系统版本: {device_params['system_version']}")
+            logger.info(f"App 版本: {device_params['app_version']}")
+            logger.info("=" * 60)
+            logger.info("")
+            
+            # 确定 Session 类型
+            if session_string:
+                # 使用字符串 Session
+                session = StringSession(session_string)
+                logger.info("使用字符串 Session")
+            elif session_path:
+                # 使用文件 Session
+                session = session_path
+                logger.info(f"使用文件 Session: {session_path}")
+            else:
+                # 默认 Session 文件名
+                session = "default"
+                logger.info("使用默认 Session 文件名: default")
+            
+            # 初始化 TelegramClient，注入设备指纹
+            telegram_client = TelegramClient(
+                session=session,
+                api_id=int(api_id),
+                api_hash=api_hash,
+                device_model=device_params["device_model"],
+                system_version=device_params["system_version"],
+                app_version=device_params["app_version"],
+                lang_code=device_params["lang_code"],
+                proxy=proxy_url if proxy_url else None  # 如果配置了 Proxy
+            )
+            
+            # 启动客户端
+            await telegram_client.start()
+            logger.info("✅ Telethon 客户端已启动")
+            
+        except ImportError:
+            logger.warning("⚠️  Telethon 未安装，跳过客户端初始化")
+            logger.warning("   安装命令: pip install telethon")
+        except Exception as e:
+            logger.error(f"❌ Telethon 客户端初始化失败: {e}", exc_info=True)
+            logger.warning("   继续运行（部分功能可能不可用）")
+    else:
+        logger.info("ℹ️  未配置 Telegram API 凭据，跳过 Telethon 客户端初始化")
+        logger.info("   如需使用 Telegram 功能，请在 config.json 中配置:")
+        logger.info("   {")
+        logger.info("     \"telegram\": {")
+        logger.info("       \"api_id\": \"YOUR_API_ID\",")
+        logger.info("       \"api_hash\": \"YOUR_API_HASH\",")
+        logger.info("       \"session_string\": \"...\" 或 \"session_path\": \"sessions/default.session\"")
+        logger.info("     }")
+        logger.info("   }")
+        logger.info("   或设置环境变量:")
+        logger.info("   - TELEGRAM_API_ID")
+        logger.info("   - TELEGRAM_API_HASH")
+        logger.info("   - TELEGRAM_SESSION_STRING 或 TELEGRAM_SESSION_PATH")
+    
+    # ============================================
+    # Phase 5: 测试剧本执行（如果配置了测试脚本）
+    # ============================================
+    test_script_path = Path(__file__).parent.parent / "test_script.json"
+    if test_script_path.exists():
+        logger.info("=" * 60)
+        logger.info("Phase 5: 测试剧本执行")
+        logger.info("=" * 60)
+        
+        try:
+            # 加载测试剧本
+            test_scenario = load_scenario_from_file(str(test_script_path))
+            
+            # 创建剧本执行器
+            test_scenario_player = ScenarioPlayer(client=telegram_client)
+            
+            # 设置测试变量（可选）
+            test_variables = {
+                "target_user": "测试用户",
+                "group_id": "-1001234567890"  # 示例群组ID
+            }
+            test_scenario_player.set_variables(test_variables)
+            
+            logger.info(f"开始执行测试剧本: {test_scenario.get('name', '未命名')}")
+            logger.info("=" * 60)
+            
+            # 执行剧本（异步，不阻塞主流程）
+            asyncio.create_task(
+                test_scenario_player.play(
+                    scenario=test_scenario,
+                    variables=test_variables,
+                    execution_id="test_exec_001"
+                )
+            )
+            
+            logger.info("✅ 测试剧本已启动（后台执行）")
+            logger.info("=" * 60)
+            logger.info("")
+        
+        except Exception as e:
+            logger.error(f"❌ 测试剧本执行失败: {e}", exc_info=True)
+            logger.warning("   继续运行主程序...")
+            logger.info("")
+    
+    # ============================================
+    # 原有启动逻辑
+    # ============================================
+    
+    # 创建 WebSocket 客户端
     client = WebSocketClient()
     
     # 初始化 RedPacket 处理器（传入 Telethon 客户端）

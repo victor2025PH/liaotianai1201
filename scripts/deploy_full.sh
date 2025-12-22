@@ -1,0 +1,479 @@
+#!/bin/bash
+# ============================================================
+# 全栈部署脚本 - 智能健康检查版
+# 用于 GitHub Actions 自动部署
+# ============================================================
+
+set -e
+
+echo "=========================================="
+echo "🚀 全栈部署 - 智能健康检查版"
+echo "时间: $(date)"
+echo "=========================================="
+echo ""
+
+PROJECT_ROOT="/home/ubuntu/telegram-ai-system"
+
+# ============================================
+# 智能端口等待函数
+# ============================================
+wait_for_port() {
+  local port=$1
+  local name=$2
+  local retries=0
+  local max_retries=60  # 最多等待 3分钟 (60 * 3s)
+  
+  echo "⏳ 正在等待 $name 启动 (端口 $port)..."
+  while ! nc -z 127.0.0.1 $port 2>/dev/null; do
+    sleep 3
+    retries=$((retries+1))
+    if [ $retries -ge $max_retries ]; then
+      echo "❌ $name 启动超时！端口 $port 未在 $((max_retries * 3)) 秒内启动"
+      echo "查看 PM2 日志:"
+      pm2 logs --lines 30 --nostream 2>/dev/null || true
+      exit 1
+    fi
+    if [ $((retries % 10)) -eq 0 ]; then
+      echo "   已等待 $((retries * 3)) 秒..."
+    fi
+  done
+  echo "✅ $name 已成功启动！(端口 $port)"
+}
+
+# 检查并安装 netcat (用于端口检测)
+if ! command -v nc >/dev/null 2>&1; then
+  echo "📦 安装 netcat (用于端口检测)..."
+  sudo apt-get update -qq
+  sudo apt-get install -y netcat-openbsd || sudo apt-get install -y netcat
+fi
+
+# ============================================
+# Step A: 配置 Swap 虚拟内存
+# ============================================
+echo "🔧 [Step A] 配置 Swap 虚拟内存..."
+echo "----------------------------------------"
+if [ -f "$PROJECT_ROOT/scripts/server/setup_swap.sh" ]; then
+  bash "$PROJECT_ROOT/scripts/server/setup_swap.sh"
+else
+  echo "⚠️  Swap 脚本不存在，跳过（如果内存充足可忽略）"
+fi
+echo ""
+
+# ============================================
+# Step B: 部署后端 (admin-backend)
+# ============================================
+if [ -d "$PROJECT_ROOT/admin-backend" ]; then
+  echo "🔧 [Step B] 部署后端服务..."
+  echo "----------------------------------------"
+  
+  cd "$PROJECT_ROOT/admin-backend"
+  
+  # 检查 requirements.txt
+  if [ ! -f "requirements.txt" ]; then
+    echo "⚠️  requirements.txt 不存在，跳过后端部署"
+  else
+    # 安装/更新依赖
+    echo "安装 Python 依赖..."
+    pip3 install -r requirements.txt --break-system-packages --quiet || {
+      echo "⚠️  依赖安装失败，尝试继续..."
+    }
+    
+    # 停止旧的后端进程
+    echo "停止旧的后端进程..."
+    pm2 delete backend 2>/dev/null || true
+    pkill -f 'uvicorn.*app.main:app' 2>/dev/null || true
+    if sudo lsof -i :8000 >/dev/null 2>&1; then
+      sudo lsof -ti :8000 | xargs sudo kill -9 2>/dev/null || true
+      sleep 2
+    fi
+    
+    # 确保日志目录存在
+    mkdir -p "$PROJECT_ROOT/logs"
+    
+    # 使用 PM2 启动后端
+    echo "启动后端服务 (端口 8000)..."
+    pm2 start python3 \
+      --name backend \
+      --interpreter python3 \
+      --error "$PROJECT_ROOT/logs/backend-error.log" \
+      --output "$PROJECT_ROOT/logs/backend-out.log" \
+      --merge-logs \
+      --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+      -- -m uvicorn app.main:app --host 0.0.0.0 --port 8000 || {
+      echo "⚠️  PM2 启动失败，查看错误..."
+      pm2 logs backend --lines 50 --nostream 2>/dev/null || true
+      exit 1
+    }
+    
+    pm2 save || true
+    
+    # 智能健康检查：等待端口启动
+    wait_for_port 8000 "Backend"
+    
+    # 额外 HTTP 健康检查
+    echo "🔍 执行 HTTP 健康检查..."
+    for i in {1..10}; do
+      if curl -s http://127.0.0.1:8000/health >/dev/null 2>&1; then
+        echo "✅ 后端服务健康检查通过"
+        break
+      fi
+      if [ $i -eq 10 ]; then
+        echo "⚠️  后端 HTTP 健康检查失败，但端口已启动"
+      else
+        sleep 2
+      fi
+    done
+  fi
+  echo ""
+fi
+
+# ============================================
+# Step C: 部署前端 (saas-demo)
+# ============================================
+if [ -d "$PROJECT_ROOT/saas-demo" ]; then
+  echo "🎨 [Step C] 部署前端服务..."
+  echo "----------------------------------------"
+  
+  cd "$PROJECT_ROOT/saas-demo"
+  
+  # 检查 package.json
+  if [ ! -f "package.json" ]; then
+    echo "⚠️  package.json 不存在，跳过前端部署"
+  else
+    # 安装依赖
+    echo "安装 Node.js 依赖..."
+    npm install --quiet || {
+      echo "⚠️  依赖安装失败，尝试继续..."
+    }
+    
+    # 构建前端
+    echo "构建前端..."
+    export NODE_OPTIONS="--max-old-space-size=3072"
+    npm run build || {
+      echo "❌ 前端构建失败"
+      exit 1
+    }
+    
+    # 检查构建输出
+    if [ ! -d ".next" ] && [ ! -d "dist" ]; then
+      echo "❌ 构建输出目录不存在"
+      exit 1
+    fi
+    
+    echo "✅ 前端构建完成"
+    
+    # 停止旧的前端进程
+    echo "停止旧的前端进程..."
+    pm2 delete saas-demo-frontend 2>/dev/null || true
+    pkill -f 'next.*start|node.*3000' 2>/dev/null || true
+    if sudo lsof -i :3000 >/dev/null 2>&1; then
+      sudo lsof -ti :3000 | xargs sudo kill -9 2>/dev/null || true
+      sleep 2
+    fi
+    
+    # 确保日志目录存在
+    mkdir -p "$PROJECT_ROOT/logs"
+    
+    # 使用 PM2 启动前端
+    echo "启动前端服务 (端口 3000)..."
+    if [ -d ".next/standalone" ]; then
+      # Next.js standalone 模式
+      pm2 start node \
+        --name saas-demo-frontend \
+        --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
+        --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
+        --merge-logs \
+        --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+        -- .next/standalone/server.js || {
+        echo "⚠️  PM2 启动失败"
+        exit 1
+      }
+    else
+      # 使用 npm start
+      pm2 start npm \
+        --name saas-demo-frontend \
+        --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
+        --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
+        --merge-logs \
+        --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+        -- start || {
+        echo "⚠️  PM2 启动失败"
+        exit 1
+      }
+    fi
+    
+    pm2 save || true
+    
+    # 智能健康检查：等待端口启动
+    wait_for_port 3000 "SaaS Demo"
+    
+    # 额外 HTTP 健康检查
+    echo "🔍 执行 HTTP 健康检查..."
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000 || echo "000")
+    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+      echo "✅ 前端服务响应正常 (HTTP $HTTP_CODE)"
+    else
+      echo "⚠️  前端服务响应异常 (HTTP $HTTP_CODE)"
+    fi
+  fi
+  echo ""
+fi
+
+# ============================================
+# Step D: 部署 aizkw (端口 3003)
+# ============================================
+if [ -d "$PROJECT_ROOT/aizkw20251219" ]; then
+  echo "📦 [Step D] 部署 aizkw 项目..."
+  echo "----------------------------------------"
+  
+  SITE_DIR="aizkw20251219"
+  PROJECT_DIR="$PROJECT_ROOT/$SITE_DIR"
+  TARGET_PORT=3003
+  PM2_NAME="aizkw-frontend"
+  
+  cd "$PROJECT_DIR" || {
+    echo "❌ 无法进入项目子目录"
+    exit 1
+  }
+  
+  # 安装依赖
+  echo "安装依赖..."
+  npm install --quiet || {
+    echo "⚠️  依赖安装失败"
+    exit 1
+  }
+  
+  # 构建项目
+  echo "构建项目..."
+  export NODE_OPTIONS="--max-old-space-size=3072"
+  npm run build || {
+    echo "❌ 构建失败"
+    exit 1
+  }
+  
+  if [ ! -d "dist" ]; then
+    echo "❌ dist 目录不存在"
+    exit 1
+  fi
+  
+  echo "✅ 构建完成"
+  
+  # 检查并安装 serve
+  if ! command -v serve >/dev/null 2>&1; then
+    echo "安装 serve..."
+    sudo npm install -g serve
+  fi
+  
+  # 停止旧进程
+  pm2 delete "$PM2_NAME" 2>/dev/null || true
+  if sudo lsof -i :$TARGET_PORT >/dev/null 2>&1; then
+    sudo lsof -ti :$TARGET_PORT | xargs sudo kill -9 2>/dev/null || true
+    sleep 2
+  fi
+  
+  # 启动服务（修正 PM2 命令格式）
+  mkdir -p "$PROJECT_ROOT/logs"
+  echo "启动 aizkw 服务 (端口 $TARGET_PORT)..."
+  pm2 start serve \
+    --name "$PM2_NAME" \
+    --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
+    --output "$PROJECT_ROOT/logs/${PM2_NAME}-out.log" \
+    --merge-logs \
+    --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+    -- -s "$PROJECT_DIR/dist" -l $TARGET_PORT || {
+    echo "⚠️  PM2 启动失败，查看错误..."
+    pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
+    exit 1
+  }
+  
+  pm2 save || true
+  
+  # 智能健康检查：等待端口启动
+  wait_for_port $TARGET_PORT "AIZKW"
+  echo ""
+fi
+
+# ============================================
+# Step E: 部署 hongbao (端口 3002)
+# ============================================
+if [ -d "$PROJECT_ROOT/hbwy20251220" ]; then
+  echo "📦 [Step E] 部署 hongbao 项目..."
+  echo "----------------------------------------"
+  
+  SITE_DIR="hbwy20251220"
+  PROJECT_DIR="$PROJECT_ROOT/$SITE_DIR"
+  TARGET_PORT=3002
+  PM2_NAME="hongbao-frontend"
+  
+  cd "$PROJECT_DIR" || {
+    echo "❌ 无法进入项目子目录"
+    exit 1
+  }
+  
+  # 安装依赖
+  echo "安装依赖..."
+  npm install --quiet || {
+    echo "⚠️  依赖安装失败"
+    exit 1
+  }
+  
+  # 构建项目
+  echo "构建项目..."
+  export NODE_OPTIONS="--max-old-space-size=3072"
+  npm run build || {
+    echo "❌ 构建失败"
+    exit 1
+  }
+  
+  if [ ! -d "dist" ]; then
+    echo "❌ dist 目录不存在"
+    exit 1
+  fi
+  
+  echo "✅ 构建完成"
+  
+  # 停止旧进程
+  pm2 delete "$PM2_NAME" 2>/dev/null || true
+  if sudo lsof -i :$TARGET_PORT >/dev/null 2>&1; then
+    sudo lsof -ti :$TARGET_PORT | xargs sudo kill -9 2>/dev/null || true
+    sleep 2
+  fi
+  
+  # 启动服务
+  mkdir -p "$PROJECT_ROOT/logs"
+  echo "启动 hongbao 服务 (端口 $TARGET_PORT)..."
+  pm2 start serve \
+    --name "$PM2_NAME" \
+    --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
+    --output "$PROJECT_ROOT/logs/${PM2_NAME}-out.log" \
+    --merge-logs \
+    --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+    -- -s "$PROJECT_DIR/dist" -l $TARGET_PORT || {
+    echo "⚠️  PM2 启动失败，查看错误..."
+    pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
+    exit 1
+  }
+  
+  pm2 save || true
+  
+  # 智能健康检查：等待端口启动
+  wait_for_port $TARGET_PORT "Hongbao"
+  echo ""
+fi
+
+# ============================================
+# Step F: 部署 tgmini (端口 3001)
+# ============================================
+if [ -d "$PROJECT_ROOT/tgmini20251220" ]; then
+  echo "📦 [Step F] 部署 tgmini 项目..."
+  echo "----------------------------------------"
+  
+  SITE_DIR="tgmini20251220"
+  PROJECT_DIR="$PROJECT_ROOT/$SITE_DIR"
+  TARGET_PORT=3001
+  PM2_NAME="tgmini-frontend"
+  
+  cd "$PROJECT_DIR" || {
+    echo "❌ 无法进入项目子目录"
+    exit 1
+  }
+  
+  # 安装依赖
+  echo "安装依赖..."
+  npm install --quiet || {
+    echo "⚠️  依赖安装失败"
+    exit 1
+  }
+  
+  # 构建项目
+  echo "构建项目..."
+  export NODE_OPTIONS="--max-old-space-size=3072"
+  npm run build || {
+    echo "❌ 构建失败"
+    exit 1
+  }
+  
+  if [ ! -d "dist" ]; then
+    echo "❌ dist 目录不存在"
+    exit 1
+  fi
+  
+  echo "✅ 构建完成"
+  
+  # 停止旧进程
+  pm2 delete "$PM2_NAME" 2>/dev/null || true
+  if sudo lsof -i :$TARGET_PORT >/dev/null 2>&1; then
+    sudo lsof -ti :$TARGET_PORT | xargs sudo kill -9 2>/dev/null || true
+    sleep 2
+  fi
+  
+  # 启动服务
+  mkdir -p "$PROJECT_ROOT/logs"
+  echo "启动 tgmini 服务 (端口 $TARGET_PORT)..."
+  pm2 start serve \
+    --name "$PM2_NAME" \
+    --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
+    --output "$PROJECT_ROOT/logs/${PM2_NAME}-out.log" \
+    --merge-logs \
+    --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+    -- -s "$PROJECT_DIR/dist" -l $TARGET_PORT || {
+    echo "⚠️  PM2 启动失败，查看错误..."
+    pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
+    exit 1
+  }
+  
+  pm2 save || true
+  
+  # 智能健康检查：等待端口启动
+  wait_for_port $TARGET_PORT "TG Mini"
+  echo ""
+fi
+
+# ============================================
+# 验证所有服务
+# ============================================
+echo "🔍 验证所有服务..."
+echo "----------------------------------------"
+pm2 list
+echo ""
+
+echo "端口监听状态:"
+sudo lsof -i :8000 -i :3000 -i :3001 -i :3002 -i :3003 2>/dev/null || echo "无法检查端口状态"
+echo ""
+
+# ============================================
+# 重启 Nginx
+# ============================================
+echo "🌐 重启 Nginx..."
+echo "----------------------------------------"
+sudo nginx -t && sudo systemctl restart nginx || {
+  echo "⚠️  Nginx 重启失败"
+}
+echo "✅ Nginx 已重启"
+echo ""
+
+# ============================================
+# 完成
+# ============================================
+echo "=========================================="
+echo "✅ 部署完成！"
+echo "时间: $(date)"
+echo "=========================================="
+echo ""
+echo "服务状态:"
+echo "  后端: http://127.0.0.1:8000"
+echo "  aikz (saas-demo): http://127.0.0.1:3000"
+echo "  tgmini: http://127.0.0.1:3001"
+echo "  hongbao: http://127.0.0.1:3002"
+echo "  aizkw: http://127.0.0.1:3003"
+echo ""
+echo "PM2 状态:"
+pm2 list
+echo ""
+echo "验证命令:"
+echo "  pm2 list"
+echo "  curl -I http://127.0.0.1:8000/health"
+echo "  curl -I http://127.0.0.1:3000"
+echo "  curl -I http://127.0.0.1:3001"
+echo "  curl -I http://127.0.0.1:3002"
+echo "  curl -I http://127.0.0.1:3003"

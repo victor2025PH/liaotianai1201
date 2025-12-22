@@ -358,181 +358,92 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     fi
     
     # ============================================
-    # 6. 启动前端服务
+    # 6. 启动前端服务 (Standard Mode)
     # ============================================
     # 确保日志目录存在
     mkdir -p "$PROJECT_ROOT/logs"
     
-    # 使用 PM2 启动前端（确保使用 --name saas-demo-frontend，端口 3005）
-    echo "启动前端服务 (端口 3005，避开 3000 冲突)..."
-    if [ -d ".next/standalone" ]; then
-      # Next.js standalone 模式 - 需要手动复制静态文件
-      echo "准备 standalone 模式启动..."
+    # 使用 Standard 模式启动（放弃 Standalone 模式，避免 MODULE_NOT_FOUND 错误）
+    echo "🚀 启动 Next.js 服务 (Standard Mode - Port 3005)..."
+    
+    # 1. 进入项目目录（而不是 standalone 目录）
+    cd "$PROJECT_ROOT/saas-demo" || {
+      echo "❌ 无法进入项目目录"
+      exit 1
+    }
+    
+    # 2. 显式导出端口变量（双重保险）
+    export PORT=3005
+    echo "  ✅ 已设置环境变量 PORT=3005"
+    
+    # 3. 使用 npm start 启动（利用 package.json 中的 -p 3005 配置）
+    # 添加 --update-env 确保环境变量生效
+    pm2 start npm \
+      --name saas-demo-frontend \
+      --max-memory-restart 1G \
+      --update-env \
+      --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
+      --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
+      --merge-logs \
+      --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+      -- start || {
+      echo "❌ PM2 启动失败"
+      echo "检查错误日志:"
+      tail -20 "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null || echo "无法读取错误日志"
+      exit 1
+    }
+    
+    echo "✅ 前端服务已启动 (端口 3005)"
+    
+    # 等待服务启动
+    sleep 3
+    
+    # 验证服务是否真正启动成功（检查端口和进程）
+    if ! sudo lsof -i :3005 >/dev/null 2>&1; then
+      echo "⚠️  警告：服务启动后端口 3005 未监听"
+      echo "检查 PM2 状态:"
+      pm2 list | grep saas-demo-frontend || echo "进程不存在"
+      echo "检查错误日志:"
+      tail -30 "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null || echo "无法读取错误日志"
       
-      # 确定 standalone 目录路径（可能是 .next/standalone 或 .next/standalone/saas-demo）
-      STANDALONE_DIR=".next/standalone"
-      if [ -d ".next/standalone/saas-demo" ]; then
-        STANDALONE_DIR=".next/standalone/saas-demo"
-        echo "发现嵌套的 standalone 目录: $STANDALONE_DIR"
-      fi
-      
-      # 确保目录结构完整
-      echo "复制静态文件到 standalone 目录..."
-      mkdir -p "$STANDALONE_DIR/.next/static"
-      mkdir -p "$STANDALONE_DIR/.next/server"
-      mkdir -p "$STANDALONE_DIR/.next"
-      
-      # 复制 BUILD_ID（必需）
-      if [ -f ".next/BUILD_ID" ]; then
-        cp .next/BUILD_ID "$STANDALONE_DIR/.next/BUILD_ID" 2>/dev/null || true
-      fi
-      
-      # 复制所有 JSON 配置文件（必需）
-      for json_file in .next/*.json; do
-        if [ -f "$json_file" ]; then
-          cp "$json_file" "$STANDALONE_DIR/.next/" 2>/dev/null || true
-        fi
-      done
-      
-      # 复制 static 目录（关键！）
-      if [ -d ".next/static" ]; then
-        echo "复制 .next/static 目录..."
-        cp -r .next/static/* "$STANDALONE_DIR/.next/static/" 2>/dev/null || true
-        STATIC_COUNT=$(find "$STANDALONE_DIR/.next/static" -type f 2>/dev/null | wc -l)
-        echo "✅ 已复制 $STATIC_COUNT 个静态文件"
-      else
-        echo "⚠️  警告：.next/static 目录不存在"
-      fi
-      
-      # 复制 server 目录（必需，包含 pages-manifest.json 等）
-      if [ -d ".next/server" ]; then
-        echo "复制 .next/server 目录..."
-        cp -r .next/server/* "$STANDALONE_DIR/.next/server/" 2>/dev/null || true
-        SERVER_COUNT=$(find "$STANDALONE_DIR/.next/server" -type f 2>/dev/null | wc -l)
-        echo "✅ 已复制 $SERVER_COUNT 个服务器文件"
-      else
-        echo "⚠️  警告：.next/server 目录不存在"
-      fi
-      
-      # 复制 public 目录
-      if [ -d "public" ]; then
-        cp -r public "$STANDALONE_DIR/" 2>/dev/null || true
-        echo "✅ public 目录已复制"
-      fi
-      
-      # 验证关键文件
-      if [ ! -f "$STANDALONE_DIR/.next/BUILD_ID" ]; then
-        echo "⚠️  警告：BUILD_ID 未复制"
-      fi
-      
-      if [ ! -d "$STANDALONE_DIR/.next/static/chunks" ]; then
-        echo "❌ 错误：chunks 目录不存在，静态文件复制可能失败"
-        exit 1
-      fi
-      
-      echo "✅ standalone 目录准备完成"
-      
-      # 启动 Next.js standalone 模式（强制使用 PORT=3005）
-      echo "🚀 启动 Next.js 服务 (Standalone Mode - Port 3005)..."
-      
-      # 进入 standalone 目录
-      cd "$PROJECT_ROOT/saas-demo/$STANDALONE_DIR" || {
-        echo "❌ 无法进入 standalone 目录: $STANDALONE_DIR"
-        exit 1
-      }
-      
-      # ⚠️ 关键修复：通过环境变量强制指定端口（在 pm2 start 之前导出）
-      export PORT=3005
-      echo "  ✅ 已设置环境变量 PORT=3005"
-      
-      # 验证 server.js 存在
-      if [ ! -f "server.js" ]; then
-        echo "❌ 错误：server.js 不存在于 standalone 目录"
-        exit 1
-      fi
-      
-      # 启动服务（使用导出的 PORT 环境变量，并在命令中显式传递以确保 PM2 接收）
-      PORT=3005 pm2 start server.js \
-        --name saas-demo-frontend \
-        --max-memory-restart 1G \
-        --update-env \
-        --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
-        --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
-        --merge-logs \
-        --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
-        echo "❌ PM2 启动失败"
-        echo "检查错误日志:"
-        tail -20 "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null || echo "无法读取错误日志"
-        exit 1
-      }
-      
-      # 返回项目根目录
-      cd "$PROJECT_ROOT/saas-demo" || true
-      
-      # 等待服务启动
-      sleep 3
-      
-      # 验证服务是否真正启动成功（检查端口和进程）
-      if ! sudo lsof -i :3005 >/dev/null 2>&1; then
-        echo "⚠️  警告：服务启动后端口 3005 未监听"
-        echo "检查 PM2 状态:"
-        pm2 list | grep saas-demo-frontend || echo "进程不存在"
-        echo "检查错误日志:"
-        tail -30 "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null || echo "无法读取错误日志"
-        
-        # 检查是否是 EADDRINUSE 错误
-        if grep -q "EADDRINUSE" "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null; then
-          echo "❌ 检测到端口冲突错误 (EADDRINUSE)，重新清理端口..."
-          sudo lsof -ti :3005 | xargs sudo kill -9 2>/dev/null || true
-          sleep 3
-          pm2 restart saas-demo-frontend || {
-            echo "❌ 重启失败，尝试删除后重新启动..."
-            pm2 delete saas-demo-frontend 2>/dev/null || true
-            sleep 2
-            # 重新进入目录并设置环境变量
-            cd "$PROJECT_ROOT/saas-demo/$STANDALONE_DIR" || exit 1
-            export PORT=3005
-            pm2 start server.js \
-              --name saas-demo-frontend \
-              --max-memory-restart 1G \
-              --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
-              --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
-              --merge-logs \
-              --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
-              echo "❌ 重新启动失败"
-              exit 1
-            }
-            cd "$PROJECT_ROOT/saas-demo" || true
-            sleep 3
+      # 检查是否是 EADDRINUSE 错误
+      if grep -q "EADDRINUSE" "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null; then
+        echo "❌ 检测到端口冲突错误 (EADDRINUSE)，重新清理端口..."
+        sudo lsof -ti :3005 | xargs sudo kill -9 2>/dev/null || true
+        sleep 3
+        pm2 restart saas-demo-frontend || {
+          echo "❌ 重启失败，尝试删除后重新启动..."
+          pm2 delete saas-demo-frontend 2>/dev/null || true
+          sleep 2
+          # 重新设置环境变量并启动
+          cd "$PROJECT_ROOT/saas-demo" || exit 1
+          export PORT=3005
+          pm2 start npm \
+            --name saas-demo-frontend \
+            --max-memory-restart 1G \
+            --update-env \
+            --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
+            --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
+            --merge-logs \
+            --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+            -- start || {
+            echo "❌ 重新启动失败"
+            exit 1
           }
-        else
-          echo "❌ 服务启动失败，但不是端口冲突问题"
-          exit 1
-        fi
-      fi
-      
-      # 最终验证
-      if sudo lsof -i :3005 >/dev/null 2>&1; then
-        echo "✅ Next.js 服务已成功启动并监听端口 3005"
+          sleep 3
+        }
       else
-        echo "❌ 服务启动失败：端口 3005 未监听"
+        echo "❌ 服务启动失败，但不是端口冲突问题"
         exit 1
       fi
+    fi
+    
+    # 最终验证
+    if sudo lsof -i :3005 >/dev/null 2>&1; then
+      echo "✅ Next.js 服务已成功启动并监听端口 3005"
     else
-      # 使用 npm start（package.json 已指定端口 3005）
-      echo "🚀 启动前端服务 (端口 3005)..."
-      echo "  直接运行 npm start，它现在会自动使用 3005 端口（package.json 已配置）"
-      pm2 start npm \
-        --name saas-demo-frontend \
-        --max-memory-restart 1G \
-        --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
-        --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
-        --merge-logs \
-        --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-        -- start || {
-        echo "⚠️  PM2 启动失败"
-        exit 1
-      }
+      echo "❌ 服务启动失败：端口 3005 未监听"
+      exit 1
     fi
     
     # 保存 PM2 配置（但不要自动重启，防止病毒进程复活）

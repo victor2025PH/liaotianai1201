@@ -137,7 +137,12 @@ async def main():
     logger.info("Phase 4: 设备指纹管理")
     logger.info("=" * 60)
     
-    device_fingerprint = get_or_create_device_fingerprint()
+    # TODO: 从配置或环境变量获取手机号
+    # 目前先使用全局指纹（兼容旧版本）
+    # 后续集成 Telethon 时，应该从 Session 文件或配置中获取手机号
+    phone_number = None  # 可以从 config.json 或环境变量读取
+    
+    device_fingerprint = get_or_create_device_fingerprint(phone_number=phone_number)
     logger.info(f"设备型号: {device_fingerprint.device_model}")
     logger.info(f"系统版本: {device_fingerprint.system_version}")
     logger.info(f"App 版本: {device_fingerprint.app_version}")
@@ -145,6 +150,7 @@ async def main():
     logger.info(f"平台: {device_fingerprint.platform}")
     if device_fingerprint.manufacturer:
         logger.info(f"制造商: {device_fingerprint.manufacturer}")
+    logger.info(f"指纹文件: {phone_number or 'global'}")
     logger.info("=" * 60)
     logger.info("")
     
@@ -171,7 +177,16 @@ async def main():
     # from telethon import TelegramClient
     # from telethon.sessions import StringSession
     # 
+    # # 从 Session 或配置中获取手机号（用于加载对应的设备指纹）
+    # phone_number = "+1234567890"  # 从配置或 Session 文件获取
+    # 
+    # # 获取或创建该手机号对应的设备指纹（每个 Session 唯一）
+    # device_fingerprint = get_or_create_device_fingerprint(phone_number=phone_number)
+    # 
+    # # 转换为 Telethon 参数
     # device_params = device_fingerprint.to_telethon_params()
+    # 
+    # # 初始化 TelegramClient，注入设备指纹
     # telegram_client = TelegramClient(
     #     session=StringSession(session_string),
     #     api_id=api_id,
@@ -183,6 +198,11 @@ async def main():
     #     proxy=proxy_url  # 如果配置了 Proxy
     # )
     # await telegram_client.start()
+    # 
+    # 注意：
+    # - 每个 Session（手机号）对应唯一的设备指纹
+    # - 指纹保存在 data/fingerprints/{phone_number}.json
+    # - 一旦生成，绝对不能修改，否则会触发 Telegram 风控
     
     # 创建客户端
     client = WebSocketClient()

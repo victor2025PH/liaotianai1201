@@ -243,6 +243,15 @@ async def on_startup() -> None:
     except Exception as e:
         logger.warning(f"啟動性能監控失敗: {e}")
     
+    # 啟動 WebSocket Manager（Agent 通信）
+    try:
+        from app.websocket import get_websocket_manager
+        ws_manager = get_websocket_manager()
+        await ws_manager.start()
+        logger.info("WebSocket Manager 已啟動（Agent 通信）")
+    except Exception as e:
+        logger.error(f"啟動 WebSocket Manager 失敗: {e}", exc_info=True)
+    
     # 初始化日誌聚合器並註冊日誌來源
     try:
         from app.services.log_aggregator import get_log_aggregator

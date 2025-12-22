@@ -215,26 +215,46 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     echo "⚠️  package.json 不存在，跳过前端部署"
   else
     # ============================================
-    # 1. 先彻底清理旧进程和端口（在构建之前）
+    # 🛑 [Security] 核弹级安全清理（在构建之前）
     # ============================================
-    echo "🧹 [清理阶段] 彻底清理旧进程和端口占用..."
+    echo "🛑 [Security] 执行核弹级安全清理..."
+    echo "----------------------------------------"
     
-    # 1.1 先告诉 PM2 删除进程（防止自动重启干扰）
-    echo "  通过 PM2 删除进程..."
-    pm2 delete saas-demo 2>/dev/null || true
-    pm2 delete saas-demo-frontend 2>/dev/null || true
-    pm2 delete frontend 2>/dev/null || true
-    pm2 save --force 2>/dev/null || true
+    # 1. 杀死 PM2 守护进程（彻底停止所有自动重启）
+    echo "  1. 停止 PM2 守护进程..."
+    pm2 kill 2>/dev/null || true
+    sleep 3
+    
+    # 2. 暴力查杀病毒特征进程
+    echo "  2. 查杀病毒特征进程..."
+    sudo pkill -9 -f "cARM" 2>/dev/null || true
+    sudo pkill -9 -f "cX86" 2>/dev/null || true
+    sudo pkill -9 -f "python.*base64" 2>/dev/null || true
+    sudo pkill -9 -f "python.*decode" 2>/dev/null || true
+    # 注意：不杀掉所有 python，因为后端需要 python
+    # 只杀掉可疑的 python 进程
     sleep 2
     
-    # 1.2 强制清理端口 3000（杀灭所有残留，包括潜在的病毒进程）
-    echo "  暴力清理端口 3000..."
-    
-    # 方法1: 使用 fuser 强制终止
-    sudo fuser -k 3000/tcp 2>/dev/null || true
+    # 3. 清理病毒可能使用的临时目录
+    echo "  3. 清理可疑临时目录..."
+    rm -rf /tmp/de 2>/dev/null || true
+    rm -rf /tmp/.X11-unix 2>/dev/null || true
+    rm -rf /tmp/.ICE-unix 2>/dev/null || true
+    find /tmp -name "*.py" -type f -mtime -1 -delete 2>/dev/null || true
     sleep 1
     
-    # 方法2: 使用 lsof 查找并终止所有占用端口的进程
+    # 4. 删除所有 PM2 保存的状态（防止复活）
+    echo "  4. 删除 PM2 保存的状态..."
+    rm -rf ~/.pm2/dump.pm2 2>/dev/null || true
+    rm -rf ~/.pm2/pm2.log 2>/dev/null || true
+    sleep 1
+    
+    # 5. 暴力释放端口 3000（使用 fuser 强制解除占用）
+    echo "  5. 暴力释放端口 3000..."
+    sudo fuser -k -9 3000/tcp 2>/dev/null || true
+    sleep 1
+    
+    # 使用 lsof 查找并终止所有占用端口的进程
     PORT_PIDS=$(sudo lsof -ti :3000 2>/dev/null || echo "")
     if [ -n "$PORT_PIDS" ]; then
       echo "  发现占用端口 3000 的进程: $PORT_PIDS"
@@ -242,8 +262,12 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
       sleep 2
     fi
     
-    # 方法3: 杀掉所有相关的 node/next 进程（包括潜在的病毒进程）
-    echo "  清理相关 Node.js 进程..."
+    # 使用 xargs -r 确保安全（如果 lsof 返回空则不执行）
+    sudo lsof -t -i:3000 2>/dev/null | xargs -r sudo kill -9 2>/dev/null || true
+    sleep 2
+    
+    # 6. 杀掉所有相关的 node/next 进程（包括潜在的病毒进程）
+    echo "  6. 清理相关 Node.js 进程..."
     sudo pkill -9 -f "next-server" 2>/dev/null || true
     sudo pkill -9 -f "saas-demo" 2>/dev/null || true
     sudo pkill -9 -f "node.*3000" 2>/dev/null || true
@@ -251,7 +275,7 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     sudo pkill -9 -f "next.*dev" 2>/dev/null || true
     sleep 2
     
-    # 方法4: 再次检查端口是否释放，如果仍被占用则通过 PID 强制查杀
+    # 7. 再次检查端口是否释放
     if nc -z 127.0.0.1 3000 2>/dev/null || sudo lsof -i :3000 >/dev/null 2>&1; then
       echo "  ⚠️  端口 3000 依然被占用，尝试通过 PID 强制查杀..."
       REMAINING_PIDS=$(sudo lsof -ti :3000 2>/dev/null || echo "")
@@ -271,7 +295,7 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
       fi
     fi
     
-    echo "  ✅ 端口 3000 已完全释放"
+    echo "  ✅ 安全清理完成，端口 3000 已完全释放"
     sleep 2
     
     # ============================================
@@ -283,12 +307,14 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     }
     
     # ============================================
-    # 3. 清理构建缓存（防止缓存损坏导致构建失败）
+    # 3. 强制清理构建缓存（防止病毒代码藏在构建缓存里）
     # ============================================
-    echo "清理构建缓存..."
-    rm -rf .next
-    rm -rf .turbo
-    echo "✅ 缓存已清理"
+    echo "🧹 [Security] 强制清理构建缓存（防止病毒代码残留）..."
+    rm -rf .next 2>/dev/null || true
+    rm -rf .turbo 2>/dev/null || true
+    rm -rf node_modules/.cache 2>/dev/null || true
+    rm -rf .next/cache 2>/dev/null || true
+    echo "✅ 缓存已彻底清理"
     
     # ============================================
     # 4. 构建前端（限制内存使用，防止撑爆服务器）
@@ -474,7 +500,8 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
       }
     fi
     
-    pm2 save || true
+    # 保存 PM2 配置（但不要自动重启，防止病毒进程复活）
+    pm2 save --no-autorestart 2>/dev/null || pm2 save || true
     
     # 智能健康检查：等待端口启动
     wait_for_port 3000 "SaaS Demo"

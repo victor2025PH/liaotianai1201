@@ -100,20 +100,14 @@ if [ -d "$PROJECT_ROOT/admin-backend" ]; then
     # 确保日志目录存在
     mkdir -p "$PROJECT_ROOT/logs"
     
-    # 使用 PM2 启动后端
+    # 使用 PM2 启动后端（使用命令字符串模式，避免 PM2 误将 python3 当作脚本文件）
     echo "启动后端服务 (端口 8000)..."
     cd "$PROJECT_ROOT/admin-backend" || exit 1
     
-    # 创建临时启动脚本（PM2 需要明确的脚本文件或正确的命令格式）
-    cat > /tmp/start_backend.sh << 'EOF'
-#!/bin/bash
-cd /home/ubuntu/telegram-ai-system/admin-backend
-exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-EOF
-    chmod +x /tmp/start_backend.sh
-    
-    pm2 start /tmp/start_backend.sh \
+    # 使用双引号包裹完整命令，让 PM2 直接运行 shell 命令
+    pm2 start "cd $PROJECT_ROOT/admin-backend && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000" \
       --name backend \
+      --interpreter bash \
       --max-memory-restart 1G \
       --error "$PROJECT_ROOT/logs/backend-error.log" \
       --output "$PROJECT_ROOT/logs/backend-out.log" \
@@ -164,6 +158,12 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     npm install --quiet || {
       echo "⚠️  依赖安装失败，尝试继续..."
     }
+    
+    # 清理构建缓存（防止缓存损坏导致构建失败）
+    echo "清理构建缓存..."
+    rm -rf .next
+    rm -rf .turbo
+    echo "✅ 缓存已清理"
     
     # 构建前端（限制内存使用，防止撑爆服务器）
     echo "构建前端..."

@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Enable standalone output for Docker deployment
-  output: "standalone",
+  // ❌ 已禁用 Standalone 模式，使用 Standard 模式（避免 MODULE_NOT_FOUND 错误）
+  // output: "standalone",
   
   // 生產優化
   compress: true,

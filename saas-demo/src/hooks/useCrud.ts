@@ -54,7 +54,7 @@ export interface UseCrudReturn<T, CreateT, UpdateT> {
   
   // 分页
   pagination: PaginationInfo
-  setPagination: (pagination: Partial<PaginationInfo>) => void
+  setPagination: (pagination: Partial<PaginationInfo> | ((prev: PaginationInfo) => Partial<PaginationInfo>)) => void
   
   // 搜索和过滤
   filters: SearchFilters

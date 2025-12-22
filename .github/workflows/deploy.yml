@@ -46,11 +46,14 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          timeout: '30m'
-          command_timeout: '30m'
+          timeout: '45m'
+          command_timeout: '45m'
           use_insecure_cipher: true
-          script_stop: true
+          script_stop: false
           debug: true
+          envs: |
+            PYTHONUNBUFFERED=1
+            DEBIAN_FRONTEND=noninteractive
           script: |
             set -e
             
@@ -105,10 +108,50 @@ jobs:
               exit 1
             fi
             
-            # 执行部署脚本
+            # 执行部署脚本（使用 unbuffered 模式确保实时输出）
             echo ""
             echo "🚀 开始执行部署脚本..."
             echo "=========================================="
-            bash scripts/deploy_full.sh
+            echo "当前时间: $(date)"
+            echo ""
+            
+            # 使用 unbuffered 模式执行脚本，确保输出实时刷新
+            if bash -c 'set -e; export PYTHONUNBUFFERED=1; exec bash scripts/deploy_full.sh'; then
+              EXIT_CODE=0
+            else
+              EXIT_CODE=$?
+            fi
+            
+            echo ""
             echo "=========================================="
-            echo "✅ 部署脚本执行完成"
+            echo "脚本执行完成，退出码: $EXIT_CODE"
+            echo "当前时间: $(date)"
+            echo ""
+            
+            # 无论成功或失败，都显示服务状态
+            echo "📊 当前服务状态:"
+            pm2 list || true
+            echo ""
+            
+            if [ $EXIT_CODE -eq 0 ]; then
+              echo "✅ 部署脚本执行成功"
+              # 验证关键端口
+              echo "🔍 验证关键端口..."
+              for port in 8000 3000 3001 3002 3003; do
+                if nc -z 127.0.0.1 $port 2>/dev/null; then
+                  echo "  ✅ 端口 $port 正在监听"
+                else
+                  echo "  ⚠️  端口 $port 未监听"
+                fi
+              done
+              echo ""
+              exit 0
+            else
+              echo "❌ 部署脚本执行失败 (退出码: $EXIT_CODE)"
+              echo "查看最近日志:"
+              pm2 logs --lines 30 --nostream 2>/dev/null || true
+              echo ""
+              echo "查看部署日志文件（如果存在）:"
+              tail -n 50 /tmp/deploy.log 2>/dev/null || echo "日志文件不存在"
+              exit $EXIT_CODE
+            fi

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from agent.config import get_agent_id, get_server_url, get_metadata
 from agent.websocket import WebSocketClient, MessageHandler, MessageType
+from agent.modules.redpacket import RedPacketHandler, RedPacketStrategy
 
 # 配置日志
 logging.basicConfig(
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 # 全局客户端实例
 client: WebSocketClient = None
+redpacket_handler: RedPacketHandler = None
 
 
 def setup_signal_handlers():

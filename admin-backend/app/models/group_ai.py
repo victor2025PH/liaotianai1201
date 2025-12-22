@@ -312,3 +312,21 @@ class KeywordTriggerEvent(Base):
     action_taken = Column(String(50), nullable=False)  # 執行的動作
     action_result = Column(JSON, default=dict)  # 動作執行結果
     triggered_at = Column(DateTime, default=func.now(), nullable=False, index=True)
+
+
+class RedPacketStrategy(Base):
+    """紅包搶包策略表 - Phase 2: 擬人化版"""
+    __tablename__ = "redpacket_strategies"
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    name = Column(String(200), nullable=False, index=True)  # 策略名稱
+    description = Column(Text, nullable=True)  # 策略描述
+    keywords = Column(JSON, nullable=False, default=list)  # 關鍵詞列表，例如 ["USDT", "TON", "積分", "紅包"]
+    delay_min = Column(Integer, nullable=False, default=1000)  # 最小延遲（毫秒）
+    delay_max = Column(Integer, nullable=False, default=5000)  # 最大延遲（毫秒）
+    target_groups = Column(JSON, nullable=False, default=list)  # 目標群組 ID 列表
+    probability = Column(Integer, nullable=True, default=100)  # 搶包概率 (0-100)，可選，模擬偶爾沒看到的情況
+    enabled = Column(Boolean, default=True, nullable=False, index=True)  # 是否啟用
+    created_by = Column(String(100), nullable=True)  # 創建者用戶ID
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)

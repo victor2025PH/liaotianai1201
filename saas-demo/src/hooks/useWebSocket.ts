@@ -291,7 +291,7 @@ export function WebSocketProvider({ children, url }: WebSocketProviderProps) {
   }
 
   return (
-    <WebSocketContext.Provider value={value}>
+    <WebSocketContext.Provider value={value as WebSocketState}>
       {children}
     </WebSocketContext.Provider>
   )

@@ -26,7 +26,6 @@ import {
   Gift, 
   RefreshCw, 
   Plus,
-  Sync,
   Clock,
   Target,
   Percent
@@ -352,7 +351,7 @@ export default function RedPacketPage() {
             size="sm"
             disabled={syncing}
           >
-            <Sync className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
             立即同步
           </Button>
           <Button

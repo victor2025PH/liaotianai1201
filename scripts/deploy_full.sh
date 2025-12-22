@@ -432,22 +432,41 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
       
       echo "✅ standalone 目录准备完成"
       
-      # 启动 Next.js standalone 模式（使用 PORT=3005 环境变量）
-      echo "启动 Next.js 服务（端口 3005）..."
-      PORT=3005 pm2 start node \
+      # 启动 Next.js standalone 模式（强制使用 PORT=3005）
+      echo "🚀 启动 Next.js 服务 (Standalone Mode - Port 3005)..."
+      
+      # 进入 standalone 目录
+      cd "$PROJECT_ROOT/saas-demo/$STANDALONE_DIR" || {
+        echo "❌ 无法进入 standalone 目录: $STANDALONE_DIR"
+        exit 1
+      }
+      
+      # ⚠️ 关键修复：通过环境变量强制指定端口（在 pm2 start 之前导出）
+      export PORT=3005
+      echo "  ✅ 已设置环境变量 PORT=3005"
+      
+      # 验证 server.js 存在
+      if [ ! -f "server.js" ]; then
+        echo "❌ 错误：server.js 不存在于 standalone 目录"
+        exit 1
+      fi
+      
+      # 启动服务（使用导出的 PORT 环境变量）
+      pm2 start server.js \
         --name saas-demo-frontend \
         --max-memory-restart 1G \
-        --cwd "$(pwd)/$STANDALONE_DIR" \
         --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
         --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
         --merge-logs \
-        --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-        -- server.js || {
+        --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
         echo "❌ PM2 启动失败"
         echo "检查错误日志:"
         tail -20 "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null || echo "无法读取错误日志"
         exit 1
       }
+      
+      # 返回项目根目录
+      cd "$PROJECT_ROOT/saas-demo" || true
       
       # 等待服务启动
       sleep 3
@@ -469,18 +488,20 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
             echo "❌ 重启失败，尝试删除后重新启动..."
             pm2 delete saas-demo-frontend 2>/dev/null || true
             sleep 2
-            PORT=3005 pm2 start node \
+            # 重新进入目录并设置环境变量
+            cd "$PROJECT_ROOT/saas-demo/$STANDALONE_DIR" || exit 1
+            export PORT=3005
+            pm2 start server.js \
               --name saas-demo-frontend \
               --max-memory-restart 1G \
-              --cwd "$(pwd)/$STANDALONE_DIR" \
               --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
               --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
               --merge-logs \
-              --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-              -- server.js || {
+              --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
               echo "❌ 重新启动失败"
               exit 1
             }
+            cd "$PROJECT_ROOT/saas-demo" || true
             sleep 3
           }
         else
@@ -497,16 +518,17 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
         exit 1
       fi
     else
-      # 使用 npm start（通过环境变量 PORT=3005 启动）
-      echo "使用 npm start 启动（端口 3005）..."
-      PORT=3005 pm2 start npm \
+      # 使用 npm start（package.json 已指定端口 3005）
+      echo "🚀 启动前端服务 (端口 3005)..."
+      echo "  直接运行 npm start，它现在会自动使用 3005 端口（package.json 已配置）"
+      pm2 start npm \
         --name saas-demo-frontend \
         --max-memory-restart 1G \
         --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
         --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
         --merge-logs \
         --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-        -- start -- --port 3005 || {
+        -- start || {
         echo "⚠️  PM2 启动失败"
         exit 1
       }

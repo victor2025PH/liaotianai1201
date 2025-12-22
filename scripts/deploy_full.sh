@@ -321,13 +321,15 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     rm -rf node_modules 2>/dev/null || true
     rm -rf package-lock.json 2>/dev/null || true
     rm -rf .npm 2>/dev/null || true
+    rm -rf .yarn 2>/dev/null || true
     echo "  ✅ node_modules 已删除"
     
     echo "📦 重新安装 Node.js 依赖（完整安装，修复损坏的包）..."
     # 使用 --force 确保完整安装，修复可能损坏的依赖
-    npm install --force || {
+    # 使用 --legacy-peer-deps 避免 peer dependency 冲突
+    npm install --force --legacy-peer-deps || {
       echo "⚠️  依赖安装失败，尝试使用标准安装..."
-      npm install || {
+      npm install --legacy-peer-deps || {
         echo "❌ 依赖安装失败，无法继续"
         exit 1
       }
@@ -336,31 +338,42 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     # 验证关键依赖包是否存在
     echo "🔍 验证关键依赖包..."
     MISSING_DEPS=0
+    
+    # 检查 jszip
     if [ ! -d "node_modules/jszip" ]; then
-      echo "  ❌ jszip 包缺失"
+      echo "  ❌ jszip 包缺失，重新安装..."
+      npm install jszip@^3.10.1 --force --legacy-peer-deps || true
       MISSING_DEPS=1
     else
       # 检查 jszip 的关键文件
-      if [ ! -f "node_modules/jszip/lib/base64.js" ]; then
-        echo "  ⚠️  jszip/base64.js 缺失，尝试修复..."
-        npm install jszip --force || true
+      if [ ! -f "node_modules/jszip/lib/base64.js" ] || [ ! -f "node_modules/jszip/lib/utils.js" ]; then
+        echo "  ⚠️  jszip 关键文件缺失，重新安装..."
+        npm install jszip@^3.10.1 --force --legacy-peer-deps || true
+        MISSING_DEPS=1
+      else
+        echo "  ✅ jszip 包完整"
       fi
     fi
     
+    # 检查 source-map-js
     if [ ! -d "node_modules/source-map-js" ]; then
-      echo "  ❌ source-map-js 包缺失"
+      echo "  ❌ source-map-js 包缺失，重新安装..."
+      npm install source-map-js --force --legacy-peer-deps || true
       MISSING_DEPS=1
     else
       # 检查 source-map-js 的关键文件
       if [ ! -f "node_modules/source-map-js/lib/base64-vlq.js" ]; then
-        echo "  ⚠️  source-map-js/base64-vlq.js 缺失，尝试修复..."
-        npm install source-map-js --force || true
+        echo "  ⚠️  source-map-js/base64-vlq.js 缺失，重新安装..."
+        npm install source-map-js --force --legacy-peer-deps || true
+        MISSING_DEPS=1
+      else
+        echo "  ✅ source-map-js 包完整"
       fi
     fi
     
     if [ $MISSING_DEPS -eq 1 ]; then
-      echo "  ⚠️  检测到缺失的依赖包，尝试重新安装..."
-      npm install --force || npm install
+      echo "  ⚠️  检测到缺失的依赖包，执行完整重新安装..."
+      npm install --force --legacy-peer-deps || npm install --legacy-peer-deps
     fi
     
     echo "  ✅ 依赖安装完成"

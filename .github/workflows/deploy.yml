@@ -45,7 +45,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          timeout: '60s'
+          timeout: '30m'
           command_timeout: '30m'
           use_insecure_cipher: true
           script_stop: true
@@ -54,14 +54,61 @@ jobs:
             set -e
             
             echo "=========================================="
-            echo "🚀 全栈部署"
+            echo "🚀 全栈部署 - 智能健康检查版"
             echo "时间: $(date)"
             echo "=========================================="
             echo ""
             
             PROJECT_ROOT="/home/ubuntu/telegram-ai-system"
             
-            # 确保项目根目录存在
+            # ============================================
+            # 智能端口等待函数
+            # ============================================
+            wait_for_port() {
+              local port=$1
+              local name=$2
+              local retries=0
+              local max_retries=60  # 最多等待 3分钟 (60 * 3s)
+              
+              echo "⏳ 正在等待 $name 启动 (端口 $port)..."
+              while ! nc -z 127.0.0.1 $port 2>/dev/null; do
+                sleep 3
+                retries=$((retries+1))
+                if [ $retries -ge $max_retries ]; then
+                  echo "❌ $name 启动超时！端口 $port 未在 $((max_retries * 3)) 秒内启动"
+                  echo "查看 PM2 日志:"
+                  pm2 logs --lines 30 --nostream 2>/dev/null || true
+                  exit 1
+                fi
+                if [ $((retries % 10)) -eq 0 ]; then
+                  echo "   已等待 $((retries * 3)) 秒..."
+                fi
+              done
+              echo "✅ $name 已成功启动！(端口 $port)"
+            }
+            
+            # 检查并安装 netcat (用于端口检测)
+            if ! command -v nc >/dev/null 2>&1; then
+              echo "📦 安装 netcat (用于端口检测)..."
+              sudo apt-get update -qq
+              sudo apt-get install -y netcat-openbsd || sudo apt-get install -y netcat
+            fi
+            
+            # ============================================
+            # Step A: 配置 Swap 虚拟内存
+            # ============================================
+            echo "🔧 [Step A] 配置 Swap 虚拟内存..."
+            echo "----------------------------------------"
+            if [ -f "$PROJECT_ROOT/scripts/server/setup_swap.sh" ]; then
+              bash "$PROJECT_ROOT/scripts/server/setup_swap.sh"
+            else
+              echo "⚠️  Swap 脚本不存在，跳过（如果内存充足可忽略）"
+            fi
+            echo ""
+            
+            # ============================================
+            # 确保项目根目录存在并拉取代码
+            # ============================================
             if [ ! -d "$PROJECT_ROOT" ]; then
               echo "❌ 项目根目录不存在: $PROJECT_ROOT"
               echo "正在创建目录并克隆项目..."
@@ -74,7 +121,7 @@ jobs:
             fi
             
             # 进入项目根目录
-            echo "📁 [1/8] 进入项目根目录: $PROJECT_ROOT"
+            echo "📁 进入项目根目录: $PROJECT_ROOT"
             cd "$PROJECT_ROOT" || {
               echo "❌ 无法进入项目根目录"
               exit 1
@@ -82,7 +129,7 @@ jobs:
             
             # 拉取最新代码
             echo ""
-            echo "📥 [2/8] 拉取最新代码..."
+            echo "📥 拉取最新代码..."
             echo "----------------------------------------"
             
             if [ ! -d ".git" ]; then
@@ -105,10 +152,10 @@ jobs:
             echo ""
             
             # ============================================
-            # 部署后端 (admin-backend)
+            # Step B: 部署后端 (admin-backend)
             # ============================================
             if [ "${{ github.event.inputs.deploy_backend }}" != "false" ] && [ -d "admin-backend" ]; then
-              echo "🔧 [3/8] 部署后端服务..."
+              echo "🔧 [Step B] 部署后端服务..."
               echo "----------------------------------------"
               
               cd "$PROJECT_ROOT/admin-backend"
@@ -151,24 +198,32 @@ jobs:
                 }
                 
                 pm2 save || true
-                echo "✅ 后端服务已启动"
-                sleep 5
                 
-                # 检查后端健康状态
-                if curl -s http://127.0.0.1:8000/health >/dev/null 2>&1; then
-                  echo "✅ 后端服务健康检查通过"
-                else
-                  echo "⚠️  后端服务可能未完全启动"
-                fi
+                # 智能健康检查：等待端口启动
+                wait_for_port 8000 "Backend"
+                
+                # 额外 HTTP 健康检查
+                echo "🔍 执行 HTTP 健康检查..."
+                for i in {1..10}; do
+                  if curl -s http://127.0.0.1:8000/health >/dev/null 2>&1; then
+                    echo "✅ 后端服务健康检查通过"
+                    break
+                  fi
+                  if [ $i -eq 10 ]; then
+                    echo "⚠️  后端 HTTP 健康检查失败，但端口已启动"
+                  else
+                    sleep 2
+                  fi
+                done
               fi
               echo ""
             fi
             
             # ============================================
-            # 部署前端 (saas-demo)
+            # Step C: 部署前端 (saas-demo)
             # ============================================
             if [ "${{ github.event.inputs.deploy_frontend }}" != "false" ] && [ -d "saas-demo" ]; then
-              echo "🎨 [4/8] 部署前端服务..."
+              echo "🎨 [Step C] 部署前端服务..."
               echo "----------------------------------------"
               
               cd "$PROJECT_ROOT/saas-demo"
@@ -240,10 +295,12 @@ jobs:
                 fi
                 
                 pm2 save || true
-                echo "✅ 前端服务已启动"
-                sleep 5
                 
-                # 检查前端服务
+                # 智能健康检查：等待端口启动
+                wait_for_port 3000 "SaaS Demo"
+                
+                # 额外 HTTP 健康检查
+                echo "🔍 执行 HTTP 健康检查..."
                 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000 || echo "000")
                 if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
                   echo "✅ 前端服务响应正常 (HTTP $HTTP_CODE)"
@@ -255,10 +312,10 @@ jobs:
             fi
             
             # ============================================
-            # 部署 aizkw (原有逻辑)
+            # Step D: 部署 aizkw (端口 3003)
             # ============================================
             if [ "${{ github.event.inputs.deploy_aizkw }}" != "false" ] && [ -d "aizkw20251219" ]; then
-              echo "📦 [5/8] 部署 aizkw 项目..."
+              echo "📦 [Step D] 部署 aizkw 项目..."
               echo "----------------------------------------"
               
               SITE_DIR="aizkw20251219"
@@ -306,9 +363,9 @@ jobs:
                 sleep 2
               fi
               
-              # 启动服务
+              # 启动服务（修正 PM2 命令格式）
               mkdir -p "$PROJECT_ROOT/logs"
-              # PM2 参数必须在 -- 之前，serve 的参数在 -- 之后
+              echo "启动 aizkw 服务 (端口 $TARGET_PORT)..."
               pm2 start serve \
                 --name "$PM2_NAME" \
                 --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
@@ -322,15 +379,17 @@ jobs:
               }
               
               pm2 save || true
-              echo "✅ aizkw 服务已启动"
+              
+              # 智能健康检查：等待端口启动
+              wait_for_port $TARGET_PORT "AIZKW"
               echo ""
             fi
             
             # ============================================
-            # 部署 hongbao (端口 3002)
+            # Step E: 部署 hongbao (端口 3002)
             # ============================================
             if [ -d "hbwy20251220" ]; then
-              echo "📦 [6/10] 部署 hongbao 项目..."
+              echo "📦 [Step E] 部署 hongbao 项目..."
               echo "----------------------------------------"
               
               SITE_DIR="hbwy20251220"
@@ -374,6 +433,7 @@ jobs:
               
               # 启动服务
               mkdir -p "$PROJECT_ROOT/logs"
+              echo "启动 hongbao 服务 (端口 $TARGET_PORT)..."
               pm2 start serve \
                 --name "$PM2_NAME" \
                 --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
@@ -387,15 +447,17 @@ jobs:
               }
               
               pm2 save || true
-              echo "✅ hongbao 服务已启动"
+              
+              # 智能健康检查：等待端口启动
+              wait_for_port $TARGET_PORT "Hongbao"
               echo ""
             fi
             
             # ============================================
-            # 部署 tgmini (端口 3001)
+            # Step F: 部署 tgmini (端口 3001)
             # ============================================
             if [ -d "tgmini20251220" ]; then
-              echo "📦 [7/10] 部署 tgmini 项目..."
+              echo "📦 [Step F] 部署 tgmini 项目..."
               echo "----------------------------------------"
               
               SITE_DIR="tgmini20251220"
@@ -439,6 +501,7 @@ jobs:
               
               # 启动服务
               mkdir -p "$PROJECT_ROOT/logs"
+              echo "启动 tgmini 服务 (端口 $TARGET_PORT)..."
               pm2 start serve \
                 --name "$PM2_NAME" \
                 --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
@@ -452,14 +515,16 @@ jobs:
               }
               
               pm2 save || true
-              echo "✅ tgmini 服务已启动"
+              
+              # 智能健康检查：等待端口启动
+              wait_for_port $TARGET_PORT "TG Mini"
               echo ""
             fi
             
             # ============================================
             # 验证所有服务
             # ============================================
-            echo "🔍 [8/10] 验证所有服务..."
+            echo "🔍 验证所有服务..."
             echo "----------------------------------------"
             pm2 list
             echo ""
@@ -471,7 +536,7 @@ jobs:
             # ============================================
             # 重启 Nginx
             # ============================================
-            echo "🌐 [9/10] 重启 Nginx..."
+            echo "🌐 重启 Nginx..."
             echo "----------------------------------------"
             sudo nginx -t && sudo systemctl restart nginx || {
               echo "⚠️  Nginx 重启失败"
@@ -501,3 +566,6 @@ jobs:
             echo "  pm2 list"
             echo "  curl -I http://127.0.0.1:8000/health"
             echo "  curl -I http://127.0.0.1:3000"
+            echo "  curl -I http://127.0.0.1:3001"
+            echo "  curl -I http://127.0.0.1:3002"
+            echo "  curl -I http://127.0.0.1:3003"

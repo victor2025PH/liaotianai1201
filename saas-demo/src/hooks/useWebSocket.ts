@@ -5,7 +5,7 @@
 
 "use client"
 
-import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from "react"
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from "react"
 import { getApiBaseUrl } from "@/lib/api/config"
 import { getToken } from "@/lib/api/auth"
 
@@ -290,10 +290,10 @@ export function WebSocketProvider({ children, url }: WebSocketProviderProps) {
     sendMessage
   }
 
-  return (
-    <WebSocketContext.Provider value={contextValue}>
-      {children}
-    </WebSocketContext.Provider>
+  return React.createElement(
+    WebSocketContext.Provider,
+    { value: contextValue },
+    children
   )
 }
 

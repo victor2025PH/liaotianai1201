@@ -33,7 +33,7 @@ export interface AgentInfo {
 }
 
 // WebSocket Context
-const WebSocketContext = createContext<WebSocketState | undefined>(undefined)
+const WebSocketContext = createContext<WebSocketState | null>(null)
 
 // WebSocket Provider Props
 interface WebSocketProviderProps {
@@ -291,7 +291,7 @@ export function WebSocketProvider({ children, url }: WebSocketProviderProps) {
   }
 
   return (
-    <WebSocketContext.Provider value={value as WebSocketState}>
+    <WebSocketContext.Provider value={value}>
       {children}
     </WebSocketContext.Provider>
   )
@@ -302,7 +302,7 @@ export function WebSocketProvider({ children, url }: WebSocketProviderProps) {
  */
 export function useWebSocket(): WebSocketState {
   const context = useContext(WebSocketContext)
-  if (context === undefined) {
+  if (!context) {
     throw new Error("useWebSocket must be used within WebSocketProvider")
   }
   return context

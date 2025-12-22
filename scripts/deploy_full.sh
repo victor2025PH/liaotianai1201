@@ -102,15 +102,14 @@ if [ -d "$PROJECT_ROOT/admin-backend" ]; then
     
     # 使用 PM2 启动后端
     echo "启动后端服务 (端口 8000)..."
-    pm2 start python3 \
+    cd "$PROJECT_ROOT/admin-backend" || exit 1
+    pm2 start "python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000" \
       --name backend \
-      --interpreter python3 \
       --max-memory-restart 1G \
       --error "$PROJECT_ROOT/logs/backend-error.log" \
       --output "$PROJECT_ROOT/logs/backend-out.log" \
       --merge-logs \
-      --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-      -- -m uvicorn app.main:app --host 0.0.0.0 --port 8000 || {
+      --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
       echo "⚠️  PM2 启动失败，查看错误..."
       pm2 logs backend --lines 50 --nostream 2>/dev/null || true
       exit 1

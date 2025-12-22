@@ -118,3 +118,15 @@ export async function getAgentStatistics(): Promise<{
   
   return response.json()
 }
+
+/**
+ * 删除/断开 Agent 连接
+ * 注意：Agent 是自动注册的，此操作会发送断开指令
+ */
+export async function deleteAgent(agentId: string): Promise<void> {
+  // 发送断开连接指令
+  await sendCommandToAgent(agentId, {
+    action: "disconnect",
+    payload: {}
+  })
+}

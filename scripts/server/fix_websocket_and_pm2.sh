@@ -5,7 +5,27 @@
 
 set -e
 
-PROJECT_ROOT="/home/***/telegram-ai-system"
+# 自动检测项目根目录（脚本所在目录的父目录）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# 如果自动检测失败，尝试常见路径
+if [ ! -d "$PROJECT_ROOT/saas-demo" ] && [ ! -d "$PROJECT_ROOT/admin-backend" ]; then
+  # 尝试从当前工作目录查找
+  if [ -d "$(pwd)/saas-demo" ] || [ -d "$(pwd)/admin-backend" ]; then
+    PROJECT_ROOT="$(pwd)"
+  # 尝试常见路径
+  elif [ -d "/home/ubuntu/telegram-ai-system" ]; then
+    PROJECT_ROOT="/home/ubuntu/telegram-ai-system"
+  elif [ -d "/home/***/telegram-ai-system" ]; then
+    PROJECT_ROOT="/home/***/telegram-ai-system"
+  else
+    echo "❌ 无法找到项目根目录，请手动设置 PROJECT_ROOT 变量"
+    exit 1
+  fi
+fi
+
+echo "📁 项目根目录: $PROJECT_ROOT"
 
 echo "=========================================="
 echo "🔧 修复 WebSocket 和 PM2 问题"
@@ -15,6 +35,7 @@ echo ""
 
 # 1. 停止所有前端服务
 echo "[1/4] 停止旧的前端服务..."
+pm2 delete saas-demo-frontend 2>/dev/null || true
 pm2 delete tgmini-frontend 2>/dev/null || true
 pm2 delete hongbao-frontend 2>/dev/null || true
 pm2 delete aizkw-frontend 2>/dev/null || true

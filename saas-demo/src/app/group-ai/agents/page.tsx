@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { DataTable, Column } from "@/components/common"
 import { getAgents, type Agent, isAgentOnline, getDeviceModel } from "@/lib/api/agentService"
-import { RefreshCw, Server, Activity, Smartphone } from "lucide-react"
+import { RefreshCw, Server, Activity, Smartphone, Download } from "lucide-react"
 
 // 格式化相对时间
 function formatRelativeTime(dateString?: string): string {
@@ -138,6 +138,36 @@ export default function AgentsPage() {
     const interval = setInterval(fetchAgents, 30000)
     return () => clearInterval(interval)
   }, [])
+  
+  // 下载启动脚本
+  const handleDownloadScripts = async () => {
+    try {
+      const { getApiBaseUrl } = await import("@/lib/api/config")
+      const apiBaseUrl = getApiBaseUrl()
+      
+      // 构建下载 URL
+      const downloadUrl = `${apiBaseUrl}/agents/download-startup-scripts?api_base_url=${encodeURIComponent(apiBaseUrl)}`
+      
+      // 创建临时链接并触发下载
+      const link = document.createElement("a")
+      link.href = downloadUrl
+      link.download = "agent_startup_scripts.zip"
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      toast({
+        title: "下载成功",
+        description: "启动脚本 ZIP 包已开始下载"
+      })
+    } catch (error) {
+      toast({
+        title: "下载失败",
+        description: error instanceof Error ? error.message : "无法下载启动脚本",
+        variant: "destructive"
+      })
+    }
+  }
   
   // 统计在线 Agent 数量
   const onlineCount = agents.filter(agent => isAgentOnline(agent)).length

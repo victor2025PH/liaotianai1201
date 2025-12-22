@@ -38,7 +38,7 @@ import {
   FileText
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 // 格式化相对时间
 function formatRelativeTime(date: Date): string {

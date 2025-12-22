@@ -224,19 +224,49 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     pm2 delete saas-demo-frontend 2>/dev/null || true
     pm2 delete frontend 2>/dev/null || true
     pkill -f 'next.*start|node.*3000|saas-demo' 2>/dev/null || true
-    # 强制清理端口 3000
-    if sudo lsof -i :3000 >/dev/null 2>&1; then
-      echo "发现端口 3000 被占用，强制清理..."
-      sudo lsof -ti :3000 | xargs sudo kill -9 2>/dev/null || true
-      sleep 3
+    sleep 2
+    
+    # 强制清理端口 3000（多重清理策略，确保端口完全释放）
+    echo "清理端口 3000..."
+    PORT_CLEANED=false
+    MAX_RETRIES=5
+    
+    for i in $(seq 1 $MAX_RETRIES); do
+      # 方法1: 使用 lsof 查找并终止
+      PORT_PIDS=$(sudo lsof -ti :3000 2>/dev/null || echo "")
+      if [ -n "$PORT_PIDS" ]; then
+        echo "  尝试 $i/$MAX_RETRIES: 发现占用端口 3000 的进程: $PORT_PIDS"
+        echo "$PORT_PIDS" | xargs sudo kill -9 2>/dev/null || true
+        sleep 2
+      fi
+      
+      # 方法2: 使用 fuser 强制终止
+      sudo fuser -k 3000/tcp 2>/dev/null || true
+      sleep 1
+      
+      # 方法3: 使用 pkill 终止相关进程
+      sudo pkill -9 -f "node.*3000" 2>/dev/null || true
+      sudo pkill -9 -f "next.*start" 2>/dev/null || true
+      sleep 1
+      
+      # 验证端口是否已释放
+      if ! sudo lsof -i :3000 >/dev/null 2>&1; then
+        PORT_CLEANED=true
+        echo "✅ 端口 3000 已成功释放"
+        break
+      fi
+    done
+    
+    # 如果端口仍未释放，报告错误
+    if [ "$PORT_CLEANED" = false ]; then
+      echo "❌ 错误：端口 3000 仍被占用，无法启动服务"
+      echo "占用端口的进程信息:"
+      sudo lsof -i :3000 2>/dev/null || echo "无法获取进程信息"
+      exit 1
     fi
-    # 再次确认端口已释放
-    if sudo lsof -i :3000 >/dev/null 2>&1; then
-      echo "⚠️  警告：端口 3000 仍被占用，等待 5 秒后重试..."
-      sleep 5
-      sudo lsof -ti :3000 | xargs sudo kill -9 2>/dev/null || true
-      sleep 2
-    fi
+    
+    # 额外等待，确保端口完全释放
+    sleep 2
     
     # 确保日志目录存在
     mkdir -p "$PROJECT_ROOT/logs"
@@ -311,6 +341,7 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
       echo "✅ standalone 目录准备完成"
       
       # 启动 Next.js standalone 模式
+      echo "启动 Next.js 服务..."
       pm2 start node \
         --name saas-demo-frontend \
         --max-memory-restart 1G \
@@ -320,9 +351,59 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
         --merge-logs \
         --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
         -- server.js || {
-        echo "⚠️  PM2 启动失败"
+        echo "❌ PM2 启动失败"
+        echo "检查错误日志:"
+        tail -20 "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null || echo "无法读取错误日志"
         exit 1
       }
+      
+      # 等待服务启动
+      sleep 3
+      
+      # 验证服务是否真正启动成功（检查端口和进程）
+      if ! sudo lsof -i :3000 >/dev/null 2>&1; then
+        echo "⚠️  警告：服务启动后端口 3000 未监听"
+        echo "检查 PM2 状态:"
+        pm2 list | grep saas-demo-frontend || echo "进程不存在"
+        echo "检查错误日志:"
+        tail -30 "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null || echo "无法读取错误日志"
+        
+        # 检查是否是 EADDRINUSE 错误
+        if grep -q "EADDRINUSE" "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null; then
+          echo "❌ 检测到端口冲突错误 (EADDRINUSE)，重新清理端口..."
+          sudo lsof -ti :3000 | xargs sudo kill -9 2>/dev/null || true
+          sleep 3
+          pm2 restart saas-demo-frontend || {
+            echo "❌ 重启失败，尝试删除后重新启动..."
+            pm2 delete saas-demo-frontend 2>/dev/null || true
+            sleep 2
+            pm2 start node \
+              --name saas-demo-frontend \
+              --max-memory-restart 1G \
+              --cwd "$(pwd)/$STANDALONE_DIR" \
+              --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
+              --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
+              --merge-logs \
+              --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+              -- server.js || {
+              echo "❌ 重新启动失败"
+              exit 1
+            }
+            sleep 3
+          }
+        else
+          echo "❌ 服务启动失败，但不是端口冲突问题"
+          exit 1
+        fi
+      fi
+      
+      # 最终验证
+      if sudo lsof -i :3000 >/dev/null 2>&1; then
+        echo "✅ Next.js 服务已成功启动并监听端口 3000"
+      else
+        echo "❌ 服务启动失败：端口 3000 未监听"
+        exit 1
+      fi
     else
       # 使用 npm start
       pm2 start npm \

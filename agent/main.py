@@ -79,8 +79,17 @@ async def main():
     # 创建客户端
     client = WebSocketClient()
     
+    # 初始化 RedPacket 处理器（TODO: 需要传入 Telethon 客户端）
+    # 目前先创建，后续集成 Telethon 时再传入真实的 client
+    global redpacket_handler
+    redpacket_handler = RedPacketHandler(
+        client=None,  # TODO: 传入 Telethon 客户端
+        websocket_client=client
+    )
+    
     # 注册消息处理器
     client.register_message_handler(MessageType.COMMAND, handle_command)
+    client.register_message_handler(MessageType.CONFIG, handle_config)
     
     # 设置信号处理器
     setup_signal_handlers()

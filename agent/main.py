@@ -12,6 +12,7 @@ from pathlib import Path
 from agent.config import get_agent_id, get_server_url, get_metadata
 from agent.websocket import WebSocketClient, MessageHandler, MessageType
 from agent.modules.redpacket import RedPacketHandler, RedPacketStrategy
+from agent.modules.theater import TheaterHandler
 
 # 配置日志
 logging.basicConfig(
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 # 全局客户端实例
 client: WebSocketClient = None
 redpacket_handler: RedPacketHandler = None
+theater_handler: TheaterHandler = None
 
 
 def setup_signal_handlers():
@@ -56,6 +58,41 @@ async def handle_command(message: dict):
         # 可以在这里执行实际任务
         # result = await execute_task(payload)
         # await client.send_message(MessageHandler.create_result_message(...))
+
+
+async def handle_config(message: dict):
+    """处理配置更新（策略更新）"""
+    global redpacket_handler
+    
+    payload = message.get("payload", {})
+    action = payload.get("action")
+    
+    logger.info(f"[CONFIG] 收到配置更新: {action}")
+    
+    if not redpacket_handler:
+        logger.warning("[CONFIG] RedPacket 处理器未初始化，忽略配置更新")
+        return
+    
+    try:
+        if action == "strategy_created" or action == "strategy_updated":
+            strategy_data = payload.get("strategy", {})
+            strategy = redpacket_handler.load_strategy_from_config(strategy_data)
+            
+            if action == "strategy_created":
+                redpacket_handler.add_strategy(strategy)
+            else:
+                redpacket_handler.update_strategy(strategy)
+            
+            logger.info(f"[CONFIG] 策略已{'添加' if action == 'strategy_created' else '更新'}: {strategy.name}")
+        
+        elif action == "strategy_deleted":
+            strategy_id = payload.get("strategy_id")
+            if strategy_id:
+                redpacket_handler.remove_strategy(strategy_id)
+                logger.info(f"[CONFIG] 策略已删除: {strategy_id}")
+    
+    except Exception as e:
+        logger.error(f"[CONFIG] 处理配置更新失败: {e}", exc_info=True)
 
 
 async def main():

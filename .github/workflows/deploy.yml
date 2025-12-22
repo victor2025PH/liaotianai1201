@@ -569,3 +569,7 @@ jobs:
             echo "  curl -I http://127.0.0.1:3001"
             echo "  curl -I http://127.0.0.1:3002"
             echo "  curl -I http://127.0.0.1:3003"
+            echo ""
+            echo "⏳ 等待 SSH 连接优雅关闭..."
+            sleep 5
+            exit 0

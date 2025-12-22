@@ -28,6 +28,13 @@ DEFAULT_CONFIG = {
         "api_hash": None,
         "session_string": None,
         "session_path": None
+    },
+    # Phase 6: API 配置
+    "api": {
+        "base_url": "http://127.0.0.1:8000",
+        "api_key": None,
+        "poll_interval": 5.0,  # 轮询间隔（秒）
+        "heartbeat_interval": 30.0  # 心跳间隔（秒）
     }
 }
 
@@ -242,3 +249,53 @@ def get_telegram_session_path() -> Optional[str]:
     config = load_config()
     telegram_config = config.get("telegram", {})
     return telegram_config.get("session_path") or os.getenv("TELEGRAM_SESSION_PATH")
+
+
+def get_api_base_url() -> str:
+    """
+    获取 API 基础 URL
+    
+    Returns:
+        API 基础 URL
+    """
+    import os
+    config = load_config()
+    api_config = config.get("api", {})
+    return api_config.get("base_url") or os.getenv("API_BASE_URL") or DEFAULT_CONFIG["api"]["base_url"]
+
+
+def get_api_key() -> Optional[str]:
+    """
+    获取 API 密钥
+    
+    Returns:
+        API 密钥或 None
+    """
+    import os
+    config = load_config()
+    api_config = config.get("api", {})
+    return api_config.get("api_key") or os.getenv("API_KEY")
+
+
+def get_poll_interval() -> float:
+    """
+    获取轮询间隔（秒）
+    
+    Returns:
+        轮询间隔
+    """
+    config = load_config()
+    api_config = config.get("api", {})
+    return api_config.get("poll_interval", DEFAULT_CONFIG["api"]["poll_interval"])
+
+
+def get_heartbeat_interval() -> float:
+    """
+    获取心跳间隔（秒）
+    
+    Returns:
+        心跳间隔
+    """
+    config = load_config()
+    api_config = config.get("api", {})
+    return api_config.get("heartbeat_interval", DEFAULT_CONFIG["api"]["heartbeat_interval"])

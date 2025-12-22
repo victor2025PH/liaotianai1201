@@ -18,7 +18,11 @@ from agent.config import (
     get_telegram_api_id,
     get_telegram_api_hash,
     get_telegram_session_string,
-    get_telegram_session_path
+    get_telegram_session_path,
+    get_api_base_url,
+    get_api_key,
+    get_poll_interval,
+    get_heartbeat_interval
 )
 from agent.websocket import WebSocketClient, MessageHandler, MessageType
 from agent.modules.redpacket import RedPacketHandler, RedPacketStrategy
@@ -26,7 +30,9 @@ from agent.modules.theater import TheaterHandler
 from agent.utils.device_fingerprint import get_or_create_device_fingerprint
 from agent.utils.proxy_checker import validate_proxy_binding
 from agent.core.session_manager import get_device_fingerprint_for_session
-from agent.core.scenario_player import ScenarioPlayer, load_scenario_from_file
+from agent.core.scenario_player import ScenarioPlayer
+from agent.core.api_client import ApiClient
+from agent.core.task_manager import TaskManager
 
 # 配置日志
 logging.basicConfig(
@@ -264,54 +270,52 @@ async def main():
         logger.info("   - TELEGRAM_SESSION_STRING 或 TELEGRAM_SESSION_PATH")
     
     # ============================================
-    # Phase 5: 测试剧本执行（如果配置了测试脚本）
-    # ============================================
-    test_script_path = Path(__file__).parent.parent / "test_script.json"
-    if test_script_path.exists():
-        logger.info("=" * 60)
-        logger.info("Phase 5: 测试剧本执行")
-        logger.info("=" * 60)
-        
-        try:
-            # 加载测试剧本
-            test_scenario = load_scenario_from_file(str(test_script_path))
-            
-            # 创建剧本执行器
-            test_scenario_player = ScenarioPlayer(client=telegram_client)
-            
-            # 设置测试变量（可选）
-            test_variables = {
-                "target_user": "测试用户",
-                "group_id": "-1001234567890"  # 示例群组ID
-            }
-            test_scenario_player.set_variables(test_variables)
-            
-            logger.info(f"开始执行测试剧本: {test_scenario.get('name', '未命名')}")
-            logger.info("=" * 60)
-            
-            # 执行剧本（异步，不阻塞主流程）
-            asyncio.create_task(
-                test_scenario_player.play(
-                    scenario=test_scenario,
-                    variables=test_variables,
-                    execution_id="test_exec_001"
-                )
-            )
-            
-            logger.info("✅ 测试剧本已启动（后台执行）")
-            logger.info("=" * 60)
-            logger.info("")
-        
-        except Exception as e:
-            logger.error(f"❌ 测试剧本执行失败: {e}", exc_info=True)
-            logger.warning("   继续运行主程序...")
-            logger.info("")
-    
-    # ============================================
-    # 原有启动逻辑
+    # Phase 6: 云端协同与任务调度
     # ============================================
     
-    # 创建 WebSocket 客户端
+    # 创建剧本执行器
+    scenario_player = ScenarioPlayer(client=telegram_client)
+    
+    # 初始化 API 客户端
+    api_base_url = get_api_base_url()
+    api_key = get_api_key()
+    
+    logger.info("=" * 60)
+    logger.info("Phase 6: 初始化 API 客户端")
+    logger.info("=" * 60)
+    logger.info(f"API 基础 URL: {api_base_url}")
+    logger.info(f"API 密钥: {'已配置' if api_key else '未配置'}")
+    logger.info("=" * 60)
+    logger.info("")
+    
+    try:
+        api_client = ApiClient(
+            api_base_url=api_base_url,
+            api_key=api_key,
+            timeout=30,
+            max_retries=3
+        )
+        logger.info("✅ API 客户端初始化成功")
+    except Exception as e:
+        logger.error(f"❌ API 客户端初始化失败: {e}")
+        logger.error("   请检查是否安装了 httpx 或 requests 库")
+        logger.error("   安装命令: pip install httpx 或 pip install requests")
+        raise
+    
+    # 初始化任务管理器
+    task_manager = TaskManager(
+        telegram_client=telegram_client,
+        api_client=api_client,
+        scenario_player=scenario_player,
+        poll_interval=get_poll_interval(),
+        heartbeat_interval=get_heartbeat_interval()
+    )
+    
+    # ============================================
+    # 保留 WebSocket 客户端（用于接收实时指令）
+    # ============================================
+    
+    # 创建 WebSocket 客户端（用于接收实时指令和配置更新）
     client = WebSocketClient()
     
     # 初始化 RedPacket 处理器（传入 Telethon 客户端）
@@ -328,9 +332,6 @@ async def main():
         websocket_client=client
     )
     
-    # Phase 5: 创建剧本执行器（用于本地测试）
-    scenario_player = ScenarioPlayer(client=telegram_client)
-    
     # 注册消息处理器
     client.register_message_handler(MessageType.COMMAND, handle_command)
     client.register_message_handler(MessageType.CONFIG, handle_config)
@@ -339,42 +340,39 @@ async def main():
     setup_signal_handlers()
     
     try:
-        # 启动客户端
-        await client.start()
-        
-        # 定期发送状态（可选）
-        async def status_loop():
-            while client.is_connected():
-                await asyncio.sleep(60)  # 每60秒发送一次状态
-                if client.is_connected():
-                    await client.send_status(
-                        status="online",
-                        accounts=[],
-                        metrics={
-                            "tasks_completed": 0,
-                            "tasks_failed": 0
-                        }
-                    )
-        
-        status_task = asyncio.create_task(status_loop())
-        
-        # 保持运行
-        logger.info("[INFO] Agent 运行中，按 Ctrl+C 退出")
+        # 启动 WebSocket 客户端（后台运行，用于接收实时指令）
+        websocket_task = None
         try:
-            await asyncio.Event().wait()  # 永久等待
-        except asyncio.CancelledError:
-            pass
-        finally:
-            status_task.cancel()
-            await client.stop()
+            await client.start()
+            logger.info("✅ WebSocket 客户端已启动（用于接收实时指令）")
+        except Exception as e:
+            logger.warning(f"⚠️  WebSocket 客户端启动失败: {e}")
+            logger.warning("   继续运行（仅使用 REST API 轮询模式）")
+        
+        # 启动任务管理器（主循环，接管控制权）
+        logger.info("=" * 60)
+        logger.info("🚀 启动任务管理器（主循环）")
+        logger.info("=" * 60)
+        logger.info("Agent 将开始轮询任务...")
+        logger.info("按 Ctrl+C 退出")
+        logger.info("=" * 60)
+        logger.info("")
+        
+        # 运行任务管理器（这会阻塞，直到停止）
+        await task_manager.start_loop()
     
     except KeyboardInterrupt:
         logger.info("[INFO] 收到中断信号")
+        task_manager.stop()
     except Exception as e:
         logger.error(f"[ERROR] 运行错误: {e}", exc_info=True)
+        task_manager.stop()
     finally:
+        # 清理资源
         if client:
             await client.stop()
+        if api_client:
+            await api_client.close()
         logger.info("[INFO] Agent 已退出")
 
 

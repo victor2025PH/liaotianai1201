@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // ❌ 已禁用 Standalone 模式，使用 Standard 模式（避免 MODULE_NOT_FOUND 错误）
-  // output: "standalone",
+  // 显式设置为 undefined，确保不使用 standalone 模式
+  output: undefined,
   
   // 生產優化
   compress: true,

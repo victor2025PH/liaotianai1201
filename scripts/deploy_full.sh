@@ -246,12 +246,16 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     # 只杀掉可疑的 python 进程
     sleep 2
     
-    # 3. 清理病毒可能使用的临时目录
-    echo "  3. 清理可疑临时目录..."
+    # 3. 清理病毒可能使用的临时目录和可疑文件
+    echo "  3. 清理可疑临时目录和文件..."
     rm -rf /tmp/de 2>/dev/null || true
     rm -rf /tmp/.X11-unix 2>/dev/null || true
     rm -rf /tmp/.ICE-unix 2>/dev/null || true
     find /tmp -name "*.py" -type f -mtime -1 -delete 2>/dev/null || true
+    # 清理项目目录中的可疑文件
+    find "$PROJECT_ROOT/saas-demo" -name "*.py" -type f -mtime -1 -delete 2>/dev/null || true
+    find "$PROJECT_ROOT/saas-demo" -name "*base64*" -type f -delete 2>/dev/null || true
+    echo "  ✅ 可疑文件已清理"
     sleep 1
     
     # 4. 删除所有 PM2 保存的状态（防止复活）
@@ -321,11 +325,44 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     # 3. 强制清理构建缓存（防止病毒代码藏在构建缓存里）
     # ============================================
     echo "🧹 [Security] 强制清理构建缓存（防止病毒代码残留）..."
+    echo "  删除所有 Next.js 构建缓存..."
+    # 彻底删除所有可能的缓存目录
     rm -rf .next 2>/dev/null || true
+    rm -rf .next/standalone 2>/dev/null || true  # 强制删除 standalone 目录（如果存在）
+    rm -rf .next/cache 2>/dev/null || true
     rm -rf .turbo 2>/dev/null || true
     rm -rf node_modules/.cache 2>/dev/null || true
-    rm -rf .next/cache 2>/dev/null || true
-    echo "✅ 缓存已彻底清理"
+    rm -rf node_modules/.next 2>/dev/null || true
+    # 删除所有可能的构建产物
+    find . -type d -name ".next" -exec rm -rf {} + 2>/dev/null || true
+    find . -type d -name ".turbo" -exec rm -rf {} + 2>/dev/null || true
+    echo "  ✅ 缓存已彻底清理"
+    
+    # ============================================
+    # 3.1 验证配置文件（确保 standalone 已禁用）
+    # ============================================
+    echo "🔍 [验证] 检查 Next.js 配置文件..."
+    if [ -f "next.config.ts" ]; then
+      echo "  发现 next.config.ts，检查 standalone 配置..."
+      if grep -q "output.*standalone" next.config.ts 2>/dev/null && ! grep -q "output.*undefined\|//.*standalone" next.config.ts 2>/dev/null; then
+        echo "  ⚠️  警告：next.config.ts 中仍有 standalone 配置"
+        echo "  配置文件内容:"
+        grep -A 2 -B 2 "output" next.config.ts 2>/dev/null || true
+      else
+        echo "  ✅ next.config.ts 配置正确（standalone 已禁用）"
+      fi
+    fi
+    if [ -f "next.config.mjs" ]; then
+      echo "  发现 next.config.mjs，检查 standalone 配置..."
+      if grep -q "output.*standalone" next.config.mjs 2>/dev/null && ! grep -q "output.*undefined\|//.*standalone" next.config.mjs 2>/dev/null; then
+        echo "  ⚠️  警告：next.config.mjs 中仍有 standalone 配置"
+        echo "  配置文件内容:"
+        grep -A 2 -B 2 "output" next.config.mjs 2>/dev/null || true
+      else
+        echo "  ✅ next.config.mjs 配置正确（standalone 已禁用）"
+      fi
+    fi
+    echo "  ✅ 配置文件验证完成"
     
     # ============================================
     # 4. 构建前端（限制内存使用，防止撑爆服务器）

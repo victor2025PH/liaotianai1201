@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Enable standalone output for Docker deployment
-  output: "standalone",
+  // ❌ 已禁用 Standalone 模式，使用 Standard 模式（避免 MODULE_NOT_FOUND 错误）
+  // output: "standalone",  // 已禁用
+  output: undefined, // 显式设置为 undefined，确保使用 Standard 模式
   
   // 生產優化
   compress: true,

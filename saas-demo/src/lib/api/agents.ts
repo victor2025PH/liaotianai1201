@@ -9,6 +9,7 @@ const API_BASE = getApiBaseUrl()
 
 export interface Agent {
   agent_id: string
+  id?: string  // 为了兼容 useCrud，添加 id 属性（映射到 agent_id）
   status: "online" | "offline" | "busy" | "error"
   connected_at: string
   last_heartbeat: string
@@ -45,7 +46,12 @@ export async function getAgents(params?: AgentListParams): Promise<Agent[]> {
     throw new Error(`HTTP ${response.status}`)
   }
   
-  return response.json()
+  const agents: Agent[] = await response.json()
+  // 为每个 Agent 添加 id 属性（映射到 agent_id），以兼容 useCrud
+  return agents.map(agent => ({
+    ...agent,
+    id: agent.agent_id
+  }))
 }
 
 /**

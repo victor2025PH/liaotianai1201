@@ -212,22 +212,22 @@ export default function TheaterPage() {
         const currentRoles = crud.editingItem?.roles || []
         
         // 2. 如果 roles 为空，从 timeline actions 中提取已使用的角色
-        const rolesFromTimeline: string[] = currentRoles.length > 0 
-          ? currentRoles 
-          : Array.from(
-              new Set(
-                (value || [])
-                  .map((action: TimelineAction) => action.role)
-                  .filter((role): role is string => Boolean(role))
-              )
-            ) as string[]
+        let roles: string[] = []
+        if (currentRoles.length > 0) {
+          roles = currentRoles
+        } else {
+          // 获取所有非空角色，并去重
+          const rawRoles = (value || []).map((action: TimelineAction) => action.role)
+          const uniqueRoles = Array.from(new Set(rawRoles)).filter((r): r is string => !!r)
+          roles = uniqueRoles
+        }
         
         // 3. 显式 return 组件
         return (
           <TimelineEditor
             value={value || []}
             onChange={onChange}
-            roles={rolesFromTimeline}
+            roles={roles}
           />
         )
       },

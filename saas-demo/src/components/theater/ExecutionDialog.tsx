@@ -163,7 +163,7 @@ export function ExecutionDialog({
               <div className="space-y-3">
                 {scenario.roles.map((role) => {
                   const currentAgentId = agentMapping[role]
-                  const currentAgent = currentAgentId ? agents[currentAgentId] : null
+                  const currentAgent = currentAgentId && agents ? agents[currentAgentId] : null
                   
                   return (
                     <div key={role} className="space-y-2">
@@ -178,7 +178,7 @@ export function ExecutionDialog({
                           <SelectValue placeholder="选择 Agent" />
                         </SelectTrigger>
                         <SelectContent>
-                          {onlineAgents.length === 0 ? (
+                          {!onlineAgents || onlineAgents.length === 0 ? (
                             <SelectItem value="" disabled>
                               没有在线 Agent
                             </SelectItem>
@@ -214,7 +214,7 @@ export function ExecutionDialog({
               </div>
             )}
             
-            {(!onlineAgents || onlineAgents.length === 0) && (
+            {onlineAgents.length === 0 && (
               <div className="text-sm text-amber-600 p-3 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800">
                 ⚠️ 当前没有在线 Agent，无法执行场景
               </div>
@@ -232,7 +232,7 @@ export function ExecutionDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={loading || onlineAgents.length === 0}
+            disabled={loading || !onlineAgents || onlineAgents.length === 0}
           >
             {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             开始执行

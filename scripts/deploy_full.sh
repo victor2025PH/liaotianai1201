@@ -25,6 +25,28 @@ progress_echo "=========================================="
 progress_echo ""
 
 # ============================================
+# 预清理：清理重复和冲突的进程
+# ============================================
+progress_echo "🧹 [预清理] 清理重复和冲突的进程..."
+progress_echo "----------------------------------------"
+# 清理所有可能的重复进程
+pm2 delete saas-demo 2>/dev/null || true
+pm2 delete saas-demo-frontend 2>/dev/null || true
+# 清理所有占用关键端口的进程
+for port in 3000 3001 3002 3003 8000; do
+  if sudo lsof -i :$port >/dev/null 2>&1; then
+    PIDS=$(sudo lsof -ti :$port 2>/dev/null || echo "")
+    if [ -n "$PIDS" ]; then
+      progress_echo "清理端口 $port 的进程: $PIDS"
+      echo "$PIDS" | xargs sudo kill -9 2>/dev/null || true
+    fi
+  fi
+done
+sleep 2
+progress_echo "✅ 预清理完成"
+progress_echo ""
+
+# ============================================
 # 智能端口等待函数
 # ============================================
 wait_for_port() {
@@ -195,11 +217,22 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     
     echo "✅ 前端构建完成"
     
-    # 停止旧的前端进程
+    # 停止旧的前端进程（彻底清理所有可能的进程名）
     echo "停止旧的前端进程..."
+    pm2 delete saas-demo 2>/dev/null || true
     pm2 delete saas-demo-frontend 2>/dev/null || true
-    pkill -f 'next.*start|node.*3000' 2>/dev/null || true
+    pm2 delete frontend 2>/dev/null || true
+    pkill -f 'next.*start|node.*3000|saas-demo' 2>/dev/null || true
+    # 强制清理端口 3000
     if sudo lsof -i :3000 >/dev/null 2>&1; then
+      echo "发现端口 3000 被占用，强制清理..."
+      sudo lsof -ti :3000 | xargs sudo kill -9 2>/dev/null || true
+      sleep 3
+    fi
+    # 再次确认端口已释放
+    if sudo lsof -i :3000 >/dev/null 2>&1; then
+      echo "⚠️  警告：端口 3000 仍被占用，等待 5 秒后重试..."
+      sleep 5
       sudo lsof -ti :3000 | xargs sudo kill -9 2>/dev/null || true
       sleep 2
     fi

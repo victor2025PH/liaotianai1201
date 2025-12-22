@@ -48,14 +48,33 @@ jobs:
           port: 22
           timeout: '45m'
           command_timeout: '45m'
-          use_insecure_cipher: true
+          use_insecure_cipher: false
           script_stop: false
           debug: true
           envs: |
             PYTHONUNBUFFERED=1
             DEBIAN_FRONTEND=noninteractive
+        continue-on-error: false
+        retries: 3
+        retry-wait: 10
           script: |
             set -e
+            
+            # SSH 连接验证和重试机制
+            echo "🔍 验证 SSH 连接..."
+            for i in {1..5}; do
+              if ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo 'SSH连接成功'" 2>/dev/null; then
+                echo "✅ SSH 连接验证成功 (尝试 $i/5)"
+                break
+              else
+                if [ $i -eq 5 ]; then
+                  echo "❌ SSH 连接验证失败，已重试 5 次"
+                  exit 1
+                fi
+                echo "⚠️  SSH 连接失败，等待 5 秒后重试 ($i/5)..."
+                sleep 5
+              fi
+            done
             
             PROJECT_ROOT="/home/ubuntu/telegram-ai-system"
             

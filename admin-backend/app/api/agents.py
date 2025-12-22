@@ -10,7 +10,7 @@ import json
 
 from app.websocket import get_websocket_manager, MessageHandler, MessageType
 from app.api.deps import get_current_user
-from app.schemas.user import User
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 

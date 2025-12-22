@@ -14,7 +14,7 @@ from app.schemas.redpacket_strategy import (
     RedPacketStrategyResponse
 )
 from app.api.deps import get_current_user
-from app.schemas.user import User
+from app.models.user import User
 from app.websocket import get_websocket_manager, MessageHandler, MessageType
 
 logger = logging.getLogger(__name__)

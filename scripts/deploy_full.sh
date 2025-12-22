@@ -103,7 +103,16 @@ if [ -d "$PROJECT_ROOT/admin-backend" ]; then
     # 使用 PM2 启动后端
     echo "启动后端服务 (端口 8000)..."
     cd "$PROJECT_ROOT/admin-backend" || exit 1
-    pm2 start "python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000" \
+    
+    # 创建临时启动脚本（PM2 需要明确的脚本文件或正确的命令格式）
+    cat > /tmp/start_backend.sh << 'EOF'
+#!/bin/bash
+cd /home/ubuntu/telegram-ai-system/admin-backend
+exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+EOF
+    chmod +x /tmp/start_backend.sh
+    
+    pm2 start /tmp/start_backend.sh \
       --name backend \
       --max-memory-restart 1G \
       --error "$PROJECT_ROOT/logs/backend-error.log" \

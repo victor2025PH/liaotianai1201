@@ -18,7 +18,7 @@ from app.schemas.theater import (
     TimelineAction
 )
 from app.api.deps import get_current_user
-from app.schemas.user import User
+from app.models.user import User
 from app.services.theater_scheduler import get_theater_scheduler
 from app.websocket import get_websocket_manager
 from datetime import datetime

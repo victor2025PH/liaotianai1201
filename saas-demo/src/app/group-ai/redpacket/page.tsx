@@ -375,7 +375,13 @@ export default function RedPacketPage() {
           crud.setPagination({ page, pageSize })
         }}
         onEdit={crud.handleEdit}
-        onDelete={crud.handleDelete}
+        onDelete={(item) => {
+          // DataTable 传递的是 item 对象，但 handleDelete 需要 id
+          const itemId = item.id
+          if (itemId !== undefined && itemId !== null) {
+            crud.handleDelete(String(itemId))
+          }
+        }}
         searchable
         searchPlaceholder="搜索策略名称或关键词..."
         searchValue={crud.filters.search}

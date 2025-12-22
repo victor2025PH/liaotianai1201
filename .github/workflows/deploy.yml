@@ -206,13 +206,14 @@ jobs:
             echo "使用 PM2 启动静态文件服务..."
             echo "命令: serve -s $PROJECT_DIR/dist -l $TARGET_PORT"
             
+            # PM2 配置参数必须在 -- 之前，serve 的参数在 -- 之后
             pm2 start serve \
               --name "$PM2_NAME" \
-              -- -s "$PROJECT_DIR/dist" -l $TARGET_PORT \
               --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
               --output "$PROJECT_ROOT/logs/${PM2_NAME}-out.log" \
               --merge-logs \
-              --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
+              --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+              -- -s "$PROJECT_DIR/dist" -l $TARGET_PORT || {
               echo "⚠️  PM2 启动失败，查看错误..."
               pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
               echo "查看 PM2 进程状态:"

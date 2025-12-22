@@ -319,7 +319,12 @@ export default function TheaterPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => crud.handleDelete(item)}
+              onClick={() => {
+                const itemId = item.id
+                if (itemId !== undefined && itemId !== null) {
+                  crud.handleDelete(String(itemId))
+                }
+              }}
             >
               <Trash2 className="h-4 w-4 text-destructive" />
             </Button>

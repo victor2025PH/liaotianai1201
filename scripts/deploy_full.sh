@@ -601,14 +601,15 @@ if [ -d "$PROJECT_ROOT/aizkw20251219" ]; then
   # 启动服务（添加内存限制）
   mkdir -p "$PROJECT_ROOT/logs"
   echo "启动 aizkw 服务 (端口 $TARGET_PORT)..."
-  pm2 start serve \
+  # 使用 npx serve 确保使用正确的 serve 命令
+  pm2 start npx \
     --name "$PM2_NAME" \
     --max-memory-restart 1G \
     --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
     --output "$PROJECT_ROOT/logs/${PM2_NAME}-out.log" \
     --merge-logs \
     --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-    -- -s "$PROJECT_DIR/dist" -l $TARGET_PORT || {
+    -- serve -s "$PROJECT_DIR/dist" -l $TARGET_PORT || {
     echo "⚠️  PM2 启动失败，查看错误..."
     pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
     exit 1

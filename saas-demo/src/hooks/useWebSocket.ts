@@ -62,13 +62,17 @@ export function WebSocketProvider({ children, url }: WebSocketProviderProps) {
   const getWebSocketUrl = useCallback(() => {
     if (url) return url
     
-    const apiBase = getApiBaseUrl()
-    // 将 http:// 或 https:// 转换为 ws:// 或 wss://
-    const wsProtocol = apiBase.startsWith("https") ? "wss" : "ws"
-    const wsHost = apiBase.replace(/^https?:\/\//, "").replace(/^wss?:\/\//, "")
-    // 注意：这里需要一个专门的前端 WebSocket 端点来接收 Agent 状态更新
-    // 暂时使用 notifications WebSocket，后续可以创建专门的 agents/ws/status 端点
-    return `${wsProtocol}://${wsHost}/notifications/ws/frontend`
+    // 使用统一的 WebSocket URL 配置函数（正确处理 HTTPS -> WSS）
+    if (typeof window !== "undefined") {
+      const host = window.location.host
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
+      // 注意：这里需要一个专门的前端 WebSocket 端点来接收 Agent 状态更新
+      // 暂时使用 notifications WebSocket，后续可以创建专门的 agents/ws/status 端点
+      return `${protocol}//${host}/api/v1/notifications/ws/frontend`
+    }
+    
+    // 服务端渲染：使用默认值
+    return "ws://localhost:8000/api/v1/notifications/ws/frontend"
   }, [url])
 
   // 订阅消息

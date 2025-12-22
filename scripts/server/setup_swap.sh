@@ -12,30 +12,42 @@ echo "=========================================="
 echo ""
 
 SWAP_FILE="/swapfile"
-SWAP_SIZE="4G"
+SWAP_SIZE="8G"  # 增加到 8GB，与物理内存 1:1 比例
 SWAPPINESS=10
 
 # 检查是否已存在 Swap
-if [ -f "$SWAP_FILE" ] || swapon --show | grep -q "$SWAP_FILE"; then
-    echo "✅ Swap 文件已存在，跳过创建"
-    swapon --show | grep "$SWAP_FILE" || echo "⚠️  Swap 文件存在但未激活"
+CURRENT_SWAP_SIZE=$(swapon --show=SIZE --noheadings 2>/dev/null | head -1 || echo "")
+if [ -f "$SWAP_FILE" ] || [ -n "$CURRENT_SWAP_SIZE" ]; then
+    if [ -n "$CURRENT_SWAP_SIZE" ]; then
+        echo "✅ Swap 已存在，当前大小: $CURRENT_SWAP_SIZE"
+        # 检查是否需要扩展
+        CURRENT_SIZE_GB=$(echo "$CURRENT_SWAP_SIZE" | sed 's/[^0-9]//g')
+        if [ "$CURRENT_SIZE_GB" -lt 8 ]; then
+            echo "⚠️  当前 Swap 大小 ($CURRENT_SWAP_SIZE) 小于 8GB，建议扩展"
+            echo "   如需扩展，请先执行: sudo swapoff $SWAP_FILE && sudo rm $SWAP_FILE"
+        fi
+    else
+        echo "✅ Swap 文件已存在，但未激活"
+        sudo swapon $SWAP_FILE 2>/dev/null || echo "⚠️  激活失败，可能需要重新创建"
+    fi
     exit 0
 fi
 
 echo "📦 创建 ${SWAP_SIZE} Swap 文件..."
 
-# 检查可用磁盘空间（需要至少 5GB）
+# 检查可用磁盘空间（需要至少 9GB）
 AVAILABLE_SPACE=$(df -BG / | tail -1 | awk '{print $4}' | sed 's/G//')
-if [ "$AVAILABLE_SPACE" -lt 5 ]; then
-    echo "⚠️  可用磁盘空间不足 5GB，无法创建 Swap"
+if [ "$AVAILABLE_SPACE" -lt 9 ]; then
+    echo "⚠️  可用磁盘空间不足 9GB，无法创建 8GB Swap"
     echo "   当前可用: ${AVAILABLE_SPACE}GB"
     exit 1
 fi
 
-# 创建 Swap 文件
+# 创建 Swap 文件（8GB = 8192MB）
+echo "⏳ 正在创建 8GB Swap 文件（这可能需要几分钟）..."
 sudo fallocate -l $SWAP_SIZE $SWAP_FILE || {
-    echo "⚠️  fallocate 失败，尝试使用 dd..."
-    sudo dd if=/dev/zero of=$SWAP_FILE bs=1M count=4096 status=progress
+    echo "⚠️  fallocate 失败，尝试使用 dd（这可能需要更长时间）..."
+    sudo dd if=/dev/zero of=$SWAP_FILE bs=1M count=8192 status=progress
 }
 
 # 设置权限

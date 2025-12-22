@@ -105,6 +105,7 @@ if [ -d "$PROJECT_ROOT/admin-backend" ]; then
     pm2 start python3 \
       --name backend \
       --interpreter python3 \
+      --max-memory-restart 1G \
       --error "$PROJECT_ROOT/logs/backend-error.log" \
       --output "$PROJECT_ROOT/logs/backend-out.log" \
       --merge-logs \
@@ -156,8 +157,9 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
       echo "⚠️  依赖安装失败，尝试继续..."
     }
     
-    # 构建前端
+    # 构建前端（限制内存使用，防止撑爆服务器）
     echo "构建前端..."
+    echo "⚠️  限制 Node.js 最大内存使用为 3GB（防止 OOM）"
     export NODE_OPTIONS="--max-old-space-size=3072"
     npm run build || {
       echo "❌ 前端构建失败"
@@ -190,6 +192,7 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
       # Next.js standalone 模式
       pm2 start node \
         --name saas-demo-frontend \
+        --max-memory-restart 1G \
         --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
         --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
         --merge-logs \
@@ -202,6 +205,7 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
       # 使用 npm start
       pm2 start npm \
         --name saas-demo-frontend \
+        --max-memory-restart 1G \
         --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
         --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
         --merge-logs \
@@ -253,8 +257,9 @@ if [ -d "$PROJECT_ROOT/aizkw20251219" ]; then
     exit 1
   }
   
-  # 构建项目
+  # 构建项目（限制内存使用，防止撑爆服务器）
   echo "构建项目..."
+  echo "⚠️  限制 Node.js 最大内存使用为 3GB（防止 OOM）"
   export NODE_OPTIONS="--max-old-space-size=3072"
   npm run build || {
     echo "❌ 构建失败"
@@ -281,11 +286,12 @@ if [ -d "$PROJECT_ROOT/aizkw20251219" ]; then
     sleep 2
   fi
   
-  # 启动服务（修正 PM2 命令格式）
+  # 启动服务（添加内存限制）
   mkdir -p "$PROJECT_ROOT/logs"
   echo "启动 aizkw 服务 (端口 $TARGET_PORT)..."
   pm2 start serve \
     --name "$PM2_NAME" \
+    --max-memory-restart 1G \
     --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
     --output "$PROJECT_ROOT/logs/${PM2_NAME}-out.log" \
     --merge-logs \
@@ -327,8 +333,9 @@ if [ -d "$PROJECT_ROOT/hbwy20251220" ]; then
     exit 1
   }
   
-  # 构建项目
+  # 构建项目（限制内存使用，防止撑爆服务器）
   echo "构建项目..."
+  echo "⚠️  限制 Node.js 最大内存使用为 3GB（防止 OOM）"
   export NODE_OPTIONS="--max-old-space-size=3072"
   npm run build || {
     echo "❌ 构建失败"
@@ -349,11 +356,12 @@ if [ -d "$PROJECT_ROOT/hbwy20251220" ]; then
     sleep 2
   fi
   
-  # 启动服务
+  # 启动服务（添加内存限制）
   mkdir -p "$PROJECT_ROOT/logs"
   echo "启动 hongbao 服务 (端口 $TARGET_PORT)..."
   pm2 start serve \
     --name "$PM2_NAME" \
+    --max-memory-restart 1G \
     --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
     --output "$PROJECT_ROOT/logs/${PM2_NAME}-out.log" \
     --merge-logs \

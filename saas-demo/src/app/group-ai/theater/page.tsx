@@ -295,9 +295,9 @@ export default function TheaterPage() {
         loading={crud.loading}
         error={crud.error}
         pagination={crud.pagination}
-        onPaginationChange={crud.setPagination}
+        onPaginationChange={(page, pageSize) => crud.setPagination({ page, pageSize })}
         searchPlaceholder="搜索剧本名称..."
-        onSearch={crud.setSearchQuery}
+        onSearchChange={(value) => crud.setFilters({ search: value })}
         actions={(item) => (
           <div className="flex items-center gap-2">
             <Button

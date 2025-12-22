@@ -278,7 +278,7 @@ export function WebSocketProvider({ children, url }: WebSocketProviderProps) {
     return () => clearInterval(interval)
   }, [isConnected])
 
-  const value: WebSocketState = {
+  const contextValue: WebSocketState = {
     isConnected,
     latency,
     onlineAgents,
@@ -291,7 +291,7 @@ export function WebSocketProvider({ children, url }: WebSocketProviderProps) {
   }
 
   return (
-    <WebSocketContext.Provider value={value}>
+    <WebSocketContext.Provider value={contextValue}>
       {children}
     </WebSocketContext.Provider>
   )

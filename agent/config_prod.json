@@ -1,0 +1,24 @@
+{
+  "agent_id": null,
+  "server_url": "ws://api.usdt2026.cc/api/v1/agents/ws",
+  "heartbeat_interval": 30,
+  "reconnect_interval": 30,
+  "reconnect_max_attempts": -1,
+  "metadata": {
+    "version": "1.0.0",
+    "platform": null,
+    "hostname": null
+  },
+  "telegram": {
+    "api_id": null,
+    "api_hash": null,
+    "session_string": null,
+    "session_path": "sessions/"
+  },
+  "api": {
+    "base_url": "https://api.usdt2026.cc",
+    "api_key": null,
+    "poll_interval": 5.0,
+    "heartbeat_interval": 30.0
+  }
+}

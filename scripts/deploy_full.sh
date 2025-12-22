@@ -111,6 +111,31 @@ if [ -d "$PROJECT_ROOT/admin-backend" ]; then
       echo "⚠️  依赖安装失败，尝试继续..."
     }
     
+    # Phase 9: 执行数据库迁移（确保 agents 表已创建）
+    echo "执行数据库迁移..."
+    cd "$PROJECT_ROOT/admin-backend" || exit 1
+    if [ -f "alembic.ini" ]; then
+      # 尝试使用 python -m alembic（如果已安装）
+      if python3 -m alembic upgrade head 2>/dev/null; then
+        echo "✅ 数据库迁移完成"
+      elif command -v alembic >/dev/null 2>&1 && alembic upgrade head 2>/dev/null; then
+        echo "✅ 数据库迁移完成（使用 alembic 命令）"
+      elif [ -f "scripts/run_migrations.py" ]; then
+        # 尝试使用迁移脚本
+        if python3 -m scripts.run_migrations 2>/dev/null; then
+          echo "✅ 数据库迁移完成（使用迁移脚本）"
+        else
+          echo "⚠️  警告：迁移脚本执行失败，请手动运行: cd admin-backend && python3 -m alembic upgrade head"
+        fi
+      else
+        echo "⚠️  警告：无法执行数据库迁移，请手动运行: cd admin-backend && python3 -m alembic upgrade head"
+        echo "   或确保已安装 alembic: pip3 install alembic --break-system-packages"
+      fi
+    else
+      echo "⚠️  alembic.ini 不存在，跳过数据库迁移"
+    fi
+    echo ""
+    
     # 停止旧的后端进程
     echo "停止旧的后端进程..."
     pm2 delete backend 2>/dev/null || true

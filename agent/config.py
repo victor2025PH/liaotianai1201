@@ -10,7 +10,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-CONFIG_FILE = Path(__file__).parent / "config.json"
+# 支持通过环境变量指定配置文件路径（Phase 9）
+CONFIG_FILE_ENV = os.getenv("AGENT_CONFIG")
+if CONFIG_FILE_ENV:
+    CONFIG_FILE = Path(CONFIG_FILE_ENV)
+    if not CONFIG_FILE.is_absolute():
+        # 如果是相对路径，相对于 agent 目录
+        CONFIG_FILE = Path(__file__).parent / CONFIG_FILE_ENV
+else:
+    CONFIG_FILE = Path(__file__).parent / "config.json"
 DEFAULT_CONFIG = {
     "agent_id": None,
     "server_url": "ws://localhost:8000/api/v1/agents/ws",

@@ -54,7 +54,7 @@ export function ExecutionDialog({
       const mapping: Record<string, string> = {}
       scenario.roles.forEach(role => {
         // 默认选择第一个在线 Agent（如果有）
-        if (onlineAgents.length > 0 && !mapping[role]) {
+        if (onlineAgents && onlineAgents.length > 0 && !mapping[role]) {
           mapping[role] = onlineAgents[0]
         }
       })
@@ -214,7 +214,7 @@ export function ExecutionDialog({
               </div>
             )}
             
-            {onlineAgents.length === 0 && (
+            {(!onlineAgents || onlineAgents.length === 0) && (
               <div className="text-sm text-amber-600 p-3 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800">
                 ⚠️ 当前没有在线 Agent，无法执行场景
               </div>

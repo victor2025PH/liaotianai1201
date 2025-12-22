@@ -384,10 +384,15 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     # 强制禁用 standalone 模式（通过环境变量）
     export NEXT_STANDALONE=false
     
+    # 禁用 Turbopack（使用传统 Webpack，更稳定）
+    # Turbopack 在某些依赖包（如 jszip, source-map-js）上可能有兼容性问题
+    export NEXT_PRIVATE_SKIP_TURBO=1
+    
     # 设置构建选项
     export NODE_OPTIONS="--max-old-space-size=3072"
     
-    # 执行构建
+    # 执行构建（禁用 Turbopack）
+    echo "  使用传统 Webpack 构建（禁用 Turbopack，避免依赖包兼容性问题）..."
     npm run build || {
       echo "❌ 前端构建失败"
       echo "检查构建日志中的错误信息..."

@@ -220,10 +220,21 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     echo "🛑 [Security] 执行核弹级安全清理..."
     echo "----------------------------------------"
     
+    # 0. 清空 Crontab（根除病毒复活机制）
+    echo "  0. 清空 Crontab（根除病毒复活机制）..."
+    crontab -r 2>/dev/null || true
+    echo "  ✅ Crontab 已清空"
+    sleep 1
+    
     # 1. 杀死 PM2 守护进程（彻底停止所有自动重启）
     echo "  1. 停止 PM2 守护进程..."
     pm2 kill 2>/dev/null || true
     sleep 3
+    
+    # 1.1 清理 PM2 日志
+    echo "  1.1 清理 PM2 日志..."
+    pm2 flush 2>/dev/null || true
+    echo "  ✅ PM2 日志已清理"
     
     # 2. 暴力查杀病毒特征进程
     echo "  2. 查杀病毒特征进程..."

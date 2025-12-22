@@ -214,19 +214,85 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
   if [ ! -f "package.json" ]; then
     echo "⚠️  package.json 不存在，跳过前端部署"
   else
-    # 安装依赖
+    # ============================================
+    # 1. 先彻底清理旧进程和端口（在构建之前）
+    # ============================================
+    echo "🧹 [清理阶段] 彻底清理旧进程和端口占用..."
+    
+    # 1.1 先告诉 PM2 删除进程（防止自动重启干扰）
+    echo "  通过 PM2 删除进程..."
+    pm2 delete saas-demo 2>/dev/null || true
+    pm2 delete saas-demo-frontend 2>/dev/null || true
+    pm2 delete frontend 2>/dev/null || true
+    pm2 save --force 2>/dev/null || true
+    sleep 2
+    
+    # 1.2 强制清理端口 3000（杀灭所有残留，包括潜在的病毒进程）
+    echo "  暴力清理端口 3000..."
+    
+    # 方法1: 使用 fuser 强制终止
+    sudo fuser -k 3000/tcp 2>/dev/null || true
+    sleep 1
+    
+    # 方法2: 使用 lsof 查找并终止所有占用端口的进程
+    PORT_PIDS=$(sudo lsof -ti :3000 2>/dev/null || echo "")
+    if [ -n "$PORT_PIDS" ]; then
+      echo "  发现占用端口 3000 的进程: $PORT_PIDS"
+      echo "$PORT_PIDS" | xargs sudo kill -9 2>/dev/null || true
+      sleep 2
+    fi
+    
+    # 方法3: 杀掉所有相关的 node/next 进程（包括潜在的病毒进程）
+    echo "  清理相关 Node.js 进程..."
+    sudo pkill -9 -f "next-server" 2>/dev/null || true
+    sudo pkill -9 -f "saas-demo" 2>/dev/null || true
+    sudo pkill -9 -f "node.*3000" 2>/dev/null || true
+    sudo pkill -9 -f "next.*start" 2>/dev/null || true
+    sudo pkill -9 -f "next.*dev" 2>/dev/null || true
+    sleep 2
+    
+    # 方法4: 再次检查端口是否释放，如果仍被占用则通过 PID 强制查杀
+    if nc -z 127.0.0.1 3000 2>/dev/null || sudo lsof -i :3000 >/dev/null 2>&1; then
+      echo "  ⚠️  端口 3000 依然被占用，尝试通过 PID 强制查杀..."
+      REMAINING_PIDS=$(sudo lsof -ti :3000 2>/dev/null || echo "")
+      if [ -n "$REMAINING_PIDS" ]; then
+        echo "  强制终止残留进程: $REMAINING_PIDS"
+        echo "$REMAINING_PIDS" | xargs sudo kill -9 2>/dev/null || true
+        sleep 3
+      fi
+      
+      # 最后验证
+      if nc -z 127.0.0.1 3000 2>/dev/null || sudo lsof -i :3000 >/dev/null 2>&1; then
+        echo "  ❌ 错误：端口 3000 仍被占用，无法继续部署"
+        echo "  占用端口的进程详细信息:"
+        sudo lsof -i :3000 2>/dev/null || echo "  无法获取进程信息"
+        echo "  请手动检查并清理: sudo lsof -i :3000"
+        exit 1
+      fi
+    fi
+    
+    echo "  ✅ 端口 3000 已完全释放"
+    sleep 2
+    
+    # ============================================
+    # 2. 安装依赖
+    # ============================================
     echo "安装 Node.js 依赖..."
     npm install --quiet || {
       echo "⚠️  依赖安装失败，尝试继续..."
     }
     
-    # 清理构建缓存（防止缓存损坏导致构建失败）
+    # ============================================
+    # 3. 清理构建缓存（防止缓存损坏导致构建失败）
+    # ============================================
     echo "清理构建缓存..."
     rm -rf .next
     rm -rf .turbo
     echo "✅ 缓存已清理"
     
-    # 构建前端（限制内存使用，防止撑爆服务器）
+    # ============================================
+    # 4. 构建前端（限制内存使用，防止撑爆服务器）
+    # ============================================
     echo "构建前端..."
     echo "⚠️  限制 Node.js 最大内存使用为 3GB（防止 OOM）"
     export NODE_OPTIONS="--max-old-space-size=3072"
@@ -243,60 +309,24 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     
     echo "✅ 前端构建完成"
     
-    # 停止旧的前端进程（彻底清理所有可能的进程名）
-    echo "停止旧的前端进程..."
-    pm2 delete saas-demo 2>/dev/null || true
-    pm2 delete saas-demo-frontend 2>/dev/null || true
-    pm2 delete frontend 2>/dev/null || true
-    pkill -f 'next.*start|node.*3000|saas-demo' 2>/dev/null || true
-    sleep 2
-    
-    # 强制清理端口 3000（多重清理策略，确保端口完全释放）
-    echo "清理端口 3000..."
-    PORT_CLEANED=false
-    MAX_RETRIES=5
-    
-    for i in $(seq 1 $MAX_RETRIES); do
-      # 方法1: 使用 lsof 查找并终止
-      PORT_PIDS=$(sudo lsof -ti :3000 2>/dev/null || echo "")
-      if [ -n "$PORT_PIDS" ]; then
-        echo "  尝试 $i/$MAX_RETRIES: 发现占用端口 3000 的进程: $PORT_PIDS"
-        echo "$PORT_PIDS" | xargs sudo kill -9 2>/dev/null || true
-        sleep 2
-      fi
-      
-      # 方法2: 使用 fuser 强制终止
+    # ============================================
+    # 5. 再次确认端口已释放（构建后再次检查）
+    # ============================================
+    echo "🔍 构建后再次检查端口 3000..."
+    if nc -z 127.0.0.1 3000 2>/dev/null || sudo lsof -i :3000 >/dev/null 2>&1; then
+      echo "  ⚠️  端口 3000 在构建后被占用，清理中..."
+      sudo lsof -ti :3000 | xargs sudo kill -9 2>/dev/null || true
       sudo fuser -k 3000/tcp 2>/dev/null || true
-      sleep 1
-      
-      # 方法3: 使用 pkill 终止相关进程
-      sudo pkill -9 -f "node.*3000" 2>/dev/null || true
-      sudo pkill -9 -f "next.*start" 2>/dev/null || true
-      sleep 1
-      
-      # 验证端口是否已释放
-      if ! sudo lsof -i :3000 >/dev/null 2>&1; then
-        PORT_CLEANED=true
-        echo "✅ 端口 3000 已成功释放"
-        break
-      fi
-    done
-    
-    # 如果端口仍未释放，报告错误
-    if [ "$PORT_CLEANED" = false ]; then
-      echo "❌ 错误：端口 3000 仍被占用，无法启动服务"
-      echo "占用端口的进程信息:"
-      sudo lsof -i :3000 2>/dev/null || echo "无法获取进程信息"
-      exit 1
+      sleep 2
     fi
     
-    # 额外等待，确保端口完全释放
-    sleep 2
-    
+    # ============================================
+    # 6. 启动前端服务
+    # ============================================
     # 确保日志目录存在
     mkdir -p "$PROJECT_ROOT/logs"
     
-    # 使用 PM2 启动前端
+    # 使用 PM2 启动前端（确保使用 --name saas-demo-frontend）
     echo "启动前端服务 (端口 3000)..."
     if [ -d ".next/standalone" ]; then
       # Next.js standalone 模式 - 需要手动复制静态文件

@@ -29,6 +29,11 @@ from app.models.group_ai import (
     GroupAIRoleAssignmentHistory,
     GroupAIAutomationTask,
     GroupAIAutomationTaskLog,
+    RedPacketStrategy,
+)
+from app.models.theater import (
+    TheaterScenario,
+    TheaterExecution,
 )
 from app.models.unified_features import (
     KeywordTriggerRule,
@@ -67,6 +72,9 @@ __all__ = [
     "GroupAIRoleAssignmentHistory",
     "GroupAIAutomationTask",
     "GroupAIAutomationTaskLog",
+    "RedPacketStrategy",
+    "TheaterScenario",
+    "TheaterExecution",
     "KeywordTriggerRule",
     "ScheduledMessageTask",
     "ScheduledMessageLog",

@@ -1,14 +1,27 @@
-name: Deploy aizkw to Server
+name: Deploy Full Stack
 
 on:
   push:
     branches:
       - main
     paths:
+      - 'saas-demo/**'
+      - 'admin-backend/**'
+      - 'agent/**'
       - 'aizkw20251219/**'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
     inputs:
+      deploy_backend:
+        description: '部署后端 (admin-backend)'
+        required: false
+        default: true
+        type: boolean
+      deploy_frontend:
+        description: '部署前端 (saas-demo)'
+        required: false
+        default: true
+        type: boolean
       deploy_aizkw:
         description: '部署 aizkw 项目到 3003 端口'
         required: false
@@ -23,7 +36,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy aizkw to server
+      - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -39,19 +52,12 @@ jobs:
             set -e
             
             echo "=========================================="
-            echo "🚀 部署 aizkw 项目"
-            echo "端口: 3003"
-            echo "PM2 名称: aizkw-frontend"
+            echo "🚀 全栈部署"
             echo "时间: $(date)"
             echo "=========================================="
             echo ""
             
-            # 项目配置（明确指定）
             PROJECT_ROOT="/home/ubuntu/telegram-ai-system"
-            SITE_DIR="aizkw20251219"
-            PROJECT_DIR="$PROJECT_ROOT/$SITE_DIR"
-            TARGET_PORT=3003
-            PM2_NAME="aizkw-frontend"
             
             # 确保项目根目录存在
             if [ ! -d "$PROJECT_ROOT" ]; then
@@ -66,7 +72,7 @@ jobs:
             fi
             
             # 进入项目根目录
-            echo "📁 [1/6] 进入项目根目录: $PROJECT_ROOT"
+            echo "📁 [1/8] 进入项目根目录: $PROJECT_ROOT"
             cd "$PROJECT_ROOT" || {
               echo "❌ 无法进入项目根目录"
               exit 1
@@ -74,21 +80,16 @@ jobs:
             
             # 拉取最新代码
             echo ""
-            echo "📥 [2/6] 拉取最新代码..."
+            echo "📥 [2/8] 拉取最新代码..."
             echo "----------------------------------------"
             
-            # 检查是否是 git 仓库
             if [ ! -d ".git" ]; then
               echo "⚠️  当前目录不是 git 仓库，初始化..."
               git init || true
               git remote add origin https://github.com/victor2025PH/liaotianai1201.git || true
             fi
             
-            # 获取远程分支信息
             git fetch origin main || git fetch origin || true
-            
-            # 同步到远程 main 分支
-            echo "同步到 origin/main..."
             git stash || true
             git reset --hard origin/main || {
               echo "⚠️  git reset 失败，尝试 git pull..."
@@ -101,189 +102,266 @@ jobs:
             echo "最新提交: $(git log -1 --oneline 2>/dev/null || echo 'N/A')"
             echo ""
             
-            # 检查项目子目录是否存在
-            if [ ! -d "$PROJECT_DIR" ]; then
-              echo "❌ 项目子目录不存在: $PROJECT_DIR"
-              echo "当前项目目录内容:"
-              ls -la "$PROJECT_ROOT" | head -20
-              exit 1
-            fi
-            
-            # 进入项目子目录
-            echo "📁 [3/6] 进入项目子目录: $PROJECT_DIR"
-            cd "$PROJECT_DIR" || {
-              echo "❌ 无法进入项目子目录"
-              exit 1
-            }
-            
-            # 检查 package.json
-            if [ ! -f "package.json" ]; then
-              echo "❌ package.json 不存在"
-              echo "当前目录内容:"
-              ls -la | head -20
-              exit 1
-            fi
-            
-            echo "✅ 找到 package.json"
-            echo ""
-            
-            # 安装依赖
-            echo "📦 [4/6] 安装依赖..."
-            echo "----------------------------------------"
-            npm install || {
-              echo "❌ npm install 失败"
-              exit 1
-            }
-            echo "✅ 依赖安装完成"
-            echo ""
-            
-            # 构建项目
-            echo "🔨 [5/6] 构建项目..."
-            echo "----------------------------------------"
-            export NODE_OPTIONS="--max-old-space-size=3072"
-            npm run build || {
-              echo "❌ npm run build 失败"
-              exit 1
-            }
-            
-            # 检查构建输出（Vite 项目应该是 dist 目录）
-            if [ ! -d "dist" ]; then
-              echo "❌ dist 目录不存在，构建可能失败"
-              echo "当前目录内容:"
-              ls -la | head -20
-              exit 1
-            fi
-            
-            echo "✅ 构建完成"
-            echo "构建输出大小: $(du -sh dist | cut -f1)"
-            echo ""
-            
-            # 启动服务（使用 serve 启动静态文件服务）
-            echo "🚀 [6/6] 启动服务..."
-            echo "----------------------------------------"
-            
-            # 检查并安装 serve（如果未安装）
-            if ! command -v serve >/dev/null 2>&1; then
-              echo "安装 serve..."
-              sudo npm install -g serve
-            fi
-            
-            # 检查并安装 PM2（如果未安装）
-            if ! command -v pm2 >/dev/null 2>&1; then
-              echo "安装 PM2..."
-              sudo npm install -g pm2
-              pm2 startup systemd -u ubuntu --hp /home/ubuntu || true
-            fi
-            
-            # 停止旧进程（只影响 aizkw-frontend，不影响其他服务）
-            echo "停止旧进程..."
-            pm2 delete "$PM2_NAME" 2>/dev/null || true
-            
-            # 停止占用端口的进程（只影响 3003 端口）
-            if sudo lsof -i :$TARGET_PORT >/dev/null 2>&1; then
-              echo "停止占用端口 $TARGET_PORT 的进程..."
-              sudo lsof -ti :$TARGET_PORT | xargs sudo kill -9 2>/dev/null || true
-              sleep 2
-            fi
-            
-            echo "✅ 旧进程已停止"
-            echo ""
-            
-            # 确保日志目录存在
-            mkdir -p "$PROJECT_ROOT/logs"
-            
-            # 确认当前目录和 dist 文件夹
-            echo "当前工作目录: $(pwd)"
-            echo "检查 dist 目录..."
-            if [ ! -d "$PROJECT_DIR/dist" ]; then
-              echo "❌ dist 目录不存在: $PROJECT_DIR/dist"
-              exit 1
-            fi
-            echo "✅ dist 目录存在: $PROJECT_DIR/dist"
-            echo ""
-            
-            # 使用 PM2 启动 serve（直接使用 serve 命令，不需要生成脚本）
-            echo "使用 PM2 启动静态文件服务..."
-            echo "命令: serve -s $PROJECT_DIR/dist -l $TARGET_PORT"
-            
-            # PM2 配置参数必须在 -- 之前，serve 的参数在 -- 之后
-            pm2 start serve \
-              --name "$PM2_NAME" \
-              --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
-              --output "$PROJECT_ROOT/logs/${PM2_NAME}-out.log" \
-              --merge-logs \
-              --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-              -- -s "$PROJECT_DIR/dist" -l $TARGET_PORT || {
-              echo "⚠️  PM2 启动失败，查看错误..."
-              pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
-              echo "查看 PM2 进程状态:"
-              pm2 list || true
-              exit 1
-            }
-            
-            pm2 save || true
-            echo "✅ PM2 应用已启动"
-            pm2 list | grep "$PM2_NAME" || true
-            echo ""
-            
-            # 等待服务启动
-            echo "等待服务启动..."
-            sleep 5
-            
-            # 检查 PM2 状态
-            PM2_STATUS=$(pm2 describe "$PM2_NAME" 2>/dev/null | grep -E "status|restarts" || echo "")
-            echo "PM2 状态: $PM2_STATUS"
-            if echo "$PM2_STATUS" | grep -q "errored\|stopped"; then
-              echo "⚠️  PM2 进程状态异常，查看日志..."
-              pm2 logs "$PM2_NAME" --lines 30 --nostream 2>/dev/null || true
-            fi
-            
-            # 检查端口是否在监听
-            echo ""
-            echo "检查端口 $TARGET_PORT..."
-            sleep 2
-            if sudo lsof -i :$TARGET_PORT >/dev/null 2>&1; then
-              echo "✅ 端口 $TARGET_PORT 正在监听"
+            # ============================================
+            # 部署后端 (admin-backend)
+            # ============================================
+            if [ "${{ github.event.inputs.deploy_backend }}" != "false" ] && [ -d "admin-backend" ]; then
+              echo "🔧 [3/8] 部署后端服务..."
+              echo "----------------------------------------"
               
-              # 测试连接
-              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$TARGET_PORT || echo "000")
-              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
-                echo "✅ 服务响应正常 (HTTP $HTTP_CODE)"
+              cd "$PROJECT_ROOT/admin-backend"
+              
+              # 检查 requirements.txt
+              if [ ! -f "requirements.txt" ]; then
+                echo "⚠️  requirements.txt 不存在，跳过后端部署"
               else
-                echo "⚠️  服务响应异常 (HTTP $HTTP_CODE)"
-                pm2 logs "$PM2_NAME" --lines 10 --nostream 2>/dev/null || true
+                # 安装/更新依赖
+                echo "安装 Python 依赖..."
+                pip3 install -r requirements.txt --break-system-packages --quiet || {
+                  echo "⚠️  依赖安装失败，尝试继续..."
+                }
+                
+                # 停止旧的后端进程
+                echo "停止旧的后端进程..."
+                pm2 delete backend 2>/dev/null || true
+                pkill -f 'uvicorn.*app.main:app' 2>/dev/null || true
+                if sudo lsof -i :8000 >/dev/null 2>&1; then
+                  sudo lsof -ti :8000 | xargs sudo kill -9 2>/dev/null || true
+                  sleep 2
+                fi
+                
+                # 确保日志目录存在
+                mkdir -p "$PROJECT_ROOT/logs"
+                
+                # 使用 PM2 启动后端
+                echo "启动后端服务 (端口 8000)..."
+                pm2 start python3 \
+                  --name backend \
+                  --interpreter python3 \
+                  --error "$PROJECT_ROOT/logs/backend-error.log" \
+                  --output "$PROJECT_ROOT/logs/backend-out.log" \
+                  --merge-logs \
+                  --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+                  -- -m uvicorn app.main:app --host 0.0.0.0 --port 8000 || {
+                  echo "⚠️  PM2 启动失败，查看错误..."
+                  pm2 logs backend --lines 50 --nostream 2>/dev/null || true
+                  exit 1
+                }
+                
+                pm2 save || true
+                echo "✅ 后端服务已启动"
+                sleep 5
+                
+                # 检查后端健康状态
+                if curl -s http://127.0.0.1:8000/health >/dev/null 2>&1; then
+                  echo "✅ 后端服务健康检查通过"
+                else
+                  echo "⚠️  后端服务可能未完全启动"
+                fi
               fi
-            else
-              echo "❌ 端口 $TARGET_PORT 未在监听，应用可能未成功启动"
-              echo "=========================================="
-              echo "🔍 详细错误诊断..."
-              echo "=========================================="
-              echo "PM2 进程状态:"
-              pm2 list || true
               echo ""
-              echo "PM2 进程详情:"
-              pm2 describe "$PM2_NAME" || true
-              echo ""
-              echo "PM2 最新日志 (最后 50 行):"
-              pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
-              echo ""
-              echo "检查进程是否在运行:"
-              ps aux | grep -E "serve|$PM2_NAME" | grep -v grep || true
-              echo ""
-              echo "检查端口占用:"
-              sudo lsof -i :$TARGET_PORT || echo "端口未被占用"
-              exit 1
             fi
             
+            # ============================================
+            # 部署前端 (saas-demo)
+            # ============================================
+            if [ "${{ github.event.inputs.deploy_frontend }}" != "false" ] && [ -d "saas-demo" ]; then
+              echo "🎨 [4/8] 部署前端服务..."
+              echo "----------------------------------------"
+              
+              cd "$PROJECT_ROOT/saas-demo"
+              
+              # 检查 package.json
+              if [ ! -f "package.json" ]; then
+                echo "⚠️  package.json 不存在，跳过前端部署"
+              else
+                # 安装依赖
+                echo "安装 Node.js 依赖..."
+                npm install --quiet || {
+                  echo "⚠️  依赖安装失败，尝试继续..."
+                }
+                
+                # 构建前端
+                echo "构建前端..."
+                export NODE_OPTIONS="--max-old-space-size=3072"
+                npm run build || {
+                  echo "❌ 前端构建失败"
+                  exit 1
+                }
+                
+                # 检查构建输出
+                if [ ! -d ".next" ] && [ ! -d "dist" ]; then
+                  echo "❌ 构建输出目录不存在"
+                  exit 1
+                fi
+                
+                echo "✅ 前端构建完成"
+                
+                # 停止旧的前端进程
+                echo "停止旧的前端进程..."
+                pm2 delete saas-demo-frontend 2>/dev/null || true
+                pkill -f 'next.*start|node.*3000' 2>/dev/null || true
+                if sudo lsof -i :3000 >/dev/null 2>&1; then
+                  sudo lsof -ti :3000 | xargs sudo kill -9 2>/dev/null || true
+                  sleep 2
+                fi
+                
+                # 确保日志目录存在
+                mkdir -p "$PROJECT_ROOT/logs"
+                
+                # 使用 PM2 启动前端
+                echo "启动前端服务 (端口 3000)..."
+                if [ -d ".next/standalone" ]; then
+                  # Next.js standalone 模式
+                  pm2 start node \
+                    --name saas-demo-frontend \
+                    --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
+                    --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
+                    --merge-logs \
+                    --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+                    -- .next/standalone/server.js || {
+                    echo "⚠️  PM2 启动失败"
+                    exit 1
+                  }
+                else
+                  # 使用 npm start
+                  pm2 start npm \
+                    --name saas-demo-frontend \
+                    --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
+                    --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
+                    --merge-logs \
+                    --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+                    -- start || {
+                    echo "⚠️  PM2 启动失败"
+                    exit 1
+                  }
+                fi
+                
+                pm2 save || true
+                echo "✅ 前端服务已启动"
+                sleep 5
+                
+                # 检查前端服务
+                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000 || echo "000")
+                if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+                  echo "✅ 前端服务响应正常 (HTTP $HTTP_CODE)"
+                else
+                  echo "⚠️  前端服务响应异常 (HTTP $HTTP_CODE)"
+                fi
+              fi
+              echo ""
+            fi
+            
+            # ============================================
+            # 部署 aizkw (原有逻辑)
+            # ============================================
+            if [ "${{ github.event.inputs.deploy_aizkw }}" != "false" ] && [ -d "aizkw20251219" ]; then
+              echo "📦 [5/8] 部署 aizkw 项目..."
+              echo "----------------------------------------"
+              
+              SITE_DIR="aizkw20251219"
+              PROJECT_DIR="$PROJECT_ROOT/$SITE_DIR"
+              TARGET_PORT=3003
+              PM2_NAME="aizkw-frontend"
+              
+              cd "$PROJECT_DIR" || {
+                echo "❌ 无法进入项目子目录"
+                exit 1
+              }
+              
+              # 安装依赖
+              echo "安装依赖..."
+              npm install --quiet || {
+                echo "⚠️  依赖安装失败"
+                exit 1
+              }
+              
+              # 构建项目
+              echo "构建项目..."
+              export NODE_OPTIONS="--max-old-space-size=3072"
+              npm run build || {
+                echo "❌ 构建失败"
+                exit 1
+              }
+              
+              if [ ! -d "dist" ]; then
+                echo "❌ dist 目录不存在"
+                exit 1
+              fi
+              
+              echo "✅ 构建完成"
+              
+              # 检查并安装 serve
+              if ! command -v serve >/dev/null 2>&1; then
+                echo "安装 serve..."
+                sudo npm install -g serve
+              fi
+              
+              # 停止旧进程
+              pm2 delete "$PM2_NAME" 2>/dev/null || true
+              if sudo lsof -i :$TARGET_PORT >/dev/null 2>&1; then
+                sudo lsof -ti :$TARGET_PORT | xargs sudo kill -9 2>/dev/null || true
+                sleep 2
+              fi
+              
+              # 启动服务
+              mkdir -p "$PROJECT_ROOT/logs"
+              pm2 start serve \
+                --name "$PM2_NAME" \
+                --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
+                --output "$PROJECT_ROOT/logs/${PM2_NAME}-out.log" \
+                --merge-logs \
+                --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+                -- -s "$PROJECT_DIR/dist" -l $TARGET_PORT || {
+                echo "⚠️  PM2 启动失败"
+                exit 1
+              }
+              
+              pm2 save || true
+              echo "✅ aizkw 服务已启动"
+              echo ""
+            fi
+            
+            # ============================================
+            # 验证所有服务
+            # ============================================
+            echo "🔍 [6/8] 验证所有服务..."
+            echo "----------------------------------------"
+            pm2 list
             echo ""
+            
+            echo "端口监听状态:"
+            sudo lsof -i :8000 -i :3000 -i :3003 2>/dev/null || echo "无法检查端口状态"
+            echo ""
+            
+            # ============================================
+            # 重启 Nginx
+            # ============================================
+            echo "🌐 [7/8] 重启 Nginx..."
+            echo "----------------------------------------"
+            sudo nginx -t && sudo systemctl restart nginx || {
+              echo "⚠️  Nginx 重启失败"
+            }
+            echo "✅ Nginx 已重启"
+            echo ""
+            
+            # ============================================
+            # 完成
+            # ============================================
             echo "=========================================="
-            echo "✅ aizkw 部署完成！"
-            echo "端口: $TARGET_PORT"
-            echo "PM2 名称: $PM2_NAME"
+            echo "✅ 部署完成！"
             echo "时间: $(date)"
             echo "=========================================="
             echo ""
+            echo "服务状态:"
+            echo "  后端: http://127.0.0.1:8000"
+            echo "  前端: http://127.0.0.1:3000"
+            echo "  aizkw: http://127.0.0.1:3003"
+            echo ""
+            echo "PM2 状态:"
+            pm2 list
+            echo ""
             echo "验证命令:"
-            echo "  pm2 list | grep $PM2_NAME"
-            echo "  curl -I http://127.0.0.1:$TARGET_PORT"
-            echo "  sudo lsof -i :$TARGET_PORT"
+            echo "  pm2 list"
+            echo "  curl -I http://127.0.0.1:8000/health"
+            echo "  curl -I http://127.0.0.1:3000"

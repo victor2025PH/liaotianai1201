@@ -9,6 +9,7 @@ from app.api import workers
 from app.api import redpacket
 from app.api import agents
 from app.api import strategies
+from app.api import theater
 
 router = APIRouter()
 router.include_router(auth.router)
@@ -27,4 +28,5 @@ router.include_router(workers.router)
 router.include_router(redpacket.router)
 router.include_router(agents.router)
 router.include_router(strategies.router)
+router.include_router(theater.router)
 

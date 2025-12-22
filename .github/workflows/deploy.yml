@@ -60,21 +60,12 @@ jobs:
           script: |
             set -e
             
-            # SSH 连接验证和重试机制
-            echo "🔍 验证 SSH 连接..."
-            for i in {1..5}; do
-              if ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo 'SSH连接成功'" 2>/dev/null; then
-                echo "✅ SSH 连接验证成功 (尝试 $i/5)"
-                break
-              else
-                if [ $i -eq 5 ]; then
-                  echo "❌ SSH 连接验证失败，已重试 5 次"
-                  exit 1
-                fi
-                echo "⚠️  SSH 连接失败，等待 5 秒后重试 ($i/5)..."
-                sleep 5
-              fi
-            done
+            # 连接成功后立即输出，确认 SSH 连接正常
+            echo "✅ SSH 连接已建立"
+            echo "服务器时间: $(date)"
+            echo "当前用户: $(whoami)"
+            echo "工作目录: $(pwd)"
+            echo ""
             
             PROJECT_ROOT="/home/ubuntu/telegram-ai-system"
             

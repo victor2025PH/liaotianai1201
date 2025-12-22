@@ -54,9 +54,6 @@ jobs:
           envs: |
             PYTHONUNBUFFERED=1
             DEBIAN_FRONTEND=noninteractive
-        continue-on-error: false
-        retries: 3
-        retry-wait: 10
           script: |
             set -e
             

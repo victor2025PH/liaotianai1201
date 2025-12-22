@@ -208,14 +208,21 @@ export default function TheaterPage() {
       label: "时间轴",
       required: true,
       render: (value, onChange) => {
-        // 从 crud.editingItem 或 initialData 中获取 roles
-        // 如果正在编辑，使用 editingItem.roles；否则尝试从 timeline 中提取已使用的角色
+        // 1. 优先从 crud.editingItem 获取 roles（如果正在编辑）
         const currentRoles = crud.editingItem?.roles || []
-        // 如果 roles 为空，尝试从 timeline actions 中提取已使用的角色
+        
+        // 2. 如果 roles 为空，从 timeline actions 中提取已使用的角色
         const rolesFromTimeline = currentRoles.length > 0 
           ? currentRoles 
-          : Array.from(new Set((value || []).map((action: TimelineAction) => action.role).filter(Boolean))
+          : Array.from(
+              new Set(
+                (value || [])
+                  .map((action: TimelineAction) => action.role)
+                  .filter(Boolean)
+              )
+            )
         
+        // 3. 显式 return 组件
         return (
           <TimelineEditor
             value={value || []}

@@ -207,13 +207,23 @@ export default function TheaterPage() {
       name: "timeline",
       label: "时间轴",
       required: true,
-      render: (value, onChange, formData) => (
-        <TimelineEditor
-          value={value || []}
-          onChange={onChange}
-          roles={formData?.roles || []}
-        />
-      ),
+      render: (value, onChange) => {
+        // 从 crud.editingItem 或 initialData 中获取 roles
+        // 如果正在编辑，使用 editingItem.roles；否则尝试从 timeline 中提取已使用的角色
+        const currentRoles = crud.editingItem?.roles || []
+        // 如果 roles 为空，尝试从 timeline actions 中提取已使用的角色
+        const rolesFromTimeline = currentRoles.length > 0 
+          ? currentRoles 
+          : Array.from(new Set((value || []).map((action: TimelineAction) => action.role).filter(Boolean))
+        
+        return (
+          <TimelineEditor
+            value={value || []}
+            onChange={onChange}
+            roles={rolesFromTimeline}
+          />
+        )
+      },
       validation: (value) => {
         if (!Array.isArray(value) || value.length === 0) {
           return "至少需要添加一个时间轴动作"

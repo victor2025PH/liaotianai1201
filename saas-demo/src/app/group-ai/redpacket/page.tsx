@@ -1,414 +1,444 @@
+/**
+ * 红包策略管理页面 - Phase 2: 拟人化版
+ * 使用通用基础设施重构
+ */
+
 "use client"
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useCrud } from "@/hooks/useCrud"
+import { DataTable, Column, CrudDialog, FormField } from "@/components/common"
+import {
+  getStrategies,
+  createStrategy,
+  updateStrategy,
+  deleteStrategy,
+  syncStrategies,
+  type RedPacketStrategy,
+  type RedPacketStrategyCreate,
+  type RedPacketStrategyUpdate
+} from "@/lib/api/strategies"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { InputTags } from "@/components/ui/input-tags"
+import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useToast } from "@/hooks/use-toast"
 import { 
-  Gift, Settings, Play, Square, RefreshCw, 
-  TrendingUp, Users, Wallet, History, Zap
+  Gift, 
+  RefreshCw, 
+  Plus,
+  Sync,
+  Clock,
+  Target,
+  Percent
 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import { useState } from "react"
 
-// 紅包遊戲配置接口（等待 API 文檔後完善）
-interface RedpacketConfig {
-  api_url: string
-  api_key: string
-  enabled: boolean
-  auto_grab: boolean
-  grab_delay_min: number
-  grab_delay_max: number
-  auto_send: boolean
-  send_interval: number
-  send_amount_min: number
-  send_amount_max: number
-}
+// 定义列结构
+const columns: Column<RedPacketStrategy>[] = [
+  {
+    key: "name",
+    header: "策略名称",
+    accessor: (item) => (
+      <div className="font-medium">{item.name}</div>
+    )
+  },
+  {
+    key: "keywords",
+    header: "关键词",
+    accessor: (item) => (
+      <div className="flex flex-wrap gap-1">
+        {item.keywords.slice(0, 3).map((keyword, idx) => (
+          <Badge key={idx} variant="secondary" className="text-xs">
+            {keyword}
+          </Badge>
+        ))}
+        {item.keywords.length > 3 && (
+          <Badge variant="outline" className="text-xs">
+            +{item.keywords.length - 3}
+          </Badge>
+        )}
+      </div>
+    )
+  },
+  {
+    key: "delay",
+    header: "延迟范围",
+    accessor: (item) => (
+      <div className="flex items-center gap-1 text-sm">
+        <Clock className="h-3 w-3 text-muted-foreground" />
+        <span>
+          {item.delay_min}ms - {item.delay_max}ms
+        </span>
+      </div>
+    )
+  },
+  {
+    key: "target_groups",
+    header: "目标群组",
+    accessor: (item) => (
+      <div className="flex items-center gap-1 text-sm">
+        <Target className="h-3 w-3 text-muted-foreground" />
+        <span>
+          {item.target_groups.length > 0 
+            ? `${item.target_groups.length} 个群组`
+            : "所有群组"
+          }
+        </span>
+      </div>
+    )
+  },
+  {
+    key: "probability",
+    header: "抢包概率",
+    accessor: (item) => (
+      <div className="flex items-center gap-1 text-sm">
+        <Percent className="h-3 w-3 text-muted-foreground" />
+        <span>{item.probability || 100}%</span>
+      </div>
+    )
+  },
+  {
+    key: "enabled",
+    header: "状态",
+    accessor: (item) => (
+      <Badge variant={item.enabled ? "default" : "secondary"}>
+        {item.enabled ? "启用" : "禁用"}
+      </Badge>
+    )
+  }
+]
 
-interface GameStats {
-  total_sent: number
-  total_grabbed: number
-  total_amount_sent: number
-  total_amount_grabbed: number
-  today_sent: number
-  today_grabbed: number
-}
-
-export default function RedpacketPage() {
+export default function RedPacketPage() {
   const { toast } = useToast()
-  const [loading, setLoading] = useState(false)
-  const [connected, setConnected] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   
-  const [config, setConfig] = useState<RedpacketConfig>({
-    api_url: "",
-    api_key: "",
-    enabled: false,
-    auto_grab: true,
-    grab_delay_min: 1,
-    grab_delay_max: 5,
-    auto_send: false,
-    send_interval: 300,
-    send_amount_min: 1,
-    send_amount_max: 10,
+  // 使用 useCrud Hook 管理策略列表
+  const crud = useCrud<RedPacketStrategy, RedPacketStrategyCreate, RedPacketStrategyUpdate>({
+    listApi: getStrategies,
+    getApi: async (id) => {
+      const { getStrategy } = await import("@/lib/api/strategies")
+      return getStrategy(id)
+    },
+    createApi: createStrategy,
+    updateApi: (id, data) => updateStrategy(id, data),
+    deleteApi: deleteStrategy,
+    initialPagination: {
+      page: 1,
+      pageSize: 20
+    },
+    autoFetch: true
   })
-
-  const [stats, setStats] = useState<GameStats>({
-    total_sent: 0,
-    total_grabbed: 0,
-    total_amount_sent: 0,
-    total_amount_grabbed: 0,
-    today_sent: 0,
-    today_grabbed: 0,
-  })
-
-  // 獲取 API 基礎地址
-  const getApiBase = () => {
-    if (typeof window !== 'undefined') {
-      return `${window.location.protocol}//${window.location.host}/api/v1`
-    }
-    return '/api/v1'
-  }
-
-  // 加載配置
-  const loadConfig = async () => {
+  
+  // 处理立即同步
+  const handleSync = async () => {
     try {
-      const { fetchWithAuth } = await import("@/lib/api/client")
-      const res = await fetchWithAuth(`${getApiBase()}/redpacket/config`)
-      if (res.ok) {
-        const data = await res.json()
-        if (data.success && data.data) {
-          setConfig(prev => ({ ...prev, ...data.data }))
-          setConnected(!!data.data.api_url)
-        }
-      }
-    } catch (error) {
-      console.error("加載配置失敗:", error)
-    }
-  }
-
-  // 加載統計
-  const loadStats = async () => {
-    try {
-      const { fetchWithAuth } = await import("@/lib/api/client")
-      const res = await fetchWithAuth(`${getApiBase()}/redpacket/stats`)
-      if (res.ok) {
-        const data = await res.json()
-        if (data.success && data.data) {
-          setStats(data.data)
-          setConnected(data.data.connected)
-        }
-      }
-    } catch (error) {
-      console.error("加載統計失敗:", error)
-    }
-  }
-
-  useEffect(() => {
-    loadConfig()
-    loadStats()
-  }, [])
-
-  const testConnection = async () => {
-    setLoading(true)
-    try {
-      const { fetchWithAuth } = await import("@/lib/api/client")
-      const res = await fetchWithAuth(`${getApiBase()}/redpacket/test-connection`, {
-        method: "POST"
+      setSyncing(true)
+      await syncStrategies()
+      // 刷新列表以确保数据最新
+      await crud.fetchItems()
+      toast({
+        title: "同步成功",
+        description: "策略已同步到所有在线 Agent"
       })
-      const data = await res.json()
-      
-      if (data.success) {
-        setConnected(true)
-        toast({ title: "✅ 連接成功", description: "紅包遊戲 API 連接正常" })
-      } else {
-        setConnected(false)
-        toast({ title: "❌ 連接失敗", description: data.message || data.detail, variant: "destructive" })
-      }
     } catch (error) {
-      setConnected(false)
-      toast({ title: "❌ 連接失敗", description: String(error), variant: "destructive" })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const saveConfig = async () => {
-    setLoading(true)
-    try {
-      const { fetchWithAuth } = await import("@/lib/api/client")
-      const res = await fetchWithAuth(`${getApiBase()}/redpacket/config`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      toast({
+        title: "同步失败",
+        description: errorMessage,
+        variant: "destructive"
       })
-      const data = await res.json()
-      
-      if (data.success) {
-        toast({ title: "✅ 配置已保存" })
-      } else {
-        toast({ title: "❌ 保存失敗", description: data.detail, variant: "destructive" })
-      }
-    } catch (error) {
-      toast({ title: "❌ 保存失敗", description: String(error), variant: "destructive" })
     } finally {
-      setLoading(false)
+      setSyncing(false)
     }
   }
-
+  
+  // 定义表单字段
+  const formFields: FormField[] = [
+    {
+      name: "name",
+      label: "策略名称",
+      type: "text",
+      required: true,
+      placeholder: "例如：USDT 红包策略"
+    },
+    {
+      name: "description",
+      label: "描述",
+      type: "textarea",
+      placeholder: "策略描述（可选）"
+    },
+    {
+      name: "keywords",
+      label: "关键词",
+      required: true,
+      render: (value: string[] = [], onChange) => (
+        <InputTags
+          value={value}
+          onChange={onChange}
+          placeholder="输入关键词后按回车添加（如：USDT, TON, 积分）"
+        />
+      ),
+      validation: (value) => {
+        if (!value || (Array.isArray(value) && value.length === 0)) {
+          return "至少需要添加一个关键词"
+        }
+        return null
+      }
+    },
+    {
+      name: "delay_min",
+      label: "最小延迟（毫秒）",
+      type: "number",
+      required: true,
+      placeholder: "1000",
+      validation: (value) => {
+        if (value === undefined || value === null || value === "") {
+          return "最小延迟不能为空"
+        }
+        const num = Number(value)
+        if (isNaN(num) || num < 0) {
+          return "最小延迟必须大于等于 0"
+        }
+        return null
+      }
+    },
+    {
+      name: "delay_max",
+      label: "最大延迟（毫秒）",
+      type: "number",
+      required: true,
+      placeholder: "5000",
+      validation: (value) => {
+        if (value === undefined || value === null || value === "") {
+          return "最大延迟不能为空"
+        }
+        const num = Number(value)
+        if (isNaN(num) || num < 0) {
+          return "最大延迟必须大于等于 0"
+        }
+        // 检查是否大于等于最小延迟（需要在表单验证时获取 delay_min 的值）
+        return null
+      }
+    },
+    {
+      name: "target_groups",
+      label: "目标群组 ID",
+      type: "textarea",
+      placeholder: "输入群组 ID，用逗号分隔（留空表示所有群组）",
+      render: (value: number[] = [], onChange) => {
+        const textValue = Array.isArray(value) ? value.join(", ") : ""
+        return (
+          <textarea
+            value={textValue}
+            onChange={(e) => {
+              const text = e.target.value.trim()
+              if (!text) {
+                onChange([])
+                return
+              }
+              // 解析逗号分隔的数字
+              const groups = text
+                .split(",")
+                .map(s => s.trim())
+                .filter(s => s)
+                .map(s => {
+                  const num = parseInt(s, 10)
+                  return isNaN(num) ? null : num
+                })
+                .filter((num): num is number => num !== null)
+              onChange(groups)
+            }}
+            placeholder="例如：-1001234567890, -1009876543210"
+            className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        )
+      }
+    },
+    {
+      name: "probability",
+      label: "抢包概率",
+      render: (value: number = 100, onChange) => (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">概率: {value}%</span>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={value}
+              onChange={(e) => {
+                const num = parseInt(e.target.value, 10)
+                if (!isNaN(num) && num >= 0 && num <= 100) {
+                  onChange(num)
+                }
+              }}
+              className="w-20 h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+            />
+          </div>
+          <Slider
+            value={[value]}
+            onValueChange={([val]) => onChange(val)}
+            min={0}
+            max={100}
+            step={1}
+            className="w-full"
+          />
+          <p className="text-xs text-muted-foreground">
+            设置抢包概率，模拟偶尔没看到红包的情况（100% = 总是抢包）
+          </p>
+        </div>
+      )
+    },
+    {
+      name: "enabled",
+      label: "启用策略",
+      type: "checkbox",
+      render: (value: boolean = true, onChange) => (
+        <div className="flex items-center space-x-2">
+          <Switch
+            checked={value}
+            onCheckedChange={onChange}
+          />
+          <span className="text-sm text-muted-foreground">
+            {value ? "策略已启用" : "策略已禁用"}
+          </span>
+        </div>
+      )
+    }
+  ]
+  
+  // 处理保存（需要特殊处理 target_groups 和 keywords）
+  const handleSave = async (data: RedPacketStrategyCreate | RedPacketStrategyUpdate) => {
+    // 确保 keywords 是数组
+    const processedData = {
+      ...data,
+      keywords: Array.isArray(data.keywords) ? data.keywords : [],
+      target_groups: Array.isArray(data.target_groups) ? data.target_groups : []
+    }
+    
+    // 验证 delay_max >= delay_min
+    if (processedData.delay_min !== undefined && processedData.delay_max !== undefined) {
+      if (processedData.delay_max < processedData.delay_min) {
+        toast({
+          title: "验证失败",
+          description: "最大延迟必须大于等于最小延迟",
+          variant: "destructive"
+        })
+        return
+      }
+    }
+    
+    await crud.handleSave(processedData)
+  }
+  
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* 標題 */}
+    <div className="container mx-auto py-6 space-y-4">
+      {/* 标题和操作栏 */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Gift className="h-6 w-6 text-red-500" />
-            🧧 紅包遊戲系統
+            <Gift className="h-6 w-6" />
+            红包策略管理
           </h1>
-          <p className="text-sm text-muted-foreground">對接紅包遊戲 API，讓 AI 帳號參與紅包互動</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            配置拟人化抢包策略，支持 USDT、TON、积分等多种红包类型
+          </p>
         </div>
-        <Badge variant={connected ? "default" : "secondary"} className={connected ? "bg-green-500" : ""}>
-          {connected ? "已連接" : "未連接"}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={handleSync}
+            variant="outline"
+            size="sm"
+            disabled={syncing}
+          >
+            <Sync className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+            立即同步
+          </Button>
+          <Button
+            onClick={crud.handleCreate}
+            size="sm"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            创建策略
+          </Button>
+        </div>
       </div>
-
-      {/* 統計卡片 */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <Gift className="h-4 w-4 text-red-500" />
-              <span className="text-sm text-muted-foreground">今日發出</span>
-            </div>
-            <div className="text-2xl font-bold mt-1">{stats.today_sent}</div>
-            <p className="text-xs text-muted-foreground">累計: {stats.total_sent}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-4 w-4 text-green-500" />
-              <span className="text-sm text-muted-foreground">今日搶到</span>
-            </div>
-            <div className="text-2xl font-bold mt-1">{stats.today_grabbed}</div>
-            <p className="text-xs text-muted-foreground">累計: {stats.total_grabbed}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-blue-500" />
-              <span className="text-sm text-muted-foreground">發出金額</span>
-            </div>
-            <div className="text-2xl font-bold mt-1">¥{stats.total_amount_sent.toFixed(2)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-yellow-500" />
-              <span className="text-sm text-muted-foreground">搶到金額</span>
-            </div>
-            <div className="text-2xl font-bold mt-1">¥{stats.total_amount_grabbed.toFixed(2)}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="config" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="config">
-            <Settings className="h-4 w-4 mr-2" />
-            API 配置
-          </TabsTrigger>
-          <TabsTrigger value="auto">
-            <Zap className="h-4 w-4 mr-2" />
-            自動化設置
-          </TabsTrigger>
-          <TabsTrigger value="history">
-            <History className="h-4 w-4 mr-2" />
-            遊戲記錄
-          </TabsTrigger>
-        </TabsList>
-
-        {/* API 配置 */}
-        <TabsContent value="config">
-          <Card>
-            <CardHeader>
-              <CardTitle>API 對接配置</CardTitle>
-              <CardDescription>配置紅包遊戲系統的 API 連接信息</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>API 地址</Label>
-                  <Input 
-                    value={config.api_url}
-                    onChange={(e) => setConfig({...config, api_url: e.target.value})}
-                    placeholder="https://api.redpacket-game.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>API 密鑰</Label>
-                  <Input 
-                    type="password"
-                    value={config.api_key}
-                    onChange={(e) => setConfig({...config, api_key: e.target.value})}
-                    placeholder="輸入 API 密鑰"
-                  />
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-4 pt-4">
-                <Button onClick={testConnection} disabled={loading}>
-                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                  測試連接
-                </Button>
-                <Button onClick={saveConfig} variant="outline" disabled={loading}>
-                  保存配置
-                </Button>
-              </div>
-
-              {/* API 文檔提示 */}
-              <div className="mt-6 p-4 bg-muted/50 rounded-lg">
-                <h4 className="font-medium mb-2">📋 待對接 API 接口</h4>
-                <p className="text-sm text-muted-foreground mb-2">
-                  請提供紅包遊戲系統的 API 文檔，包括以下接口：
-                </p>
-                <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-                  <li>用戶認證接口</li>
-                  <li>發送紅包接口</li>
-                  <li>搶紅包接口</li>
-                  <li>查詢餘額接口</li>
-                  <li>遊戲記錄接口</li>
-                  <li>Webhook 回調接口</li>
-                </ul>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* 自動化設置 */}
-        <TabsContent value="auto">
-          <Card>
-            <CardHeader>
-              <CardTitle>自動化設置</CardTitle>
-              <CardDescription>配置 AI 帳號自動參與紅包遊戲的規則</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* 總開關 */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div>
-                  <h4 className="font-medium">🎮 啟用紅包遊戲</h4>
-                  <p className="text-sm text-muted-foreground">開啟後 AI 帳號將參與紅包互動</p>
-                </div>
-                <Switch 
-                  checked={Boolean(config.enabled ?? false)}
-                  onCheckedChange={(v) => setConfig({...config, enabled: Boolean(v)})}
-                />
-              </div>
-
-              {/* 自動搶紅包 */}
-              <div className="space-y-4 p-4 border rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium">🎯 自動搶紅包</h4>
-                    <p className="text-sm text-muted-foreground">AI 自動搶群內紅包</p>
-                  </div>
-                  <Switch 
-                    checked={config.auto_grab}
-                    onCheckedChange={(v) => setConfig({...config, auto_grab: v})}
-                  />
-                </div>
-                {config.auto_grab && (
-                  <div className="grid gap-4 md:grid-cols-2 pt-2">
-                    <div className="space-y-2">
-                      <Label>搶包延遲（最小秒）</Label>
-                      <Input 
-                        type="number"
-                        value={config.grab_delay_min}
-                        onChange={(e) => setConfig({...config, grab_delay_min: parseInt(e.target.value) || 1})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>搶包延遲（最大秒）</Label>
-                      <Input 
-                        type="number"
-                        value={config.grab_delay_max}
-                        onChange={(e) => setConfig({...config, grab_delay_max: parseInt(e.target.value) || 5})}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 自動發紅包 */}
-              <div className="space-y-4 p-4 border rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium">🧧 自動發紅包</h4>
-                    <p className="text-sm text-muted-foreground">AI 定時發送紅包活躍氣氛</p>
-                  </div>
-                  <Switch 
-                    checked={config.auto_send}
-                    onCheckedChange={(v) => setConfig({...config, auto_send: v})}
-                  />
-                </div>
-                {config.auto_send && (
-                  <div className="grid gap-4 md:grid-cols-3 pt-2">
-                    <div className="space-y-2">
-                      <Label>發包間隔（秒）</Label>
-                      <Input 
-                        type="number"
-                        value={config.send_interval}
-                        onChange={(e) => setConfig({...config, send_interval: parseInt(e.target.value) || 300})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>金額最小值</Label>
-                      <Input 
-                        type="number"
-                        value={config.send_amount_min}
-                        onChange={(e) => setConfig({...config, send_amount_min: parseFloat(e.target.value) || 1})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>金額最大值</Label>
-                      <Input 
-                        type="number"
-                        value={config.send_amount_max}
-                        onChange={(e) => setConfig({...config, send_amount_max: parseFloat(e.target.value) || 10})}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <Button onClick={saveConfig} className="w-full">
-                保存自動化設置
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* 遊戲記錄 */}
-        <TabsContent value="history">
-          <Card>
-            <CardHeader>
-              <CardTitle>遊戲記錄</CardTitle>
-              <CardDescription>查看紅包收發記錄</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>暫無遊戲記錄</p>
-                <p className="text-sm">連接 API 後將顯示紅包收發記錄</p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      
+      {/* 数据表格 */}
+      <DataTable
+        data={crud.items}
+        columns={columns}
+        loading={crud.loading}
+        error={crud.error}
+        pagination={crud.pagination}
+        onPaginationChange={(page, pageSize) => {
+          crud.setPagination({ page, pageSize })
+        }}
+        onEdit={crud.handleEdit}
+        onDelete={crud.handleDelete}
+        searchable
+        searchPlaceholder="搜索策略名称或关键词..."
+        searchValue={crud.filters.search}
+        onSearchChange={(value) => crud.setFilters({ search: value })}
+        getItemId={(item) => item.id}
+        emptyMessage="暂无策略"
+        emptyDescription="创建第一个红包策略，开始使用拟人化抢包功能。"
+      />
+      
+      {/* 删除确认对话框 */}
+      <AlertDialog 
+        open={crud.deleteDialogOpen} 
+        onOpenChange={crud.setDeleteDialogOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除策略 <strong>{crud.items.find(item => item.id === crud.deletingId)?.name}</strong> 吗？
+              此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                crud.setDeleteDialogOpen(false)
+                crud.setDeletingId(null)
+              }}
+            >
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={crud.handleDeleteConfirm}
+              disabled={crud.loading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {crud.loading ? "删除中..." : "确认删除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+      {/* 创建/编辑对话框 */}
+      <CrudDialog
+        open={crud.dialogOpen}
+        onOpenChange={crud.setDialogOpen}
+        mode={crud.editingItem ? "edit" : "create"}
+        title={crud.editingItem ? "编辑策略" : "创建策略"}
+        description={crud.editingItem ? "修改红包策略配置" : "创建新的红包抢包策略"}
+        fields={formFields}
+        initialData={crud.editingItem || {
+          keywords: [],
+          delay_min: 1000,
+          delay_max: 5000,
+          target_groups: [],
+          probability: 100,
+          enabled: true
+        }}
+        onSubmit={handleSave}
+        loading={crud.loading}
+      />
+      
     </div>
   )
 }

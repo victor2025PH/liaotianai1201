@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -214,19 +215,19 @@ export function CrudDialog<T extends Record<string, any>>({
       
       case "checkbox":
         return (
-          <div key={field.name} className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={value || false}
-              onChange={(e) => updateField(field.name, e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            <label className="text-sm font-medium">
-              {field.label}
-              {field.required && <span className="text-destructive ml-1">*</span>}
-            </label>
+          <div key={field.name} className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Switch
+                checked={value || false}
+                onCheckedChange={(checked) => updateField(field.name, checked)}
+              />
+              <label className="text-sm font-medium">
+                {field.label}
+                {field.required && <span className="text-destructive ml-1">*</span>}
+              </label>
+            </div>
             {error && (
-              <p className="text-sm text-destructive ml-2">{error}</p>
+              <p className="text-sm text-destructive">{error}</p>
             )}
           </div>
         )

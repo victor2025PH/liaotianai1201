@@ -314,66 +314,92 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     sleep 2
     
     # ============================================
-    # 2. 安装依赖
+    # 2. 彻底清理并重新安装依赖（修复损坏的依赖包）
     # ============================================
-    echo "安装 Node.js 依赖..."
-    npm install --quiet || {
-      echo "⚠️  依赖安装失败，尝试继续..."
+    echo "🧹 [修复] 彻底清理 node_modules（修复损坏的依赖包）..."
+    # 删除 node_modules 和 package-lock.json（强制重新安装）
+    rm -rf node_modules 2>/dev/null || true
+    rm -rf package-lock.json 2>/dev/null || true
+    rm -rf .npm 2>/dev/null || true
+    echo "  ✅ node_modules 已删除"
+    
+    echo "📦 重新安装 Node.js 依赖（完整安装，修复损坏的包）..."
+    # 使用 --force 确保完整安装，修复可能损坏的依赖
+    npm install --force || {
+      echo "⚠️  依赖安装失败，尝试使用标准安装..."
+      npm install || {
+        echo "❌ 依赖安装失败，无法继续"
+        exit 1
+      }
     }
+    
+    # 验证关键依赖包是否存在
+    echo "🔍 验证关键依赖包..."
+    MISSING_DEPS=0
+    if [ ! -d "node_modules/jszip" ]; then
+      echo "  ❌ jszip 包缺失"
+      MISSING_DEPS=1
+    else
+      # 检查 jszip 的关键文件
+      if [ ! -f "node_modules/jszip/lib/base64.js" ]; then
+        echo "  ⚠️  jszip/base64.js 缺失，尝试修复..."
+        npm install jszip --force || true
+      fi
+    fi
+    
+    if [ ! -d "node_modules/source-map-js" ]; then
+      echo "  ❌ source-map-js 包缺失"
+      MISSING_DEPS=1
+    else
+      # 检查 source-map-js 的关键文件
+      if [ ! -f "node_modules/source-map-js/lib/base64-vlq.js" ]; then
+        echo "  ⚠️  source-map-js/base64-vlq.js 缺失，尝试修复..."
+        npm install source-map-js --force || true
+      fi
+    fi
+    
+    if [ $MISSING_DEPS -eq 1 ]; then
+      echo "  ⚠️  检测到缺失的依赖包，尝试重新安装..."
+      npm install --force || npm install
+    fi
+    
+    echo "  ✅ 依赖安装完成"
     
     # ============================================
     # 3. 强制清理构建缓存（防止病毒代码藏在构建缓存里）
     # ============================================
     echo "🧹 [Security] 强制清理构建缓存（防止病毒代码残留）..."
-    echo "  删除所有 Next.js 构建缓存..."
-    # 彻底删除所有可能的缓存目录
     rm -rf .next 2>/dev/null || true
-    rm -rf .next/standalone 2>/dev/null || true  # 强制删除 standalone 目录（如果存在）
-    rm -rf .next/cache 2>/dev/null || true
     rm -rf .turbo 2>/dev/null || true
     rm -rf node_modules/.cache 2>/dev/null || true
-    rm -rf node_modules/.next 2>/dev/null || true
-    # 删除所有可能的构建产物
-    find . -type d -name ".next" -exec rm -rf {} + 2>/dev/null || true
-    find . -type d -name ".turbo" -exec rm -rf {} + 2>/dev/null || true
-    echo "  ✅ 缓存已彻底清理"
-    
-    # ============================================
-    # 3.1 验证配置文件（确保 standalone 已禁用）
-    # ============================================
-    echo "🔍 [验证] 检查 Next.js 配置文件..."
-    if [ -f "next.config.ts" ]; then
-      echo "  发现 next.config.ts，检查 standalone 配置..."
-      if grep -q "output.*standalone" next.config.ts 2>/dev/null && ! grep -q "output.*undefined\|//.*standalone" next.config.ts 2>/dev/null; then
-        echo "  ⚠️  警告：next.config.ts 中仍有 standalone 配置"
-        echo "  配置文件内容:"
-        grep -A 2 -B 2 "output" next.config.ts 2>/dev/null || true
-      else
-        echo "  ✅ next.config.ts 配置正确（standalone 已禁用）"
-      fi
-    fi
-    if [ -f "next.config.mjs" ]; then
-      echo "  发现 next.config.mjs，检查 standalone 配置..."
-      if grep -q "output.*standalone" next.config.mjs 2>/dev/null && ! grep -q "output.*undefined\|//.*standalone" next.config.mjs 2>/dev/null; then
-        echo "  ⚠️  警告：next.config.mjs 中仍有 standalone 配置"
-        echo "  配置文件内容:"
-        grep -A 2 -B 2 "output" next.config.mjs 2>/dev/null || true
-      else
-        echo "  ✅ next.config.mjs 配置正确（standalone 已禁用）"
-      fi
-    fi
-    echo "  ✅ 配置文件验证完成"
+    rm -rf .next/cache 2>/dev/null || true
+    echo "✅ 缓存已彻底清理"
     
     # ============================================
     # 4. 构建前端（限制内存使用，防止撑爆服务器）
     # ============================================
     echo "构建前端..."
     echo "⚠️  限制 Node.js 最大内存使用为 3GB（防止 OOM）"
+    
+    # 强制禁用 standalone 模式（通过环境变量）
+    export NEXT_STANDALONE=false
+    
+    # 设置构建选项
     export NODE_OPTIONS="--max-old-space-size=3072"
+    
+    # 执行构建
     npm run build || {
       echo "❌ 前端构建失败"
+      echo "检查构建日志中的错误信息..."
       exit 1
     }
+    
+    # 构建后验证：确保没有生成 standalone 目录
+    if [ -d ".next/standalone" ]; then
+      echo "  ⚠️  警告：构建后仍生成了 standalone 目录，强制删除..."
+      rm -rf .next/standalone 2>/dev/null || true
+      echo "  ✅ standalone 目录已删除"
+    fi
     
     # 检查构建输出
     if [ ! -d ".next" ] && [ ! -d "dist" ]; then

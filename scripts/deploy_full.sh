@@ -100,14 +100,27 @@ if [ -d "$PROJECT_ROOT/admin-backend" ]; then
     # 确保日志目录存在
     mkdir -p "$PROJECT_ROOT/logs"
     
-    # 使用 PM2 启动后端（使用命令字符串模式，避免 PM2 误将 python3 当作脚本文件）
+    # 使用 PM2 启动后端（使用 Shell 脚本封装模式，最稳定可靠）
     echo "启动后端服务 (端口 8000)..."
     cd "$PROJECT_ROOT/admin-backend" || exit 1
     
-    # 使用双引号包裹完整命令，让 PM2 直接运行 shell 命令
-    pm2 start "cd $PROJECT_ROOT/admin-backend && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000" \
+    # 赋予启动脚本执行权限
+    if [ -f "start.sh" ]; then
+      chmod +x start.sh
+      echo "✅ 启动脚本权限已设置"
+    else
+      echo "❌ 启动脚本不存在: start.sh"
+      exit 1
+    fi
+    
+    # 停止并删除旧进程（彻底清理）
+    pm2 delete backend 2>/dev/null || true
+    pkill -f 'uvicorn.*app.main:app' 2>/dev/null || true
+    sleep 1
+    
+    # 使用 PM2 启动 Shell 脚本（这是最稳定的方式）
+    pm2 start ./start.sh \
       --name backend \
-      --interpreter bash \
       --max-memory-restart 1G \
       --error "$PROJECT_ROOT/logs/backend-error.log" \
       --output "$PROJECT_ROOT/logs/backend-out.log" \

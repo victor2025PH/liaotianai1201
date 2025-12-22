@@ -1,18 +1,16 @@
-name: Deploy to Server
+name: Deploy aizkw to Server
 
 on:
   push:
     branches:
       - main
-    paths-ignore:
-      - 'tgmini20251220/**'
-      - 'hbwy20251220/**'
+    paths:
       - 'aizkw20251219/**'
-      - '.github/workflows/deploy-three-sites.yml'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
     inputs:
-      deploy_single:
-        description: '部署单个 aizkw 项目'
+      deploy_aizkw:
+        description: '部署 aizkw 项目到 3003 端口'
         required: false
         default: true
         type: boolean
@@ -25,7 +23,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to server
+      - name: Deploy aizkw to server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -41,15 +39,19 @@ jobs:
             set -e
             
             echo "=========================================="
-            echo "🚀 开始部署"
+            echo "🚀 部署 aizkw 项目"
+            echo "端口: 3003"
+            echo "PM2 名称: aizkw-frontend"
             echo "时间: $(date)"
             echo "=========================================="
             echo ""
             
-            # 项目根目录（统一的项目目录）
+            # 项目配置（明确指定）
             PROJECT_ROOT="/home/ubuntu/telegram-ai-system"
             SITE_DIR="aizkw20251219"
             PROJECT_DIR="$PROJECT_ROOT/$SITE_DIR"
+            TARGET_PORT=3003
+            PM2_NAME="aizkw-frontend"
             
             # 确保项目根目录存在
             if [ ! -d "$PROJECT_ROOT" ]; then
@@ -64,14 +66,16 @@ jobs:
             fi
             
             # 进入项目根目录
-            echo "📁 进入项目根目录: $PROJECT_ROOT"
+            echo "📁 [1/6] 进入项目根目录: $PROJECT_ROOT"
             cd "$PROJECT_ROOT" || {
               echo "❌ 无法进入项目根目录"
               exit 1
             }
             
-            echo "当前目录: $(pwd)"
+            # 拉取最新代码
             echo ""
+            echo "📥 [2/6] 拉取最新代码..."
+            echo "----------------------------------------"
             
             # 检查是否是 git 仓库
             if [ ! -d ".git" ]; then
@@ -80,14 +84,10 @@ jobs:
               git remote add origin https://github.com/victor2025PH/liaotianai1201.git || true
             fi
             
-            # 拉取最新代码
-            echo "📥 [1/5] 拉取最新代码..."
-            echo "----------------------------------------"
-            
             # 获取远程分支信息
             git fetch origin main || git fetch origin || true
             
-            # 强制重置到远程 main 分支（如果有本地修改，先 stash）
+            # 同步到远程 main 分支
             echo "同步到 origin/main..."
             git stash || true
             git reset --hard origin/main || {
@@ -103,556 +103,186 @@ jobs:
             
             # 检查项目子目录是否存在
             if [ ! -d "$PROJECT_DIR" ]; then
-              echo "⚠️  项目子目录不存在: $PROJECT_DIR"
-              echo "创建目录..."
-              mkdir -p "$PROJECT_DIR"
+              echo "❌ 项目子目录不存在: $PROJECT_DIR"
+              echo "当前项目目录内容:"
+              ls -la "$PROJECT_ROOT" | head -20
+              exit 1
             fi
             
             # 进入项目子目录
-            echo "📁 进入项目子目录: $PROJECT_DIR"
+            echo "📁 [3/6] 进入项目子目录: $PROJECT_DIR"
             cd "$PROJECT_DIR" || {
               echo "❌ 无法进入项目子目录"
               exit 1
             }
             
-            echo "当前目录: $(pwd)"
-            echo ""
-            
-            # 查找 package.json（支持多种位置）
-            PACKAGE_JSON=""
-            
-            # 1. 检查当前目录
-            if [ -f "package.json" ]; then
-              PACKAGE_JSON="package.json"
-              echo "✅ 找到 package.json（当前目录）"
-            else
-              # 2. 检查子目录（最多 2 层）
-              FOUND=$(find . -maxdepth 2 -name "package.json" -type f 2>/dev/null | head -1)
-              if [ -n "$FOUND" ]; then
-                PACKAGE_JSON="$FOUND"
-                echo "✅ 找到 package.json（子目录）: $FOUND"
-                PACKAGE_DIR=$(dirname "$FOUND")
-                if [ "$PACKAGE_DIR" != "." ]; then
-                  cd "$PACKAGE_DIR"
-                  PROJECT_DIR="$PROJECT_DIR/$PACKAGE_DIR"
-                fi
-              else
-                # 3. 检查项目根目录
-                if [ -f "$PROJECT_ROOT/package.json" ]; then
-                  echo "⚠️  在项目根目录找到 package.json，但这不是预期的位置"
-                  echo "   建议将文件上传到: $PROJECT_DIR"
-                  PACKAGE_JSON="$PROJECT_ROOT/package.json"
-                  cd "$PROJECT_ROOT"
-                  PROJECT_DIR="$PROJECT_ROOT"
-                else
-                  echo "❌ 未找到 package.json"
-                  echo "检查项目结构..."
-                  ls -la "$PROJECT_DIR" | head -20
-                  echo ""
-                  echo "请确保项目文件已上传到: $PROJECT_DIR"
-                  exit 1
-                fi
-              fi
+            # 检查 package.json
+            if [ ! -f "package.json" ]; then
+              echo "❌ package.json 不存在"
+              echo "当前目录内容:"
+              ls -la | head -20
+              exit 1
             fi
             
-            echo "✅ 使用 package.json: $(pwd)/package.json"
+            echo "✅ 找到 package.json"
             echo ""
             
-            # 安装依赖（在项目根目录）
-            echo "📦 [2/5] 安装依赖..."
-            echo "----------------------------------------"
-            
-            # 确保在项目根目录
-            cd "$PROJECT_DIR" || {
-              echo "❌ 无法进入项目目录"
-              exit 1
-            }
-            
             # 安装依赖
+            echo "📦 [4/6] 安装依赖..."
+            echo "----------------------------------------"
             npm install || {
               echo "❌ npm install 失败"
               exit 1
             }
-            
             echo "✅ 依赖安装完成"
             echo ""
             
-            # 构建前端（在项目根目录）
-            echo "🔨 [3/5] 构建前端..."
+            # 构建项目
+            echo "🔨 [5/6] 构建项目..."
             echo "----------------------------------------"
-            
-            # 设置 Node.js 内存限制（防止内存溢出）
             export NODE_OPTIONS="--max-old-space-size=3072"
-            
             npm run build || {
               echo "❌ npm run build 失败"
               exit 1
             }
             
-            echo "✅ 前端构建完成"
-            echo ""
-            
-            # 检查构建输出（Vite 项目通常是 dist 目录，Next.js 是 .next 目录）
-            if [ -d "dist" ]; then
-              echo "✅ 构建输出目录存在: dist"
-              echo "构建输出大小: $(du -sh dist | cut -f1)"
-              IS_NEXTJS=false
-              IS_VITE=true
-            elif [ -d ".next" ]; then
-              echo "✅ 构建输出目录存在: .next"
-              IS_NEXTJS=true
-              IS_VITE=false
-              
-              # 验证 Next.js 构建完整性
-              if [ -f ".next/BUILD_ID" ]; then
-                BUILD_ID=$(cat .next/BUILD_ID)
-                echo "✅ BUILD_ID: $BUILD_ID"
-              else
-                echo "⚠️  警告: BUILD_ID 不存在，构建可能不完整"
-              fi
-              
-              # 检查 standalone 输出
-              if [ -f ".next/standalone/server.js" ]; then
-                echo "✅ standalone/server.js 存在"
-              else
-                echo "⚠️  警告: standalone/server.js 不存在"
-                echo "检查 standalone 目录..."
-                ls -la .next/standalone/ 2>/dev/null | head -10 || echo "standalone 目录不存在"
-              fi
-            else
-              echo "❌ 错误: 未找到 dist 或 .next 目录，构建可能失败"
-              echo "检查当前目录内容:"
+            # 检查构建输出（Vite 项目应该是 dist 目录）
+            if [ ! -d "dist" ]; then
+              echo "❌ dist 目录不存在，构建可能失败"
+              echo "当前目录内容:"
               ls -la | head -20
               exit 1
             fi
             
-            # 如果是 Next.js 项目，需要启动应用服务器
-            if [ "$IS_NEXTJS" = "true" ]; then
-              echo ""
-              echo "🚀 [4/5] 启动 Next.js 应用服务器..."
-              echo "----------------------------------------"
-              
-              # 停止可能运行在端口 3000 的进程
-              if sudo lsof -i :3000 >/dev/null 2>&1; then
-                echo "停止占用端口 3000 的进程..."
-                sudo lsof -ti :3000 | xargs sudo kill -9 2>/dev/null || true
-                sleep 2
-              fi
-              
-              # 停止并删除 PM2 旧进程
-              pm2 delete frontend 2>/dev/null || true
-              
-              # 确保日志目录存在
-              mkdir -p "$PROJECT_DIR/logs"
-              
-              # 检查 standalone 输出
-              if [ -f ".next/standalone/server.js" ]; then
-                echo "✅ 检测到 standalone 模式，使用 node .next/standalone/server.js"
-                USE_STANDALONE=true
-              else
-                echo "⚠️  standalone/server.js 不存在，检查是否有 .next 目录..."
-                if [ -d ".next" ]; then
-                  echo "✅ .next 目录存在，但 standalone 输出可能未生成"
-                  echo "检查构建输出..."
-                  ls -la .next/ | head -10
-                  USE_STANDALONE=false
-                else
-                  echo "❌ .next 目录不存在，构建可能失败"
-                  exit 1
-                fi
-              fi
-              
-              # 使用 PM2 启动（如果可用）
-              if command -v pm2 >/dev/null 2>&1; then
-                echo "使用 PM2 启动应用..."
-                cd "$PROJECT_DIR"
-                
-                if [ "$USE_STANDALONE" = "true" ]; then
-                  # standalone 模式：使用环境变量，不要传递命令行参数
-                  pm2 start "node .next/standalone/server.js" \
-                    --name frontend \
-                    --interpreter node \
-                    --env NODE_ENV=production \
-                    --env PORT=3000 \
-                    --env HOSTNAME=0.0.0.0 \
-                    --env NODE_OPTIONS="--max-old-space-size=3072" \
-                    --error "$PROJECT_DIR/logs/frontend-error.log" \
-                    --output "$PROJECT_DIR/logs/frontend-out.log" \
-                    --merge-logs \
-                    --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
-                    echo "⚠️  PM2 启动失败，查看错误..."
-                    pm2 logs frontend --lines 10 --nostream 2>/dev/null || true
-                    exit 1
-                  }
-                else
-                  # 标准模式：使用 npm start
-                  pm2 start npm \
-                    --name frontend \
-                    -- start \
-                    --env NODE_ENV=production \
-                    --env PORT=3000 \
-                    --env NODE_OPTIONS="--max-old-space-size=3072" \
-                    --error "$PROJECT_DIR/logs/frontend-error.log" \
-                    --output "$PROJECT_DIR/logs/frontend-out.log" \
-                    --merge-logs \
-                    --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
-                    echo "⚠️  PM2 启动失败，查看错误..."
-                    pm2 logs frontend --lines 10 --nostream 2>/dev/null || true
-                    exit 1
-                  }
-                fi
-                
-                pm2 save || true
-                echo "✅ PM2 应用已启动"
-                pm2 list | grep frontend || true
-                
-                # 等待启动
-                echo "等待应用启动..."
-                sleep 8
-                
-                # 检查 PM2 状态
-                pm2 describe frontend | grep -E "status|pid|uptime" || true
-                
-              else
-                # 使用 nohup 后台启动
-                echo "使用 nohup 后台启动应用..."
-                cd "$PROJECT_DIR"
-                
-                # 设置环境变量
-                export NODE_ENV=production
-                export PORT=3000
-                export HOSTNAME=0.0.0.0
-                export NODE_OPTIONS="--max-old-space-size=3072"
-                
-                if [ "$USE_STANDALONE" = "true" ]; then
-                  nohup node .next/standalone/server.js > "$PROJECT_DIR/logs/frontend-out.log" 2> "$PROJECT_DIR/logs/frontend-error.log" &
-                else
-                  nohup npm start > "$PROJECT_DIR/logs/frontend-out.log" 2> "$PROJECT_DIR/logs/frontend-error.log" &
-                fi
-                
-                APP_PID=$!
-                echo "应用进程 PID: $APP_PID"
-                sleep 8
-                
-                # 检查进程是否还在运行
-                if ps -p $APP_PID > /dev/null 2>&1; then
-                  echo "✅ 应用已启动（PID: $APP_PID）"
-                else
-                  echo "❌ 应用启动失败，查看日志:"
-                  tail -30 "$PROJECT_DIR/logs/frontend-error.log" 2>/dev/null || true
-                  exit 1
-                fi
-              fi
-              
-              # 检查端口 3000 是否在监听
-              echo "检查端口 3000..."
-              sleep 2
-              if sudo lsof -i :3000 >/dev/null 2>&1; then
-                echo "✅ 端口 3000 正在监听"
-                # 测试连接
-                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000 || echo "000")
-                if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
-                  echo "✅ 应用响应正常 (HTTP $HTTP_CODE)"
-                else
-                  echo "⚠️  应用响应异常 (HTTP $HTTP_CODE)"
-                fi
-              else
-                echo "❌ 端口 3000 未在监听，应用可能未成功启动"
-                echo "查看最新日志:"
-                if command -v pm2 >/dev/null 2>&1; then
-                  pm2 logs frontend --lines 20 --nostream 2>/dev/null || true
-                else
-                  tail -30 "$PROJECT_DIR/logs/frontend-error.log" 2>/dev/null || true
-                fi
-                exit 1
-              fi
-              
-              echo ""
-            fi
-
-            # 如果是 Vite 项目，需要启动静态文件服务
-            if [ "$IS_VITE" = "true" ]; then
-              echo ""
-              echo "🚀 [4/5] 启动 Vite 静态文件服务..."
-              echo "----------------------------------------"
-              
-              # 检查 serve 是否安装
-              if ! command -v serve >/dev/null 2>&1; then
-                echo "⚠️  serve 未安装，安装 serve..."
-                sudo npm install -g serve
-              fi
-              
-              # 检查 PM2 是否安装
-              if ! command -v pm2 >/dev/null 2>&1; then
-                echo "⚠️  PM2 未安装，安装 PM2..."
-                sudo npm install -g pm2
-                pm2 startup systemd -u ubuntu --hp /home/ubuntu || true
-              fi
-              
-              # 确定端口（从项目配置或使用默认 3000）
-              FRONTEND_PORT=3000
-              if [ -f "vite.config.ts" ]; then
-                # 尝试从 vite.config.ts 读取端口配置
-                CONFIG_PORT=$(grep -oP "port:\s*\K\d+" vite.config.ts 2>/dev/null | head -1 || echo "")
-                if [ -n "$CONFIG_PORT" ] && [ "$CONFIG_PORT" -gt 0 ] && [ "$CONFIG_PORT" -lt 65536 ]; then
-                  FRONTEND_PORT=$CONFIG_PORT
-                fi
-              elif [ -f "vite.config.js" ]; then
-                # 尝试从 vite.config.js 读取端口配置
-                CONFIG_PORT=$(grep -oP "port:\s*\K\d+" vite.config.js 2>/dev/null | head -1 || echo "")
-                if [ -n "$CONFIG_PORT" ] && [ "$CONFIG_PORT" -gt 0 ] && [ "$CONFIG_PORT" -lt 65536 ]; then
-                  FRONTEND_PORT=$CONFIG_PORT
-                fi
-              fi
-              
-              echo "使用端口: $FRONTEND_PORT"
-              
-              # 停止可能运行在端口的进程
-              if sudo lsof -i :$FRONTEND_PORT >/dev/null 2>&1; then
-                echo "停止占用端口 $FRONTEND_PORT 的进程..."
-                sudo lsof -ti :$FRONTEND_PORT | xargs sudo kill -9 2>/dev/null || true
-                sleep 2
-              fi
-              
-              # 停止并删除 PM2 旧进程
-              pm2 delete frontend 2>/dev/null || true
-              
-              # 确保日志目录存在
-              mkdir -p "$PROJECT_DIR/logs"
-              
-              # 确认当前目录和 dist 文件夹
-              echo "当前工作目录: $(pwd)"
-              echo "检查 dist 目录..."
-              if [ ! -d "$PROJECT_DIR/dist" ]; then
-                echo "❌ dist 目录不存在: $PROJECT_DIR/dist"
-                echo "当前目录内容:"
-                ls -la "$PROJECT_DIR" | head -20
-                exit 1
-              fi
-              echo "✅ dist 目录存在: $PROJECT_DIR/dist"
-              echo "dist 目录大小: $(du -sh $PROJECT_DIR/dist | cut -f1)"
-              
-              # 进入项目目录
-              cd "$PROJECT_DIR" || {
-                echo "❌ 无法进入项目目录: $PROJECT_DIR"
-                exit 1
-              }
-              
-              # 生成启动脚本（直接在脚本中写入路径和端口，避免参数传递问题）
-              echo "生成启动脚本..."
-              START_SCRIPT="$PROJECT_DIR/start-frontend.sh"
-              printf '#!/bin/bash\n# 前端服务启动脚本\n# 使用全局 serve 命令启动静态文件服务\nset -e\nDIST_DIR="%s"\nPORT=%s\n# 检查 serve 命令是否存在\nif ! command -v serve >/dev/null 2>&1; then\n  echo "错误: serve 命令未找到，请先安装: npm install -g serve"\n  exit 1\nfi\n# 检查 dist 目录是否存在\nif [ ! -d "$DIST_DIR" ]; then\n  echo "错误: dist 目录不存在: $DIST_DIR"\n  exit 1\nfi\n# 启动 serve（移除不支持的 --no-open 选项）\nexec serve -s "$DIST_DIR" -l "$PORT" --no-clipboard\n' "$PROJECT_DIR/dist" "$FRONTEND_PORT" > "$START_SCRIPT"
-              
-              chmod +x "$START_SCRIPT"
-              echo "✅ 启动脚本已生成: $START_SCRIPT"
-              echo "启动脚本内容:"
-              cat "$START_SCRIPT"
-              echo ""
-              
-              # 使用 PM2 启动脚本（不需要传递参数，路径已写入脚本）
-              echo "使用 PM2 启动前端服务..."
-              pm2 start "$START_SCRIPT" \
-                --name frontend \
-                --error "$PROJECT_DIR/logs/frontend-error.log" \
-                --output "$PROJECT_DIR/logs/frontend-out.log" \
-                --merge-logs \
-                --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
-                echo "⚠️  PM2 启动失败，查看错误..."
-                pm2 logs frontend --lines 50 --nostream 2>/dev/null || true
-                echo "查看 PM2 进程状态:"
-                pm2 list || true
-                exit 1
-              }
-              
-              pm2 save || true
-              echo "✅ PM2 应用已启动"
-              pm2 list | grep frontend || true
-              
-              # 立即检查 PM2 状态
-              echo "检查 PM2 进程状态..."
-              sleep 2
-              PM2_STATUS=$(pm2 describe frontend 2>/dev/null | grep -E "status|restarts" || echo "")
-              echo "PM2 状态: $PM2_STATUS"
-              if echo "$PM2_STATUS" | grep -q "errored\|stopped"; then
-                echo "⚠️  PM2 进程状态异常，查看日志..."
-                pm2 logs frontend --lines 30 --nostream 2>/dev/null || true
-              fi
-              
-              # 等待启动（延长等待时间，给 Node.js 应用更多启动时间）
-              echo "等待服务启动..."
-              sleep 13
-              
-              # 检查端口是否在监听
-              echo "检查端口 $FRONTEND_PORT..."
-              sleep 2
-              # 验证端口号是有效数字
-              if ! [[ "$FRONTEND_PORT" =~ ^[0-9]+$ ]] || [ "$FRONTEND_PORT" -lt 1 ] || [ "$FRONTEND_PORT" -gt 65535 ]; then
-                echo "❌ 无效的端口号: $FRONTEND_PORT"
-                echo "使用默认端口 3000"
-                FRONTEND_PORT=3000
-              fi
-              if sudo lsof -i :$FRONTEND_PORT >/dev/null 2>&1; then
-                echo "✅ 端口 $FRONTEND_PORT 正在监听"
-                # 测试连接
-                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$FRONTEND_PORT || echo "000")
-                if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
-                  echo "✅ 应用响应正常 (HTTP $HTTP_CODE)"
-                else
-                  echo "⚠️  应用响应异常 (HTTP $HTTP_CODE)"
-                  pm2 logs frontend --lines 10 --nostream 2>/dev/null || true
-                fi
-              else
-                echo "❌ 端口 $FRONTEND_PORT 未在监听，应用可能未成功启动"
-                echo "=========================================="
-                echo "🔍 详细错误诊断..."
-                echo "=========================================="
-                echo "PM2 进程状态:"
-                pm2 list || true
-                echo ""
-                echo "PM2 进程详情:"
-                pm2 describe frontend || true
-                echo ""
-                echo "PM2 最新日志 (最后 50 行):"
-                pm2 logs frontend --lines 50 --nostream 2>/dev/null || true
-                echo ""
-                echo "检查进程是否在运行:"
-                ps aux | grep -E "serve|frontend" | grep -v grep || true
-                echo ""
-                echo "检查端口占用:"
-                sudo lsof -i :$FRONTEND_PORT || echo "端口未被占用"
-                echo ""
-                echo "查看错误日志文件:"
-                tail -50 "$PROJECT_DIR/logs/frontend-error.log" 2>/dev/null || echo "错误日志文件不存在"
-                echo ""
-                echo "查看输出日志文件:"
-                tail -50 "$PROJECT_DIR/logs/frontend-out.log" 2>/dev/null || echo "输出日志文件不存在"
-                exit 1
-              fi
-              
-              echo ""
-            fi
-
-            # 重载 Nginx
-            echo "🔄 [5/5] 重载 Nginx..."
-            echo "----------------------------------------"
-            
-            # 检查 Nginx 是否安装
-            if ! command -v nginx >/dev/null 2>&1; then
-              echo "⚠️  Nginx 未安装，安装 Nginx..."
-              sudo apt-get update -qq
-              sudo apt-get install -y nginx || {
-                echo "❌ Nginx 安装失败"
-                exit 1
-              }
-            fi
-            echo "✅ Nginx 已安装: $(nginx -v 2>&1 || echo '已安装')"
-            
-            # 重载/重启 Nginx（简单粗暴但有效）
-            echo "🔄 重载/重启 Nginx..."
-            echo "----------------------------------------"
-            
-            # 0. 清理无效的旧配置（证书不存在的 HTTPS 配置）
-            echo "0. 清理无效的旧配置..."
-            for config_file in /etc/nginx/sites-enabled/*; do
-              if [ -f "$config_file" ]; then
-                # 检查配置文件中是否引用了证书，但证书文件不存在
-                if grep -q "ssl_certificate" "$config_file" 2>/dev/null; then
-                  # 提取证书路径（更可靠的方法）
-                  CERT_PATH=$(grep "ssl_certificate" "$config_file" | grep -v "^[[:space:]]*#" | head -1 | sed 's/.*ssl_certificate[[:space:]]*\([^;]*\);.*/\1/' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
-                  if [ -n "$CERT_PATH" ] && [ ! -f "$CERT_PATH" ]; then
-                    echo "⚠️  发现无效配置（证书不存在: $CERT_PATH）: $config_file，临时禁用..."
-                    sudo rm -f "$config_file" || true
-                  fi
-                fi
-              fi
-            done
-            
-            # 1. 先做体检（确保配置文件没写错）
-            echo "1. 测试 Nginx 配置文件..."
-            if ! sudo nginx -t 2>&1; then
-              echo "❌ Nginx 配置文件有误！"
-              echo "查看详细错误："
-              sudo nginx -t 2>&1 || true
-              echo ""
-              echo "尝试修复：删除所有可能无效的配置..."
-              # 列出所有启用的配置
-              echo "当前启用的配置："
-              ls -la /etc/nginx/sites-enabled/ || true
-              echo ""
-              echo "检查每个配置的证书..."
-              for config_file in /etc/nginx/sites-enabled/*; do
-                if [ -f "$config_file" ]; then
-                  echo "检查: $config_file"
-                  if grep -q "ssl_certificate" "$config_file" 2>/dev/null; then
-                    # 提取证书路径（更可靠的方法）
-                    CERT_PATH=$(grep "ssl_certificate" "$config_file" | grep -v "^[[:space:]]*#" | head -1 | sed 's/.*ssl_certificate[[:space:]]*\([^;]*\);.*/\1/' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
-                    if [ -n "$CERT_PATH" ]; then
-                      if [ ! -f "$CERT_PATH" ]; then
-                        echo "  ❌ 证书不存在: $CERT_PATH，删除配置..."
-                        sudo rm -f "$config_file" || true
-                      else
-                        echo "  ✅ 证书存在: $CERT_PATH"
-                      fi
-                    fi
-                  fi
-                fi
-              done
-              echo ""
-              echo "再次测试配置..."
-              if ! sudo nginx -t 2>&1; then
-                echo "❌ 修复后配置测试仍然失败，禁止重启，以免搞挂现有服务。"
-                exit 1
-              fi
-            fi
-            echo "✅ Nginx 配置测试通过"
-            
-            # 2. 直接重启（不管它现在是死是活，重启能解决所有状态问题）
-            echo "2. 执行重启..."
-            if sudo systemctl restart nginx; then
-              echo "✅ Nginx 重启成功！"
-            else
-              echo "❌ Nginx 重启失败！打印日志："
-              sudo journalctl -u nginx --no-pager -n 50
-              exit 1
-            fi
-            
-            # 3. 最终确认
-            echo "3. 验证运行状态..."
-            sleep 3
-            if sudo systemctl is-active --quiet nginx; then
-              echo "✅ Nginx 服务正常运行中"
-            else
-              echo "❌ Nginx 重启后依然未运行"
-              exit 1
-            fi
-            
-            echo "✅ Nginx 重载完成"
+            echo "✅ 构建完成"
+            echo "构建输出大小: $(du -sh dist | cut -f1)"
             echo ""
             
-            # 验证服务状态（禁用 set -e 避免验证失败导致脚本退出）
-            set +e
-            echo "🔍 验证服务状态..."
+            # 启动服务（使用 serve 启动静态文件服务）
+            echo "🚀 [6/6] 启动服务..."
             echo "----------------------------------------"
             
-            # 检查 Nginx 状态
-            if sudo systemctl is-active --quiet nginx 2>/dev/null; then
-              echo "✅ Nginx 服务运行中"
-            else
-              echo "⚠️  Nginx 服务未运行"
+            # 检查并安装 serve（如果未安装）
+            if ! command -v serve >/dev/null 2>&1; then
+              echo "安装 serve..."
+              sudo npm install -g serve
             fi
             
-            # 检查端口占用
-            if sudo lsof -i :80 >/dev/null 2>&1; then
-              echo "✅ 端口 80 已被占用（Nginx 可能正在运行）"
-            else
-              echo "⚠️  端口 80 未被占用"
+            # 检查并安装 PM2（如果未安装）
+            if ! command -v pm2 >/dev/null 2>&1; then
+              echo "安装 PM2..."
+              sudo npm install -g pm2
+              pm2 startup systemd -u ubuntu --hp /home/ubuntu || true
             fi
             
-            # 恢复 set -e
-            set -e
+            # 停止旧进程（只影响 aizkw-frontend，不影响其他服务）
+            echo "停止旧进程..."
+            pm2 delete "$PM2_NAME" 2>/dev/null || true
+            
+            # 停止占用端口的进程（只影响 3003 端口）
+            if sudo lsof -i :$TARGET_PORT >/dev/null 2>&1; then
+              echo "停止占用端口 $TARGET_PORT 的进程..."
+              sudo lsof -ti :$TARGET_PORT | xargs sudo kill -9 2>/dev/null || true
+              sleep 2
+            fi
+            
+            echo "✅ 旧进程已停止"
+            echo ""
+            
+            # 确保日志目录存在
+            mkdir -p "$PROJECT_ROOT/logs"
+            
+            # 确认当前目录和 dist 文件夹
+            echo "当前工作目录: $(pwd)"
+            echo "检查 dist 目录..."
+            if [ ! -d "$PROJECT_DIR/dist" ]; then
+              echo "❌ dist 目录不存在: $PROJECT_DIR/dist"
+              exit 1
+            fi
+            echo "✅ dist 目录存在: $PROJECT_DIR/dist"
+            echo ""
+            
+            # 使用 PM2 启动 serve（直接使用 serve 命令，不需要生成脚本）
+            echo "使用 PM2 启动静态文件服务..."
+            echo "命令: serve -s $PROJECT_DIR/dist -l $TARGET_PORT"
+            
+            pm2 start serve \
+              --name "$PM2_NAME" \
+              -- -s "$PROJECT_DIR/dist" -l $TARGET_PORT \
+              --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
+              --output "$PROJECT_ROOT/logs/${PM2_NAME}-out.log" \
+              --merge-logs \
+              --log-date-format "YYYY-MM-DD HH:mm:ss Z" || {
+              echo "⚠️  PM2 启动失败，查看错误..."
+              pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
+              echo "查看 PM2 进程状态:"
+              pm2 list || true
+              exit 1
+            }
+            
+            pm2 save || true
+            echo "✅ PM2 应用已启动"
+            pm2 list | grep "$PM2_NAME" || true
+            echo ""
+            
+            # 等待服务启动
+            echo "等待服务启动..."
+            sleep 5
+            
+            # 检查 PM2 状态
+            PM2_STATUS=$(pm2 describe "$PM2_NAME" 2>/dev/null | grep -E "status|restarts" || echo "")
+            echo "PM2 状态: $PM2_STATUS"
+            if echo "$PM2_STATUS" | grep -q "errored\|stopped"; then
+              echo "⚠️  PM2 进程状态异常，查看日志..."
+              pm2 logs "$PM2_NAME" --lines 30 --nostream 2>/dev/null || true
+            fi
+            
+            # 检查端口是否在监听
+            echo ""
+            echo "检查端口 $TARGET_PORT..."
+            sleep 2
+            if sudo lsof -i :$TARGET_PORT >/dev/null 2>&1; then
+              echo "✅ 端口 $TARGET_PORT 正在监听"
+              
+              # 测试连接
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$TARGET_PORT || echo "000")
+              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+                echo "✅ 服务响应正常 (HTTP $HTTP_CODE)"
+              else
+                echo "⚠️  服务响应异常 (HTTP $HTTP_CODE)"
+                pm2 logs "$PM2_NAME" --lines 10 --nostream 2>/dev/null || true
+              fi
+            else
+              echo "❌ 端口 $TARGET_PORT 未在监听，应用可能未成功启动"
+              echo "=========================================="
+              echo "🔍 详细错误诊断..."
+              echo "=========================================="
+              echo "PM2 进程状态:"
+              pm2 list || true
+              echo ""
+              echo "PM2 进程详情:"
+              pm2 describe "$PM2_NAME" || true
+              echo ""
+              echo "PM2 最新日志 (最后 50 行):"
+              pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
+              echo ""
+              echo "检查进程是否在运行:"
+              ps aux | grep -E "serve|$PM2_NAME" | grep -v grep || true
+              echo ""
+              echo "检查端口占用:"
+              sudo lsof -i :$TARGET_PORT || echo "端口未被占用"
+              exit 1
+            fi
             
             echo ""
             echo "=========================================="
-            echo "✅ 部署完成！"
+            echo "✅ aizkw 部署完成！"
+            echo "端口: $TARGET_PORT"
+            echo "PM2 名称: $PM2_NAME"
             echo "时间: $(date)"
             echo "=========================================="
+            echo ""
+            echo "验证命令:"
+            echo "  pm2 list | grep $PM2_NAME"
+            echo "  curl -I http://127.0.0.1:$TARGET_PORT"
+            echo "  sudo lsof -i :$TARGET_PORT"

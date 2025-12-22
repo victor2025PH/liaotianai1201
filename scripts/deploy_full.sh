@@ -2,6 +2,7 @@
 # ============================================================
 # 全栈部署脚本 - 智能健康检查版
 # 用于 GitHub Actions 自动部署
+# 版本: 2025-12-22 - 修复重复进程和端口冲突问题
 # ============================================================
 
 set -e
@@ -243,15 +244,82 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     # 使用 PM2 启动前端
     echo "启动前端服务 (端口 3000)..."
     if [ -d ".next/standalone" ]; then
-      # Next.js standalone 模式
+      # Next.js standalone 模式 - 需要手动复制静态文件
+      echo "准备 standalone 模式启动..."
+      
+      # 确定 standalone 目录路径（可能是 .next/standalone 或 .next/standalone/saas-demo）
+      STANDALONE_DIR=".next/standalone"
+      if [ -d ".next/standalone/saas-demo" ]; then
+        STANDALONE_DIR=".next/standalone/saas-demo"
+        echo "发现嵌套的 standalone 目录: $STANDALONE_DIR"
+      fi
+      
+      # 确保目录结构完整
+      echo "复制静态文件到 standalone 目录..."
+      mkdir -p "$STANDALONE_DIR/.next/static"
+      mkdir -p "$STANDALONE_DIR/.next/server"
+      mkdir -p "$STANDALONE_DIR/.next"
+      
+      # 复制 BUILD_ID（必需）
+      if [ -f ".next/BUILD_ID" ]; then
+        cp .next/BUILD_ID "$STANDALONE_DIR/.next/BUILD_ID" 2>/dev/null || true
+      fi
+      
+      # 复制所有 JSON 配置文件（必需）
+      for json_file in .next/*.json; do
+        if [ -f "$json_file" ]; then
+          cp "$json_file" "$STANDALONE_DIR/.next/" 2>/dev/null || true
+        fi
+      done
+      
+      # 复制 static 目录（关键！）
+      if [ -d ".next/static" ]; then
+        echo "复制 .next/static 目录..."
+        cp -r .next/static/* "$STANDALONE_DIR/.next/static/" 2>/dev/null || true
+        STATIC_COUNT=$(find "$STANDALONE_DIR/.next/static" -type f 2>/dev/null | wc -l)
+        echo "✅ 已复制 $STATIC_COUNT 个静态文件"
+      else
+        echo "⚠️  警告：.next/static 目录不存在"
+      fi
+      
+      # 复制 server 目录（必需，包含 pages-manifest.json 等）
+      if [ -d ".next/server" ]; then
+        echo "复制 .next/server 目录..."
+        cp -r .next/server/* "$STANDALONE_DIR/.next/server/" 2>/dev/null || true
+        SERVER_COUNT=$(find "$STANDALONE_DIR/.next/server" -type f 2>/dev/null | wc -l)
+        echo "✅ 已复制 $SERVER_COUNT 个服务器文件"
+      else
+        echo "⚠️  警告：.next/server 目录不存在"
+      fi
+      
+      # 复制 public 目录
+      if [ -d "public" ]; then
+        cp -r public "$STANDALONE_DIR/" 2>/dev/null || true
+        echo "✅ public 目录已复制"
+      fi
+      
+      # 验证关键文件
+      if [ ! -f "$STANDALONE_DIR/.next/BUILD_ID" ]; then
+        echo "⚠️  警告：BUILD_ID 未复制"
+      fi
+      
+      if [ ! -d "$STANDALONE_DIR/.next/static/chunks" ]; then
+        echo "❌ 错误：chunks 目录不存在，静态文件复制可能失败"
+        exit 1
+      fi
+      
+      echo "✅ standalone 目录准备完成"
+      
+      # 启动 Next.js standalone 模式
       pm2 start node \
         --name saas-demo-frontend \
         --max-memory-restart 1G \
+        --cwd "$(pwd)/$STANDALONE_DIR" \
         --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
         --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
         --merge-logs \
         --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-        -- .next/standalone/server.js || {
+        -- server.js || {
         echo "⚠️  PM2 启动失败"
         exit 1
       }

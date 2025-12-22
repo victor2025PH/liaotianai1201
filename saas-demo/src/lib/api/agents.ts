@@ -10,10 +10,25 @@ const API_BASE = getApiBaseUrl()
 export interface Agent {
   agent_id: string
   id?: string  // 为了兼容 useCrud，添加 id 属性（映射到 agent_id）
+  phone_number?: string
   status: "online" | "offline" | "busy" | "error"
-  connected_at: string
-  last_heartbeat: string
+  connected_at?: string
+  last_heartbeat?: string
+  last_active_time?: string
   latency?: number
+  current_task_id?: string
+  device_info?: {
+    device_model?: string
+    system_version?: string
+    app_version?: string
+    [key: string]: any
+  }
+  agent_metadata?: {
+    version?: string
+    platform?: string
+    hostname?: string
+    [key: string]: any
+  }
   metadata?: {
     version?: string
     platform?: string
@@ -31,8 +46,27 @@ export interface AgentListParams {
 
 /**
  * 获取所有 Agent 列表
+ * Phase 8: 更新为使用新的 REST API
  */
 export async function getAgents(params?: AgentListParams): Promise<Agent[]> {
+  // 优先使用新的 REST API (/api/v1/agents)
+  try {
+    const response = await fetchWithAuth(`${API_BASE}/agents`)
+    
+    if (response.ok) {
+      const agents: Agent[] = await response.json()
+      // 为每个 Agent 添加 id 属性（映射到 agent_id），以兼容 useCrud
+      return agents.map(agent => ({
+        ...agent,
+        id: agent.agent_id || agent.id
+      }))
+    }
+  } catch (error) {
+    // 如果新 API 失败，回退到旧 API
+    console.warn("新 Agent API 失败，回退到旧 API", error)
+  }
+  
+  // 回退到旧的 WebSocket 管理 API
   const queryParams = new URLSearchParams()
   if (params?.page) queryParams.append("page", params.page.toString())
   if (params?.page_size) queryParams.append("page_size", params.page_size.toString())

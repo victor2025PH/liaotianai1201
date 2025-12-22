@@ -152,6 +152,67 @@ async def send_heartbeat(
         )
 
 
+@router.post("/tasks", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def create_task(
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    创建任务接口
+    
+    前端调用此接口创建任务并下发给 Agent。
+    """
+    try:
+        agent_id = request.get("agent_id")
+        task_type = request.get("task_type", "scenario_execute")
+        scenario_data = request.get("scenario_data")
+        variables = request.get("variables", {})
+        priority = request.get("priority", 1)
+        
+        if not scenario_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="缺少 scenario_data 字段"
+            )
+        
+        # 生成任务ID
+        import uuid
+        task_id = f"task_{uuid.uuid4().hex[:16]}"
+        
+        # 创建任务
+        task = AgentTask(
+            task_id=task_id,
+            agent_id=agent_id,  # 可选，如果未指定则由 Agent 轮询时自动分配
+            task_type=task_type,
+            scenario_data=scenario_data,
+            variables=variables,
+            priority=priority,
+            status="pending"
+        )
+        
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        
+        logger.info(f"任务已创建: {task_id} (Agent: {agent_id or '自动分配'})")
+        
+        return {
+            "success": True,
+            "task_id": task_id,
+            "message": "任务已创建"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"创建任务失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"创建任务失败: {str(e)}"
+        )
+
+
 @router.get("/tasks/pending", response_model=TaskResponse, status_code=status.HTTP_200_OK)
 async def fetch_pending_task(
     agent_id: str = Query(..., description="Agent ID"),

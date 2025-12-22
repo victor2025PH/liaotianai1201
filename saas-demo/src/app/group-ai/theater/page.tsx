@@ -17,6 +17,7 @@ import {
   type TheaterScenarioUpdate,
   type TimelineAction
 } from "@/lib/api/theater"
+import { getAgents, createTask, type Agent, isAgentOnline, getDeviceModel } from "@/lib/api/agentService"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -116,6 +117,11 @@ export default function TheaterPage() {
   const { toast } = useToast()
   const [executionDialogOpen, setExecutionDialogOpen] = useState(false)
   const [selectedScenario, setSelectedScenario] = useState<TheaterScenario | null>(null)
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false)
+  const [selectedAgentId, setSelectedAgentId] = useState<string>("")
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [loadingAgents, setLoadingAgents] = useState(false)
+  const [submittingTask, setSubmittingTask] = useState(false)
   
   const crud = useCrud<TheaterScenario, TheaterScenarioCreate, TheaterScenarioUpdate>({
     listApi: getScenarios,
@@ -125,10 +131,90 @@ export default function TheaterPage() {
     autoFetch: true
   })
   
-  // 处理执行
+  // 加载在线 Agent 列表
+  useEffect(() => {
+    if (taskDialogOpen) {
+      loadAgents()
+    }
+  }, [taskDialogOpen])
+  
+  const loadAgents = async () => {
+    try {
+      setLoadingAgents(true)
+      const data = await getAgents()
+      setAgents(data.filter(agent => isAgentOnline(agent)))
+      // 默认选择第一个在线 Agent
+      if (data.length > 0 && !selectedAgentId) {
+        const firstOnline = data.find(agent => isAgentOnline(agent))
+        if (firstOnline) {
+          setSelectedAgentId(firstOnline.agent_id)
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "加载失败",
+        description: error instanceof Error ? error.message : "无法加载 Agent 列表",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingAgents(false)
+    }
+  }
+  
+  // 处理执行（旧的多 Agent 协同模式）
   const handleExecute = (scenario: TheaterScenario) => {
     setSelectedScenario(scenario)
     setExecutionDialogOpen(true)
+  }
+  
+  // 处理任务下发（新的单 Agent 模式）
+  const handleRunTask = (scenario: TheaterScenario) => {
+    setSelectedScenario(scenario)
+    setTaskDialogOpen(true)
+    setSelectedAgentId("")
+  }
+  
+  // 提交任务
+  const handleSubmitTask = async () => {
+    if (!selectedScenario || !selectedAgentId) {
+      toast({
+        title: "验证失败",
+        description: "请选择要下发的 Agent",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    setSubmittingTask(true)
+    try {
+      await createTask({
+        agent_id: selectedAgentId,
+        task_type: "scenario_execute",
+        scenario_data: {
+          name: selectedScenario.name,
+          timeline: selectedScenario.timeline,
+          roles: selectedScenario.roles
+        },
+        variables: {},
+        priority: 5
+      })
+      
+      toast({
+        title: "任务已下发",
+        description: `剧本 "${selectedScenario.name}" 已下发给 Agent`
+      })
+      
+      setTaskDialogOpen(false)
+      setSelectedAgentId("")
+    } catch (error) {
+      toast({
+        title: "下发失败",
+        description: error instanceof Error ? error.message : "无法下发任务",
+        variant: "destructive"
+      })
+    } finally {
+      setSubmittingTask(false)
+    }
   }
   
   // 处理保存（包含角色和时间轴的验证）
@@ -355,7 +441,80 @@ export default function TheaterPage() {
         maxWidth="2xl"
       />
       
-      {/* 执行配置对话框 */}
+      {/* 任务下发对话框 */}
+      <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>下发任务: {selectedScenario?.name}</DialogTitle>
+            <DialogDescription>
+              选择一个在线 Agent 来执行此剧本
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {loadingAgents ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : agents.length === 0 ? (
+              <div className="text-sm text-amber-600 p-3 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800">
+                ⚠️ 当前没有在线 Agent，无法下发任务
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="agent-select">选择 Agent</Label>
+                <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+                  <SelectTrigger id="agent-select">
+                    <SelectValue placeholder="选择 Agent" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {agents.map((agent) => (
+                      <SelectItem key={agent.agent_id} value={agent.agent_id}>
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full bg-green-500" />
+                          <span className="font-mono text-sm">{agent.agent_id}</span>
+                          {agent.phone_number && (
+                            <span className="text-xs text-muted-foreground">
+                              ({agent.phone_number})
+                            </span>
+                          )}
+                          <span className="text-xs text-muted-foreground">
+                            - {getDeviceModel(agent)}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedAgentId && (
+                  <p className="text-xs text-muted-foreground">
+                    任务将下发给选中的 Agent，Agent 会自动领取并执行
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setTaskDialogOpen(false)}
+              disabled={submittingTask}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleSubmitTask}
+              disabled={submittingTask || !selectedAgentId || agents.length === 0}
+            >
+              {submittingTask && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              确认下发
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* 执行配置对话框（多 Agent 协同模式） */}
       <ExecutionDialog
         open={executionDialogOpen}
         onOpenChange={setExecutionDialogOpen}

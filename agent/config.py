@@ -21,6 +21,13 @@ DEFAULT_CONFIG = {
         "version": "1.0.0",
         "platform": None,
         "hostname": None
+    },
+    # Phase 5: Telegram 配置
+    "telegram": {
+        "api_id": None,
+        "api_hash": None,
+        "session_string": None,
+        "session_path": None
     }
 }
 
@@ -182,3 +189,56 @@ def get_expected_ip() -> Optional[str]:
     """
     config = load_config()
     return config.get("expected_ip")
+
+
+def get_telegram_api_id() -> Optional[int]:
+    """
+    获取 Telegram API ID
+    
+    Returns:
+        API ID 或 None
+    """
+    import os
+    config = load_config()
+    telegram_config = config.get("telegram", {})
+    api_id = telegram_config.get("api_id") or os.getenv("TELEGRAM_API_ID")
+    return int(api_id) if api_id else None
+
+
+def get_telegram_api_hash() -> Optional[str]:
+    """
+    获取 Telegram API Hash
+    
+    Returns:
+        API Hash 或 None
+    """
+    import os
+    config = load_config()
+    telegram_config = config.get("telegram", {})
+    return telegram_config.get("api_hash") or os.getenv("TELEGRAM_API_HASH")
+
+
+def get_telegram_session_string() -> Optional[str]:
+    """
+    获取 Telegram Session String
+    
+    Returns:
+        Session String 或 None
+    """
+    import os
+    config = load_config()
+    telegram_config = config.get("telegram", {})
+    return telegram_config.get("session_string") or os.getenv("TELEGRAM_SESSION_STRING")
+
+
+def get_telegram_session_path() -> Optional[str]:
+    """
+    获取 Telegram Session 文件路径
+    
+    Returns:
+        Session 文件路径或 None
+    """
+    import os
+    config = load_config()
+    telegram_config = config.get("telegram", {})
+    return telegram_config.get("session_path") or os.getenv("TELEGRAM_SESSION_PATH")

@@ -14,13 +14,19 @@ from agent.config import (
     get_server_url, 
     get_metadata,
     get_proxy,
-    get_expected_ip
+    get_expected_ip,
+    get_telegram_api_id,
+    get_telegram_api_hash,
+    get_telegram_session_string,
+    get_telegram_session_path
 )
 from agent.websocket import WebSocketClient, MessageHandler, MessageType
 from agent.modules.redpacket import RedPacketHandler, RedPacketStrategy
 from agent.modules.theater import TheaterHandler
 from agent.utils.device_fingerprint import get_or_create_device_fingerprint
 from agent.utils.proxy_checker import validate_proxy_binding
+from agent.core.session_manager import get_device_fingerprint_for_session
+from agent.core.scenario_player import ScenarioPlayer, load_scenario_from_file
 
 # 配置日志
 logging.basicConfig(
@@ -132,17 +138,24 @@ async def main():
             sys.exit(1)
         logger.info("")
     
-    # 2. 获取或创建设备指纹
+    # 2. 获取或创建设备指纹（Phase 4 + Phase 5 集成）
     logger.info("=" * 60)
-    logger.info("Phase 4: 设备指纹管理")
+    logger.info("Phase 4/5: 设备指纹管理与 Telethon 集成")
     logger.info("=" * 60)
     
-    # TODO: 从配置或环境变量获取手机号
-    # 目前先使用全局指纹（兼容旧版本）
-    # 后续集成 Telethon 时，应该从 Session 文件或配置中获取手机号
-    phone_number = None  # 可以从 config.json 或环境变量读取
+    # 从配置获取 Session 路径（如果配置了）
+    session_path = get_telegram_session_path()
     
-    device_fingerprint = get_or_create_device_fingerprint(phone_number=phone_number)
+    # 获取设备指纹（根据 Session 路径）
+    if session_path:
+        device_fingerprint = get_device_fingerprint_for_session(session_path)
+        logger.info(f"从 Session 文件获取设备指纹: {session_path}")
+    else:
+        # 兼容模式：使用全局指纹
+        phone_number = None  # 可以从 config.json 或环境变量读取
+        device_fingerprint = get_or_create_device_fingerprint(phone_number=phone_number)
+        logger.info("使用全局设备指纹（兼容模式）")
+    
     logger.info(f"设备型号: {device_fingerprint.device_model}")
     logger.info(f"系统版本: {device_fingerprint.system_version}")
     logger.info(f"App 版本: {device_fingerprint.app_version}")
@@ -150,7 +163,6 @@ async def main():
     logger.info(f"平台: {device_fingerprint.platform}")
     if device_fingerprint.manufacturer:
         logger.info(f"制造商: {device_fingerprint.manufacturer}")
-    logger.info(f"指纹文件: {phone_number or 'global'}")
     logger.info("=" * 60)
     logger.info("")
     
@@ -207,20 +219,22 @@ async def main():
     # 创建客户端
     client = WebSocketClient()
     
-    # 初始化 RedPacket 处理器（TODO: 需要传入 Telethon 客户端）
-    # 目前先创建，后续集成 Telethon 时再传入真实的 client
+    # 初始化 RedPacket 处理器（传入 Telethon 客户端）
     global redpacket_handler
     redpacket_handler = RedPacketHandler(
-        client=None,  # TODO: 传入 Telethon 客户端
+        client=telegram_client,  # Phase 5: 传入 Telethon 客户端
         websocket_client=client
     )
     
-    # 初始化 Theater 处理器（TODO: 需要传入 Telethon 客户端）
+    # 初始化 Theater 处理器（传入 Telethon 客户端）
     global theater_handler
     theater_handler = TheaterHandler(
-        client=None,  # TODO: 传入 Telethon 客户端
+        client=telegram_client,  # Phase 5: 传入 Telethon 客户端
         websocket_client=client
     )
+    
+    # Phase 5: 创建剧本执行器（用于本地测试）
+    scenario_player = ScenarioPlayer(client=telegram_client)
     
     # 注册消息处理器
     client.register_message_handler(MessageType.COMMAND, handle_command)

@@ -1,0 +1,29 @@
+{
+  "name": "测试剧本 - 简单对话",
+  "description": "用于测试剧本执行引擎的简单对话场景",
+  "timeline": [
+    {
+      "time_offset": 0,
+      "role": "UserA",
+      "content": "大家好！",
+      "action": "send_message"
+    },
+    {
+      "time_offset": 3,
+      "role": "UserB",
+      "content": "你好 {target_user}，欢迎加入！",
+      "action": "send_message"
+    },
+    {
+      "time_offset": 6,
+      "action": "wait",
+      "duration": 2
+    },
+    {
+      "time_offset": 8,
+      "role": "UserA",
+      "content": "谢谢！很高兴认识大家",
+      "action": "send_message"
+    }
+  ]
+}

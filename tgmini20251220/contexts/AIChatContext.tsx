@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, ReactNode, useEffect } from
 import { detectUserLanguage } from '../utils/aiConfig';
 import { sendChatRequest, sendStreamChatRequest, ChatMessage } from '../utils/aiProxy';
 import { loadMessages, saveMessages, clearStoredMessages } from '../utils/messageStorage';
+import { getSessionId, updateSessionActivity } from '../utils/sessionManager';
 
 // Message Type
 export interface Message {

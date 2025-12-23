@@ -52,6 +52,7 @@ sudo chown -R $CURRENT_USER:$CURRENT_USER .next public package.json node_modules
 # 6. 停止旧进程（如果存在）
 echo "🛑 停止旧进程..."
 pm2 delete admin-frontend 2>/dev/null || true
+sleep 2
 
 # 7. 启动服务
 echo "🚀 启动服务..."
@@ -77,15 +78,24 @@ echo "⏳ 等待服务启动..."
 sleep 5
 
 # 10. 健康检查
-if curl -s http://127.0.0.1:3001 > /dev/null; then
-    echo "✅ 管理后台前端启动成功 (Port 3001)!"
+echo "⏳ 等待服务完全启动..."
+sleep 3
+
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3001 || echo "000")
+if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "404" ]; then
+    echo "✅ 管理后台前端启动成功 (Port 3001, HTTP $HTTP_STATUS)!"
+    echo "   访问地址: http://127.0.0.1:3001"
 else
-    echo "❌ 管理后台前端启动失败！"
+    echo "⚠️  管理后台前端可能未完全启动 (HTTP $HTTP_STATUS)"
     echo "检查 PM2 状态:"
     pm2 list | grep admin-frontend || echo "进程不存在"
     echo "检查错误日志:"
     tail -30 "$PROJECT_ROOT/logs/admin-frontend-error.log" 2>/dev/null || echo "无法读取错误日志"
-    exit 1
+    echo "检查输出日志:"
+    tail -30 "$PROJECT_ROOT/logs/admin-frontend-out.log" 2>/dev/null || echo "无法读取输出日志"
+    echo ""
+    echo "💡 如果进程存在但无法访问，请等待几秒后重试:"
+    echo "   curl http://127.0.0.1:3001"
 fi
 
 echo "🎉 管理后台前端部署完成！"

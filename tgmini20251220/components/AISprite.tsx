@@ -1,0 +1,517 @@
+import React, { useEffect, useState, useRef } from 'react';
+import { motion, useSpring, useVelocity, useAnimationFrame, useTransform, useScroll, useMotionTemplate, AnimatePresence } from 'framer-motion';
+import { useAIChat } from '../contexts/AIChatContext';
+import { Activity } from 'lucide-react';
+
+const NeuralNeck = ({ active, color }: { active: boolean; color: string }) => (
+  <motion.div 
+    className="absolute left-1/2 top-[25%] -translate-x-1/2 w-3 h-10 z-10 overflow-hidden pointer-events-none"
+    animate={{ opacity: 1, height: 28 }}
+    transition={{ duration: 0.4 }}
+  >
+     <div className="w-full h-full flex flex-col items-center justify-center">
+        <div 
+            className="w-[1px] h-full transition-colors duration-1000" 
+            style={{ backgroundColor: `${color}4D`, boxShadow: `0 0 5px ${color}` }} 
+        />
+     </div>
+  </motion.div>
+);
+
+const NewsHologram = ({ active, text, color }: { active: boolean; text: string; color: string }) => (
+    <AnimatePresence>
+        {active && (
+            <motion.div
+                className="absolute bottom-[105%] left-1/2 -translate-x-1/2 w-48 z-50 pointer-events-none"
+                initial={{ opacity: 0, scale: 0.8, y: 10, rotateX: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0, rotateX: 0 }}
+                exit={{ opacity: 0, scale: 0.8, y: 5 }}
+            >
+                <div 
+                    className="bg-black/80 border backdrop-blur-md rounded-lg p-3 relative overflow-hidden"
+                    style={{ borderColor: `${color}60`, boxShadow: `0 0 15px ${color}20` }}
+                >
+                    <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.2)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%] pointer-events-none opacity-50"></div>
+                    <div className="flex items-center gap-2 mb-1 border-b border-white/10 pb-1">
+                        <Activity className="w-3 h-3 animate-pulse" style={{ color }} />
+                        <span className="text-[10px] font-mono font-bold tracking-wider text-zinc-300">DEV_FEED</span>
+                    </div>
+                    <div className="text-xs text-white font-sans leading-tight relative z-10">
+                        {text}
+                    </div>
+                </div>
+                <div 
+                    className="absolute top-full left-1/2 -translate-x-1/2 w-8 h-8 opacity-50 blur-md"
+                    style={{ background: `conic-gradient(from 180deg at 50% 0%, transparent 45%, ${color} 50%, transparent 55%)` }}
+                />
+            </motion.div>
+        )}
+    </AnimatePresence>
+);
+
+const EveArm = ({ isLeft }: { isLeft: boolean }) => (
+    <svg width="18" height="64" viewBox="0 0 18 64" fill="none" className="drop-shadow-sm" style={{ transform: isLeft ? 'scaleX(1)' : 'scaleX(-1)' }}>
+        <defs>
+            <linearGradient id="armGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#ffffff" />
+                <stop offset="40%" stopColor="#eef2ff" />
+                <stop offset="100%" stopColor="#dbeafe" />
+            </linearGradient>
+        </defs>
+        <path d="M16 2C16 2 4 10 4 28C4 50 12 60 16 62C17 62.5 18 60 18 56C18 56 18 10 16 2Z" fill="url(#armGrad)" />
+        <path d="M16 2C16 2 4 10 4 28C4 50 12 60 16 62" stroke="white" strokeWidth="0.5" strokeOpacity="0.8" fill="none" />
+        <path d="M16 2C16 2 4 10 4 28C4 50 12 60 16 62C17 62.5 18 60 18 56C18 56 18 10 16 2Z" stroke="rgba(0,0,0,0.05)" strokeWidth="0.5" />
+    </svg>
+);
+
+const DigitalEye = ({ expression, color }: { expression: 'normal' | 'happy' | 'blink' | 'focused' | 'scanning' | 'scared' | 'wink'; color: string }) => {
+    const variants = {
+        normal: { scaleY: 1, scaleX: 1, borderRadius: "50%", height: "16px" },
+        blink: { scaleY: 0.1, scaleX: 1.1, borderRadius: "50%", height: "16px" },
+        happy: { scaleY: 0.6, scaleX: 1.1, borderRadius: "50% 50% 20% 20%", height: "16px" },
+        focused: { scaleY: 0.7, scaleX: 0.9, borderRadius: "30%", height: "14px" }, 
+        scanning: { scaleY: 1.1, scaleX: 0.8, borderRadius: "50%", height: "18px" },
+        scared: { scaleY: 1.3, scaleX: 0.7, borderRadius: "40%", height: "20px" },
+        wink: { scaleY: 0.1, scaleX: 1.1, borderRadius: "50%", height: "16px" }
+    };
+    return (
+        <motion.div 
+            className="relative w-6 bg-[#001020] overflow-hidden transition-colors duration-1000"
+            style={{ 
+                boxShadow: `0 0 5px ${color}80`, 
+                border: `1px solid ${color}40`,
+            }}
+            animate={variants[expression === 'wink' ? 'blink' : expression]}
+            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+        >
+             <motion.div 
+                className="absolute inset-0 bg-black"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: expression === 'happy' ? 1 : 0 }}
+                style={{ clipPath: 'polygon(0% 50%, 100% 50%, 100% 100%, 0% 100%)' }}
+             />
+             {expression === 'scanning' && (
+                 <motion.div 
+                    className="absolute inset-0 bg-white/50 h-[2px]"
+                    animate={{ top: ['0%', '100%', '0%'] }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                 />
+             )}
+            <div className="absolute inset-0 flex flex-col justify-center gap-[1px] opacity-90">
+                {[...Array(5)].map((_, i) => (
+                    <div 
+                        key={i} 
+                        className="w-full h-[2px] transition-colors duration-1000"
+                        style={{ 
+                            backgroundColor: color, 
+                            boxShadow: `0 0 2px ${color}`,
+                            opacity: 1 - Math.abs(2 - i) * 0.25
+                        }} 
+                    />
+                ))}
+            </div>
+            <div 
+                className="absolute inset-0 blur-sm transition-colors duration-1000" 
+                style={{ backgroundColor: `${color}40` }} 
+            />
+        </motion.div>
+    );
+};
+
+type BotMode = 'flying' | 'falling' | 'idle_base' | 'idle_wave' | 'idle_dance' | 'idle_scan' | 'idle_news' | 'idle_spin';
+
+const EveBot: React.FC<{ 
+    mode: BotMode;
+    flightAngle: number;
+    scrollTilt: number;
+    velocity: number;
+    isHovered: boolean;
+    newsText: string;
+}> = ({ mode, flightAngle, scrollTilt, velocity, isHovered, newsText }) => {
+    const [eyeExpression, setEyeExpression] = useState<'normal' | 'happy' | 'blink' | 'focused' | 'scanning' | 'scared'>('normal');
+    const [eyeColor, setEyeColor] = useState('#8B5CF6');
+    const [spinRotation, setSpinRotation] = useState(0);
+    useEffect(() => {
+        const colors = ['#8B5CF6', '#3B82F6', '#06B6D4', '#EC4899', '#A855F7'];
+        let colorIndex = 0;
+        const interval = setInterval(() => {
+            colorIndex = (colorIndex + 1) % colors.length;
+            setEyeColor(colors[colorIndex]);
+        }, 4000);
+        return () => clearInterval(interval);
+    }, []);
+    useEffect(() => {
+        if (isHovered) { setEyeExpression('happy'); return; }
+        if (mode === 'falling') { setEyeExpression('scared'); return; }
+        if (mode === 'flying') { setEyeExpression('focused'); return; }
+        if (mode === 'idle_scan') { setEyeExpression('scanning'); return; }
+        if (mode === 'idle_wave') { setEyeExpression('happy'); return; }
+        if (mode === 'idle_dance') { setEyeExpression('happy'); return; }
+        if (mode === 'idle_news') { setEyeExpression('focused'); return; }
+        const blinkLoop = () => {
+            if (mode === 'idle_base' && !isHovered) {
+                setEyeExpression('blink');
+                setTimeout(() => setEyeExpression('normal'), 150);
+            }
+            setTimeout(blinkLoop, 2000 + Math.random() * 3000);
+        };
+        const timer = setTimeout(blinkLoop, 2000);
+        return () => clearTimeout(timer);
+    }, [mode, isHovered]);
+    useEffect(() => {
+        if (mode === 'idle_spin') {
+            setSpinRotation(prev => prev + 360);
+        }
+    }, [mode]);
+    const bodyVariants = {
+        idle_base: { 
+            y: [0, -8, 0], 
+            rotate: 0,
+            transition: { y: { repeat: Infinity, duration: 2.5, ease: "easeInOut" as const } } 
+        },
+        idle_scan: {
+            y: -5,
+            rotate: [0, -5, 5, 0],
+            transition: { rotate: { duration: 2, ease: "easeInOut" as const } }
+        },
+        idle_wave: {
+            y: -5,
+            rotate: -2,
+        },
+        idle_dance: {
+            y: [0, -15, 0],
+            rotate: [-3, 3, -3],
+            transition: { 
+                y: { repeat: Infinity, duration: 0.4, ease: "easeOut" as const },
+                rotate: { repeat: Infinity, duration: 0.8, ease: "linear" as const }
+            }
+        },
+        idle_news: {
+            y: 0,
+            rotate: 0,
+        },
+        idle_spin: {
+            rotateY: 360,
+            transition: { duration: 0.8, ease: "easeInOut" as const }
+        },
+        flying: { rotate: flightAngle, y: -20 },
+        falling: { rotate: -15, y: 30 },
+    };
+    const leftArmVariants = {
+        idle_base: { x: -6, y: 10, rotate: 5 },
+        idle_scan: { x: -6, y: 10, rotate: 5 },
+        idle_wave: { x: -6, y: 10, rotate: 5 },
+        idle_dance: { 
+            x: -12, y: 5, 
+            rotate: [0, 45, 0],
+            transition: { repeat: Infinity, duration: 0.4 } 
+        },
+        idle_news: { x: -8, y: 8, rotate: 10 },
+        flying: { x: -12, y: 25, rotate: 35 },
+        falling: { x: -25, y: -25, rotate: 150 },
+    };
+    const rightArmVariants = {
+        idle_base: { x: 6, y: 10, rotate: -5 },
+        idle_scan: { x: 6, y: 10, rotate: -5 },
+        idle_wave: { 
+            x: 6, y: 10,
+            rotate: [-140, -110, -140],
+            transition: { repeat: Infinity, duration: 1, ease: "easeInOut" as const }
+        },
+        idle_dance: { 
+            x: 12, y: 5, 
+            rotate: [0, -45, 0],
+            transition: { repeat: Infinity, duration: 0.4, delay: 0.2 } 
+        },
+        idle_news: { x: 8, y: 8, rotate: -10 },
+        flying: { x: 12, y: 25, rotate: -35 },
+        falling: { x: 25, y: -25, rotate: -150 },
+    };
+    return (
+        <motion.div 
+            className="relative w-32 h-44 flex flex-col items-center justify-center preserve-3d"
+            style={{ rotateX: scrollTilt }}
+            animate={{ rotateY: spinRotation }}
+            transition={{ rotateY: { duration: 1, ease: "backOut" } }}
+        >
+            <motion.div 
+                 className="relative w-full h-full flex flex-col items-center justify-center preserve-3d"
+                 variants={bodyVariants}
+                 animate={mode === 'idle_spin' ? undefined : mode}
+                 transition={{ type: "spring", stiffness: 100, damping: 20 }}
+            >
+                <NewsHologram active={mode === 'idle_news'} text={newsText} color={eyeColor} />
+                <motion.div 
+                    className="relative z-30 w-[4.4rem] h-[3.2rem] bg-white rounded-[50%_50%_45%_45%] shadow-[inset_0_-2px_6px_rgba(0,0,0,0.15),0_5px_15px_rgba(0,0,0,0.1)] overflow-hidden flex items-center justify-center"
+                    style={{ background: 'radial-gradient(circle at 50% 10%, #ffffff 0%, #f3e8ff 60%, #e9d5ff 100%)' }}
+                    animate={{
+                        y: mode === 'idle_dance' ? -2 : -8,
+                    }}
+                >
+                    <div className="absolute top-1 left-1/4 w-1/2 h-1/2 bg-white opacity-60 rounded-full blur-[2px]" />
+                    <div className="w-[88%] h-[75%] bg-black rounded-[45%_45%_50%_50%] flex items-center justify-center gap-3 relative shadow-[inset_0_0_10px_rgba(255,255,255,0.15)] overflow-hidden border border-zinc-800/50 mt-1">
+                        <div className="flex gap-3">
+                            <DigitalEye expression={eyeExpression} color={eyeColor} />
+                            <DigitalEye expression={eyeExpression} color={eyeColor} />
+                        </div>
+                    </div>
+                </motion.div>
+                <NeuralNeck active={true} color={eyeColor} />
+                <div className="relative z-20 w-[4rem] h-[5.5rem] mt-[-10px]">
+                    <div 
+                        className="w-full h-full bg-white relative overflow-hidden"
+                        style={{ 
+                            background: 'radial-gradient(circle at 30% 50%, #ffffff 0%, #f3e8ff 50%, #e9d5ff 100%',
+                            borderRadius: '30% 30% 50% 50% / 20% 20% 80% 80%', 
+                            boxShadow: 'inset -5px -5px 15px rgba(0,0,0,0.05), inset 5px 5px 15px rgba(255,255,255,1), 0 10px 25px rgba(0,0,0,0.1)'
+                        }}
+                    >
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[90%] h-5 bg-gradient-to-b from-[#d8b4fe] to-transparent rounded-b-full opacity-40 blur-[1px]" />
+                        <div className="absolute top-[-2px] left-1/2 -translate-x-1/2 w-[80%] h-3 bg-purple-200/50 rounded-b-full blur-[2px]" />
+                        <div className={`absolute top-[45%] left-1/2 -translate-x-1/2 w-8 h-8 flex items-center justify-center transition-opacity duration-700 opacity-100`}>
+                            <div 
+                                className="w-2 h-2 rounded-full animate-pulse transition-colors duration-1000"
+                                style={{ backgroundColor: eyeColor, boxShadow: `0 0 10px ${eyeColor}` }}
+                            />
+                            <div className="absolute w-full h-[1px] bg-black/5 top-1/2 -translate-y-1/2" />
+                            <div className="absolute h-full w-[1px] bg-black/5 left-1/2 -translate-x-1/2" />
+                        </div>
+                    </div>
+                </div>
+                <motion.div className="absolute left-[22px] top-[46px] z-10 origin-[16px_8px]" variants={leftArmVariants} animate={mode}>
+                    <EveArm isLeft={true} />
+                </motion.div>
+                <motion.div className="absolute right-[22px] top-[46px] z-10 origin-[2px_8px]" variants={rightArmVariants} animate={mode}>
+                    <EveArm isLeft={false} />
+                </motion.div>
+                <motion.div 
+                    className="absolute top-[88%] left-[49%] -translate-x-1/2 -z-10"
+                    animate={{ 
+                        opacity: (mode === 'flying' || mode === 'idle_dance') ? 0.8 : 0.4, 
+                        scaleY: (mode === 'flying') ? 1.5 : 0.8
+                    }}
+                >
+                    <div 
+                        className="w-6 h-12 rounded-full blur-[6px] transition-colors duration-1000" 
+                        style={{ background: `linear-gradient(to top, transparent, ${eyeColor}, white)` }}
+                    />
+                </motion.div>
+            </motion.div>
+        </motion.div>
+    );
+};
+
+const NEWS_SNIPPETS = [
+    "检测到 TON 网络更新...",
+    "分析 Mini App 趋势...",
+    "优化开发流程...",
+    "监控 Telegram API...",
+    "更新技术栈文档...",
+    "分析用户需求...",
+    "优化部署方案...",
+    "检测 Web3 集成...",
+    "分析竞品动态...",
+    "开发矩阵运行中..."
+];
+
+export const AISprite: React.FC = () => {
+    const { openChat } = useAIChat();
+    const { scrollY } = useScroll();
+    const [mode, setMode] = useState<BotMode>('idle_base');
+    const [newsText, setNewsText] = useState('');
+    const [isHovered, setIsHovered] = useState(false);
+    const isHoveredRef = useRef(false);
+    const [zIndex, setZIndex] = useState(50); 
+    const [velocity, setVelocity] = useState(0);
+    const [tilt, setTilt] = useState(0);
+    const [flightAngle, setFlightAngle] = useState(0); 
+    const springScrollVelocity = useVelocity(scrollY);
+    const clickX = useSpring(0, { stiffness: 60, damping: 15 });
+    const clickY = useSpring(0, { stiffness: 60, damping: 15 });
+    const flightVelX = useVelocity(clickX);
+    const flightVelY = useVelocity(clickY);
+    const avoidX = useSpring(0, { stiffness: 100, damping: 20 });
+    const avoidY = useSpring(0, { stiffness: 100, damping: 20 });
+    const rawDragY = useTransform(springScrollVelocity, [-3000, 3000], [-150, 150]);
+    const smoothDragY = useSpring(rawDragY, { stiffness: 100, damping: 20 });
+    const combinedY = useMotionTemplate`calc(${clickY}px + ${smoothDragY}px + ${avoidY}px)`;
+    const combinedX = useMotionTemplate`calc(${clickX}px + ${avoidX}px)`;
+    useEffect(() => {
+        const loop = setInterval(() => {
+            if (velocity > 100 || Math.abs(flightVelX.get()) > 10 || isHoveredRef.current) return;
+            const rand = Math.random();
+            let nextMode: BotMode = 'idle_base';
+            if (rand > 0.95) nextMode = 'idle_spin';
+            else if (rand > 0.90) nextMode = 'idle_dance';
+            else if (rand > 0.80) nextMode = 'idle_wave';
+            else if (rand > 0.65) {
+                nextMode = 'idle_news';
+                setNewsText(NEWS_SNIPPETS[Math.floor(Math.random() * NEWS_SNIPPETS.length)]);
+            }
+            else if (rand > 0.50) nextMode = 'idle_scan';
+            else nextMode = 'idle_base';
+            setMode(nextMode);
+            if (nextMode !== 'idle_base') {
+                const duration = nextMode === 'idle_dance' ? 4000 : 
+                                 nextMode === 'idle_news' ? 5000 : 
+                                 nextMode === 'idle_spin' ? 1500 : 3000;
+                setTimeout(() => {
+                    setMode(prev => {
+                        if (prev === nextMode) return 'idle_base';
+                        return prev;
+                    });
+                }, duration);
+            }
+        }, 6000); 
+        return () => clearInterval(loop);
+    }, [velocity]); 
+    const checkCollision = (robotX: number, robotY: number, robotWidth: number = 128, robotHeight: number = 176): { hasCollision: boolean; adjustX: number; adjustY: number } => {
+        const avoidElements = document.querySelectorAll('[data-robot-avoid="true"]');
+        let hasCollision = false;
+        let adjustX = 0;
+        let adjustY = 0;
+        const padding = 20;
+        avoidElements.forEach((element) => {
+            const rect = element.getBoundingClientRect();
+            const elementCenterX = rect.left + rect.width / 2;
+            const elementCenterY = rect.top + rect.height / 2;
+            const robotCenterX = robotX + robotWidth / 2;
+            const robotCenterY = robotY + robotHeight / 2;
+            const distanceX = robotCenterX - elementCenterX;
+            const distanceY = robotCenterY - elementCenterY;
+            const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+            const minDistance = (robotWidth / 2 + rect.width / 2 + padding);
+            if (distance < minDistance) {
+                hasCollision = true;
+                const angle = Math.atan2(distanceY, distanceX);
+                const pushDistance = minDistance - distance + 10;
+                adjustX += Math.cos(angle) * pushDistance;
+                adjustY += Math.sin(angle) * pushDistance;
+            }
+        });
+        return { hasCollision, adjustX, adjustY };
+    };
+    useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('.ai-sprite-container') || target.closest('.ai-chat-window')) return;
+            if (target.closest('[data-robot-avoid="true"]')) {
+                return;
+            }
+            const robotCenterX = window.innerWidth - 32 - 64; 
+            const robotCenterY = window.innerHeight - 32 - 88; 
+            const offsetX = e.clientX - robotCenterX;
+            const offsetY = e.clientY - robotCenterY;
+            clickX.set(offsetX);
+            clickY.set(offsetY);
+        };
+        window.addEventListener('click', handleClick);
+        return () => window.removeEventListener('click', handleClick);
+    }, [clickX, clickY]);
+    useAnimationFrame(() => {
+        const v = springScrollVelocity.get();
+        const fvx = flightVelX.get();
+        const fvy = flightVelY.get();
+        const flightSpeed = Math.sqrt(fvx*fvx + fvy*fvy);
+        const t = Math.max(Math.min(v * 0.05, 30), -30);
+        if (Math.abs(v - velocity) > 10 || Math.abs(t - tilt) > 1) {
+            setVelocity(v);
+            setTilt(t);
+        }
+        if (flightSpeed > 50) {
+            const lean = Math.max(Math.min(fvx * 0.05, 30), -30);
+            setFlightAngle(lean);
+        } else {
+             setFlightAngle(prev => prev * 0.9);
+        }
+        if (robotRef.current) {
+            const robotRect = robotRef.current.getBoundingClientRect();
+            const robotX = robotRect.left;
+            const robotY = robotRect.top;
+            const collision = checkCollision(robotX, robotY);
+            if (collision.hasCollision) {
+                avoidX.set(collision.adjustX);
+                avoidY.set(collision.adjustY);
+            } else {
+                avoidX.set(0);
+                avoidY.set(0);
+            }
+        }
+        const SCROLL_ACTION_THRESHOLD = 500; 
+        const FLIGHT_THRESHOLD = 50; 
+        if (v > SCROLL_ACTION_THRESHOLD) {
+             if (mode !== 'falling') setMode('falling');
+        } else if (v < -SCROLL_ACTION_THRESHOLD) {
+             if (mode !== 'flying') setMode('flying');
+        } else if (flightSpeed > FLIGHT_THRESHOLD) {
+             if (mode !== 'flying') setMode('flying');
+        } else {
+            if (isHoveredRef.current) {
+                if (mode !== 'idle_wave') setMode('idle_wave');
+            } else {
+                if (mode === 'falling' || mode === 'flying') {
+                    setMode('idle_base');
+                }
+            }
+        }
+        if (isHovered && zIndex !== 100) setZIndex(100);
+        else if (!isHovered && zIndex === 100) setZIndex(50);
+    });
+    const robotRef = useRef<HTMLDivElement>(null);
+    return (
+        <motion.div 
+            ref={robotRef}
+            className="fixed bottom-8 right-8 hidden md:block perspective-[1000px] pointer-events-none ai-sprite-container"
+            style={{ 
+                zIndex: zIndex,
+                x: combinedX,
+                y: combinedY 
+            }}
+        >
+            <motion.div
+                className="cursor-pointer pointer-events-auto"
+                onMouseEnter={() => { setIsHovered(true); isHoveredRef.current = true; }}
+                onMouseLeave={() => { setIsHovered(false); isHoveredRef.current = false; }}
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    let triggerPrompt = "用户点击了机器人。你需要扮演开发顾问，介绍 Mini App 开发服务。";
+                    const hotProducts = [
+                        "1. 🚀 Mini App 开发",
+                        "2. 🔗 TON 区块链集成",
+                        "3. 🎨 UI/UX 设计",
+                        "4. 📱 运营支持"
+                    ];
+                    let aiMsg = `欢迎来到 TON Mini App Studio！\n\n我是您的开发顾问。我可以为您介绍：\n\n${hotProducts.join('\n')}\n\n您想了解哪个方面？`;
+                    let suggestions = "了解开发流程|查看技术栈|了解服务范围";
+                    if (mode === 'idle_news') {
+                        triggerPrompt = `用户对新闻 "${newsText}" 感兴趣。`;
+                        aiMsg = `正在分析：${newsText}\n\n基于此趋势，我为您推荐相关解决方案。`;
+                        suggestions = "了解详情|查看案例|联系开发团队";
+                    } else if (mode === 'idle_dance') {
+                         triggerPrompt = "用户在机器人跳舞时点击。";
+                         aiMsg = "系统心情指数：100% ⚡\n\n趁我心情好，给您透露点内部数据。\n目前 Mini App 开发的需求最高。\n\n您想看案例吗？";
+                         suggestions = "看案例|推荐方案|无需推荐";
+                    }
+                    const fullMsg = `${aiMsg}|||${suggestions}`;
+                    openChat(triggerPrompt, fullMsg, e.currentTarget as HTMLElement);
+                }}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                initial={{ y: 200, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 50, damping: 20, delay: 0.5 }}
+            >
+                <EveBot 
+                    mode={mode} 
+                    flightAngle={flightAngle} 
+                    scrollTilt={tilt} 
+                    velocity={velocity}
+                    isHovered={isHovered}
+                    newsText={newsText}
+                />
+            </motion.div>
+        </motion.div>
+    );
+};
+

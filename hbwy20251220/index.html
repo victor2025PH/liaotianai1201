@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RedEnvelope.fi - TG Viral Growth Engine</title>
+    <!-- Tailwind CSS 已通过 PostCSS 加载，不再使用 CDN -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;700;900&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              display: ['Outfit', 'sans-serif'],
+            },
+            colors: {
+              game: {
+                primary: '#FF6B00', // Orange from Send Packet
+                secondary: '#8B5CF6', // Purple from Invite
+                dark: '#0a0a0a', // Main BG
+                card: '#1c1c1c', // Card BG
+                surface: '#252525', // Lighter surface
+                text: '#9CA3AF', // Muted text
+              }
+            },
+            backgroundImage: {
+              'gradient-primary': 'linear-gradient(135deg, #FF8F00 0%, #FF3D00 100%)',
+              'gradient-purple': 'linear-gradient(135deg, #A855F7 0%, #6366F1 100%)',
+              'gradient-dark': 'linear-gradient(180deg, #1c1c1c 0%, #111111 100%)',
+            },
+            animation: {
+              'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'float': 'float 3s ease-in-out infinite',
+            },
+            keyframes: {
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #0a0a0a;
+        color: white;
+        overflow-x: hidden;
+      }
+      .glass-panel {
+        background: rgba(28, 28, 28, 0.7);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .text-glow {
+        text-shadow: 0 0 20px rgba(255, 107, 0, 0.4);
+      }
+    </style>
+  <!-- ES Modules 已通过 npm 包加载，不再使用 CDN -->
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

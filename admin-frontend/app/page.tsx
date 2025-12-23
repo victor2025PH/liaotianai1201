@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import Navigation from '@/components/Navigation';
 import DashboardStats from '@/components/DashboardStats';
 import UsageChart from '@/components/UsageChart';
 import RecentErrors from '@/components/RecentErrors';
 import SessionList from '@/components/SessionList';
+import ProviderComparison from '@/components/ProviderComparison';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://aiadmin.usdt2026.cc';
 

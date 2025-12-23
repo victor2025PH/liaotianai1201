@@ -29,37 +29,8 @@ export default function SitesOverview() {
 
   const fetchSites = async () => {
     try {
-      // TODO: 实现后端 API
-      // const response = await axios.get(`${API_BASE_URL}/api/v1/sites`);
-      // setSites(response.data.items || []);
-      
-      // 临时显示三个站点
-      setSites([
-        {
-          id: 1,
-          name: '智控王',
-          url: 'https://aizkw.usdt2026.cc',
-          site_type: 'aizkw',
-          status: 'active',
-          stats: { today_pv: 0, today_uv: 0, today_conversations: 0 }
-        },
-        {
-          id: 2,
-          name: '红包游戏',
-          url: 'https://hongbao.usdt2026.cc',
-          site_type: 'hongbao',
-          status: 'active',
-          stats: { today_pv: 0, today_uv: 0, today_conversations: 0 }
-        },
-        {
-          id: 3,
-          name: 'TON Mini App',
-          url: 'https://tgmini.usdt2026.cc',
-          site_type: 'tgmini',
-          status: 'active',
-          stats: { today_pv: 0, today_uv: 0, today_conversations: 0 }
-        }
-      ]);
+      const response = await axios.get(`${API_BASE_URL}/api/v1/sites`);
+      setSites(response.data.items || []);
       setError(null);
     } catch (err: any) {
       console.error('获取站点列表失败:', err);

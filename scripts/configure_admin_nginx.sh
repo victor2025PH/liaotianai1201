@@ -136,11 +136,27 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
         
+        # 重写路径，移除 /ai-monitor 前缀
+        rewrite ^/ai-monitor/?(.*) /$1 break;
+    }
+
+    # 三个展示网站管理后台前端代理（待创建）
+    location /admin {
+        proxy_pass http://127.0.0.1:3007;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        
         # 重写路径，移除 /admin 前缀
         rewrite ^/admin/?(.*) /$1 break;
     }
 
-    # 管理后台根路径（可选，直接访问域名时跳转到 /admin）
+    # 根路径跳转到管理后台
     location = / {
         return 301 /admin;
     }

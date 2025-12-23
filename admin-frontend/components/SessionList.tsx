@@ -17,17 +17,35 @@ interface SessionStat {
   last_request: string | null;
 }
 
+interface ActiveSession {
+  session_id: string;
+  request_count: number;
+  total_tokens: number;
+  total_cost: number;
+  first_request: string | null;
+  last_request: string | null;
+}
+
 export default function SessionList() {
-  const [sessions, setSessions] = useState<SessionStat[]>([]);
+  const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [sessionDetails, setSessionDetails] = useState<SessionStat | null>(null);
 
   useEffect(() => {
-    // 这里应该从 API 获取活跃会话列表
-    // 目前先显示空列表，后续可以添加获取活跃会话的 API
-    setLoading(false);
+    fetchActiveSessions();
   }, []);
+
+  const fetchActiveSessions = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/v1/ai-monitoring/sessions/active?days=7&limit=50`);
+      setActiveSessions(response.data.sessions || []);
+    } catch (err) {
+      console.error('获取活跃会话失败:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchSessionDetails = async (sessionId: string) => {
     try {

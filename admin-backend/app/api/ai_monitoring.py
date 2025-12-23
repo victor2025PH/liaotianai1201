@@ -11,7 +11,7 @@ from sqlalchemy import func, and_, or_
 from app.api.deps import get_db_session
 from app.models.ai_usage import AIUsageLog, AIUsageStats
 from app.core.config import get_settings
-from app.crud.ai_usage import get_session_stats
+from app.crud.ai_usage import get_session_stats, get_active_sessions
 import logging
 
 logger = logging.getLogger(__name__)
@@ -259,4 +259,24 @@ async def get_session_statistics(
     except Exception as e:
         logger.error(f"获取会话统计失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"获取会话统计失败: {str(e)}")
+
+
+@router.get("/sessions/active")
+async def get_active_sessions_list(
+    days: int = Query(7, description="查询天数"),
+    limit: int = Query(50, description="返回数量"),
+    db: Session = Depends(get_db_session)
+):
+    """
+    获取活跃会话列表
+    """
+    try:
+        sessions = get_active_sessions(db, days=days, limit=limit)
+        return {
+            "total": len(sessions),
+            "sessions": sessions
+        }
+    except Exception as e:
+        logger.error(f"获取活跃会话列表失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取活跃会话列表失败: {str(e)}")
 

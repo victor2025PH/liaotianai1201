@@ -198,6 +198,50 @@ def get_recent_errors(
     ).limit(limit).all()
 
 
+def get_active_sessions(
+    db: Session,
+    days: int = 7,
+    limit: int = 50,
+) -> List[Dict]:
+    """获取活跃会话列表"""
+    start_date = datetime.now() - timedelta(days=days)
+    
+    # 查询有会话 ID 的日志，按会话分组
+    from sqlalchemy import distinct
+    
+    sessions = db.query(
+        AIUsageLog.session_id,
+        func.count(AIUsageLog.id).label('request_count'),
+        func.sum(AIUsageLog.total_tokens).label('total_tokens'),
+        func.sum(AIUsageLog.estimated_cost).label('total_cost'),
+        func.min(AIUsageLog.created_at).label('first_request'),
+        func.max(AIUsageLog.created_at).label('last_request'),
+    ).filter(
+        and_(
+            AIUsageLog.session_id.isnot(None),
+            AIUsageLog.session_id != '',
+            AIUsageLog.created_at >= start_date
+        )
+    ).group_by(
+        AIUsageLog.session_id
+    ).order_by(
+        func.max(AIUsageLog.created_at).desc()
+    ).limit(limit).all()
+    
+    result = []
+    for session in sessions:
+        result.append({
+            'session_id': session.session_id,
+            'request_count': session.request_count,
+            'total_tokens': session.total_tokens or 0,
+            'total_cost': float(session.total_cost or 0.0),
+            'first_request': session.first_request.isoformat() if session.first_request else None,
+            'last_request': session.last_request.isoformat() if session.last_request else None,
+        })
+    
+    return result
+
+
 def calculate_cost(
     provider: str,
     model: str,

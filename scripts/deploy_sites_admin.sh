@@ -58,6 +58,7 @@ sleep 2
 echo "🚀 启动服务..."
 export HOSTNAME=0.0.0.0
 export PORT=3007
+export HOST=0.0.0.0
 pm2 start npm --name "sites-admin-frontend" \
     --cwd "$FRONTEND_DIR" \
     --update-env \

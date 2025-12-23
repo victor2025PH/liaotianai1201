@@ -4,7 +4,9 @@
 
 set -e
 
-PROJECT_ROOT="/home/ubuntu/telegram-ai-system"
+# 自动检测项目根目录（支持本地和服务器环境）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT" || exit 1
 
 echo "🔧 修复 admin-frontend 端口冲突..."
@@ -29,27 +31,35 @@ echo "📝 修改部署脚本..."
 
 # deploy_admin_frontend.sh
 if [ -f "scripts/deploy_admin_frontend.sh" ]; then
-    sed -i.bak 's/PORT=3006/PORT=3008/g' scripts/deploy_admin_frontend.sh
-    sed -i.bak 's/:3006/:3008/g' scripts/deploy_admin_frontend.sh
-    sed -i.bak 's/3006/3008/g' scripts/deploy_admin_frontend.sh
-    # 恢复 ai-monitor-frontend 的引用（如果有）
-    sed -i.bak 's/ai-monitor-frontend.*3008/ai-monitor-frontend.*3006/g' scripts/deploy_admin_frontend.sh || true
+    # 更精确的替换：只替换 admin-frontend 相关的端口引用
+    # 替换 PORT=3006 为 PORT=3008（在 admin-frontend 上下文中）
+    sed -i.bak 's/export PORT=3006/export PORT=3008/g' scripts/deploy_admin_frontend.sh
+    sed -i.bak 's/^export PORT=3006$/export PORT=3008/g' scripts/deploy_admin_frontend.sh
+    # 替换端口号引用（避免误替换）
+    sed -i.bak 's/127\.0\.0\.1:3006\([^0-9]\)/127.0.0.1:3008\1/g' scripts/deploy_admin_frontend.sh
+    sed -i.bak 's/localhost:3006\([^0-9]\)/localhost:3008\1/g' scripts/deploy_admin_frontend.sh
+    # 替换 HTTP 状态码检查中的 3006（如果是 admin-frontend 相关的）
+    sed -i.bak 's/http:\/\/127\.0\.0\.1:3006/http:\/\/127.0.0.1:3008/g' scripts/deploy_admin_frontend.sh
     rm -f scripts/deploy_admin_frontend.sh.bak
     echo "✅ 已更新: scripts/deploy_admin_frontend.sh"
 fi
 
 # check_admin_frontend.sh
 if [ -f "scripts/check_admin_frontend.sh" ]; then
+    # 精确替换端口引用
     sed -i.bak 's/:3006/:3008/g' scripts/check_admin_frontend.sh
-    sed -i.bak 's/3006/3008/g' scripts/check_admin_frontend.sh
+    sed -i.bak 's/127\.0\.0\.1:3006/127.0.0.1:3008/g' scripts/check_admin_frontend.sh
+    sed -i.bak 's/http:\/\/127\.0\.0\.1:3006/http:\/\/127.0.0.1:3008/g' scripts/check_admin_frontend.sh
     rm -f scripts/check_admin_frontend.sh.bak
     echo "✅ 已更新: scripts/check_admin_frontend.sh"
 fi
 
 # verify_admin_frontend.sh
 if [ -f "scripts/verify_admin_frontend.sh" ]; then
+    # 精确替换端口引用
     sed -i.bak 's/:3006/:3008/g' scripts/verify_admin_frontend.sh
-    sed -i.bak 's/3006/3008/g' scripts/verify_admin_frontend.sh
+    sed -i.bak 's/127\.0\.0\.1:3006/127.0.0.1:3008/g' scripts/verify_admin_frontend.sh
+    sed -i.bak 's/http:\/\/127\.0\.0\.1:3006/http:\/\/127.0.0.1:3008/g' scripts/verify_admin_frontend.sh
     rm -f scripts/verify_admin_frontend.sh.bak
     echo "✅ 已更新: scripts/verify_admin_frontend.sh"
 fi

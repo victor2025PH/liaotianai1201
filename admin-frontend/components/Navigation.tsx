@@ -12,7 +12,7 @@ export default function Navigation() {
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             <h1 className="text-2xl font-bold text-gray-900">
-              统一后台管理系统
+              AI 使用监控系统
             </h1>
           </div>
           <div className="flex items-center space-x-4">

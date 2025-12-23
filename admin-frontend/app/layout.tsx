@@ -5,8 +5,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: '统一后台管理系统',
-  description: '三个展示网站的统一后台管理系统',
+  title: 'AI 使用监控系统',
+  description: 'AI 对话使用统计和监控系统',
 };
 
 export default function RootLayout({

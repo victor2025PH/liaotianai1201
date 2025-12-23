@@ -1,7 +1,7 @@
 {
-  "name": "admin-frontend",
+  "name": "ai-monitor-frontend",
   "version": "1.0.0",
-  "description": "统一后台管理系统前端",
+  "description": "AI 使用监控系统前端",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3006 -H 0.0.0.0",

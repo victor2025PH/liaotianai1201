@@ -3,6 +3,7 @@ import { useLanguage } from './LanguageContext';
 import { detectUserLanguage } from '../utils/aiConfig';
 import { sendChatRequest, sendStreamChatRequest, ChatMessage } from '../utils/aiProxy';
 import { loadMessages, saveMessages, clearStoredMessages } from '../utils/messageStorage';
+import { getSessionId, updateSessionActivity } from '../utils/sessionManager';
 
 // Message Type
 export interface Message {
@@ -271,6 +272,7 @@ export const AIChatProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           model: 'gemini-2.5-flash-latest',
           temperature: 0.7,
           max_tokens: 1000,
+          session_id: sessionId, // 发送会话 ID
         });
         
         const aiMessage = response.content;

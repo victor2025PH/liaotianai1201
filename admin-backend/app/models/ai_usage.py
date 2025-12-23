@@ -14,6 +14,7 @@ class AIUsageLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     # 请求信息
     request_id = Column(String(100), unique=True, index=True, nullable=False)
+    session_id = Column(String(100), index=True)  # 会话 ID
     user_ip = Column(String(50), index=True)
     user_agent = Column(Text)
     site_domain = Column(String(200), index=True)  # 来源网站域名

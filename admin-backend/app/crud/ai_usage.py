@@ -23,12 +23,14 @@ def create_usage_log(
     user_ip: Optional[str] = None,
     user_agent: Optional[str] = None,
     site_domain: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> AIUsageLog:
     """创建使用日志"""
     request_id = str(uuid.uuid4())
     
     log = AIUsageLog(
         request_id=request_id,
+        session_id=session_id,
         provider=provider,
         model=model,
         prompt_tokens=prompt_tokens,

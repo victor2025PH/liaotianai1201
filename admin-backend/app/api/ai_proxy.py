@@ -33,7 +33,8 @@ class ChatRequest(BaseModel):
     model: Optional[str] = "gemini-2.5-flash-latest"  # 或 "gpt-4o-mini"
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = 1000
-    stream: Optional[bool] = False  # 流式响应（待实现）
+    stream: Optional[bool] = False  # 流式响应
+    session_id: Optional[str] = None  # 会话 ID
 
 
 class ChatResponse(BaseModel):
@@ -78,6 +79,9 @@ async def chat_proxy(
     # 普通响应（原有逻辑）
     try:
         settings = get_settings()
+        
+        # 获取会话 ID
+        session_id = request.session_id or http_request.headers.get("X-Session-Id")
         
         # 确定使用的模型和 API Key
         use_gemini = request.model.startswith("gemini") or request.model == "gemini-2.5-flash-latest"
@@ -146,6 +150,7 @@ async def chat_proxy(
                     user_ip=http_request.client.host if http_request.client else None,
                     user_agent=http_request.headers.get("user-agent"),
                     site_domain=http_request.headers.get("referer"),
+                    session_id=session_id,
                 )
                 
                 return ChatResponse(
@@ -167,6 +172,7 @@ async def chat_proxy(
                     user_ip=http_request.client.host if http_request.client else None,
                     user_agent=http_request.headers.get("user-agent"),
                     site_domain=http_request.headers.get("referer"),
+                    session_id=session_id,
                 )
                 
                 # 如果 Gemini 失败，尝试 OpenAI
@@ -231,6 +237,7 @@ async def chat_proxy(
                     user_ip=http_request.client.host if http_request.client else None,
                     user_agent=http_request.headers.get("user-agent"),
                     site_domain=http_request.headers.get("referer"),
+                    session_id=session_id,
                 )
                 
                 return ChatResponse(
@@ -257,6 +264,7 @@ async def chat_proxy(
                     user_ip=http_request.client.host if http_request.client else None,
                     user_agent=http_request.headers.get("user-agent"),
                     site_domain=http_request.headers.get("referer"),
+                    session_id=session_id,
                 )
                 
                 raise HTTPException(
@@ -348,6 +356,7 @@ async def _stream_chat_response(
                     user_ip=http_request.client.host if http_request.client else None,
                     user_agent=http_request.headers.get("user-agent"),
                     site_domain=http_request.headers.get("referer"),
+                    session_id=session_id,
                 )
                 return
                 
@@ -398,6 +407,7 @@ async def _stream_chat_response(
                     user_ip=http_request.client.host if http_request.client else None,
                     user_agent=http_request.headers.get("user-agent"),
                     site_domain=http_request.headers.get("referer"),
+                    session_id=session_id,
                 )
                 return
                 

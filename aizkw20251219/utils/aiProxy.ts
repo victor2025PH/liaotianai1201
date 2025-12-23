@@ -16,6 +16,7 @@ export interface ChatRequest {
   temperature?: number;
   max_tokens?: number;
   stream?: boolean; // 是否使用流式响应
+  session_id?: string; // 会话 ID
 }
 
 export interface ChatResponse {
@@ -34,12 +35,27 @@ export interface ChatResponse {
  */
 export async function sendChatRequest(request: ChatRequest): Promise<ChatResponse> {
   try {
+    // 从 localStorage 获取会话 ID（如果请求中没有提供）
+    const sessionId = request.session_id || (() => {
+      try {
+        const sessionData = localStorage.getItem('ai_chat_session_id');
+        if (sessionData) {
+          const parsed = JSON.parse(sessionData);
+          return parsed.sessionId;
+        }
+      } catch (e) {
+        // 忽略错误
+      }
+      return undefined;
+    })();
+
     const response = await fetch(`${API_BASE_URL}/api/v1/ai-proxy/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(sessionId ? { 'X-Session-Id': sessionId } : {}),
       },
-      body: JSON.stringify({ ...request, stream: false }),
+      body: JSON.stringify({ ...request, stream: false, session_id: sessionId }),
     });
 
     if (!response.ok) {
@@ -66,12 +82,27 @@ export async function sendStreamChatRequest(
   onChunk?: (chunk: string) => void
 ): Promise<string> {
   try {
+    // 从 localStorage 获取会话 ID（如果请求中没有提供）
+    const sessionId = request.session_id || (() => {
+      try {
+        const sessionData = localStorage.getItem('ai_chat_session_id');
+        if (sessionData) {
+          const parsed = JSON.parse(sessionData);
+          return parsed.sessionId;
+        }
+      } catch (e) {
+        // 忽略错误
+      }
+      return undefined;
+    })();
+
     const response = await fetch(`${API_BASE_URL}/api/v1/ai-proxy/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(sessionId ? { 'X-Session-Id': sessionId } : {}),
       },
-      body: JSON.stringify({ ...request, stream: true }),
+      body: JSON.stringify({ ...request, stream: true, session_id: sessionId }),
     });
 
     if (!response.ok) {

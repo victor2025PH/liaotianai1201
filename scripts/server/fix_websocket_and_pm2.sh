@@ -69,20 +69,23 @@ cd "$PROJECT_ROOT" || exit 1
 # 启动 saas-demo-frontend (端口 3005)
 if [ -d "$PROJECT_ROOT/saas-demo" ] && [ -d "$PROJECT_ROOT/saas-demo/.next" ]; then
   echo "启动 saas-demo-frontend..."
-  cd "$PROJECT_ROOT/saas-demo" || exit 1
   export PORT=3005
   export NEXT_STANDALONE=false
+  export NODE_ENV=production
   pm2 start npm \
     --name saas-demo-frontend \
+    --cwd "$PROJECT_ROOT/saas-demo" \
     --max-memory-restart 1G \
     --update-env \
     --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
     --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
     --merge-logs \
     --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-    -- start
+    -- start || {
+    echo "  ❌ saas-demo-frontend 启动失败"
+    pm2 logs saas-demo-frontend --lines 20 --nostream 2>/dev/null || true
+  }
   echo "✅ saas-demo-frontend 已启动"
-  cd "$PROJECT_ROOT" || exit 1
 fi
 
 # 启动 tgmini (端口 3001)

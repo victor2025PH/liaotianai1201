@@ -21,6 +21,7 @@ def upgrade() -> None:
     op.create_table('ai_usage_logs',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('request_id', sa.String(length=100), nullable=False),
+        sa.Column('session_id', sa.String(length=100), nullable=True),  # 会话 ID
         sa.Column('user_ip', sa.String(length=50), nullable=True),
         sa.Column('user_agent', sa.Text(), nullable=True),
         sa.Column('site_domain', sa.String(length=200), nullable=True),
@@ -38,12 +39,14 @@ def upgrade() -> None:
     
     # 创建索引
     op.create_index('ix_ai_usage_logs_request_id', 'ai_usage_logs', ['request_id'], unique=True)
+    op.create_index('ix_ai_usage_logs_session_id', 'ai_usage_logs', ['session_id'], unique=False)  # 会话 ID 索引
     op.create_index('ix_ai_usage_logs_user_ip', 'ai_usage_logs', ['user_ip'], unique=False)
     op.create_index('ix_ai_usage_logs_site_domain', 'ai_usage_logs', ['site_domain'], unique=False)
     op.create_index('ix_ai_usage_logs_provider', 'ai_usage_logs', ['provider'], unique=False)
     op.create_index('ix_ai_usage_logs_created_at', 'ai_usage_logs', ['created_at'], unique=False)
     op.create_index('idx_provider_created', 'ai_usage_logs', ['provider', 'created_at'], unique=False)
     op.create_index('idx_site_created', 'ai_usage_logs', ['site_domain', 'created_at'], unique=False)
+    op.create_index('idx_session_created', 'ai_usage_logs', ['session_id', 'created_at'], unique=False)  # 会话统计索引
     
     # 创建 ai_usage_stats 表
     op.create_table('ai_usage_stats',

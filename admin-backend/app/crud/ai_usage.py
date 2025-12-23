@@ -2,9 +2,9 @@
 AI 使用统计 CRUD 操作
 """
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from datetime import datetime, timedelta
-from typing import Optional
+from sqlalchemy import func, and_
+from datetime import datetime, timedelta, date
+from typing import Optional, List, Dict
 import uuid
 
 from app.models.ai_usage import AIUsageLog, AIUsageStats
@@ -54,70 +54,174 @@ def create_usage_log(
     return log
 
 
-def update_daily_stats(db: Session, log: AIUsageLog):
+def update_daily_stats(db: Session, log: AIUsageLog) -> None:
     """更新每日统计"""
-    stat_date = log.created_at.date()
+    today = date.today()
     
-    # 查找或创建统计记录
-    stats = db.query(AIUsageStats).filter(
-        AIUsageStats.stat_date == stat_date,
-        AIUsageStats.provider == log.provider,
-        AIUsageStats.model == log.model,
-        AIUsageStats.site_domain == (log.site_domain or None)
-    ).first()
+    stats = db.query(AIUsageStats).filter(AIUsageStats.stat_date == today).first()
     
-    if stats:
-        # 更新现有统计
-        stats.total_requests += 1
-        if log.status == "success":
-            stats.success_requests += 1
-        else:
-            stats.error_requests += 1
-        stats.total_prompt_tokens += log.prompt_tokens
-        stats.total_completion_tokens += log.completion_tokens
-        stats.total_tokens += log.total_tokens
-        stats.total_cost += log.estimated_cost
-        stats.updated_at = datetime.utcnow()
-    else:
-        # 创建新统计
+    if not stats:
         stats = AIUsageStats(
-            stat_date=stat_date,
-            provider=log.provider,
-            model=log.model,
-            site_domain=log.site_domain,
-            total_requests=1,
-            success_requests=1 if log.status == "success" else 0,
-            error_requests=0 if log.status == "success" else 1,
-            total_prompt_tokens=log.prompt_tokens,
-            total_completion_tokens=log.completion_tokens,
-            total_tokens=log.total_tokens,
-            total_cost=log.estimated_cost,
+            stat_date=today,
+            total_requests=0,
+            total_tokens=0,
+            total_cost=0.0,
+            requests_by_provider={},
+            tokens_by_provider={},
+            cost_by_provider={},
+            requests_by_model={},
+            tokens_by_model={},
+            cost_by_model={},
         )
         db.add(stats)
+    
+    # 更新统计
+    stats.total_requests += 1
+    stats.total_tokens += log.total_tokens
+    stats.total_cost += log.estimated_cost
+    
+    # 按提供商统计
+    if log.provider not in stats.requests_by_provider:
+        stats.requests_by_provider[log.provider] = 0
+        stats.tokens_by_provider[log.provider] = 0
+        stats.cost_by_provider[log.provider] = 0.0
+    
+    stats.requests_by_provider[log.provider] += 1
+    stats.tokens_by_provider[log.provider] += log.total_tokens
+    stats.cost_by_provider[log.provider] += log.estimated_cost
+    
+    # 按模型统计
+    if log.model not in stats.requests_by_model:
+        stats.requests_by_model[log.model] = 0
+        stats.tokens_by_model[log.model] = 0
+        stats.cost_by_model[log.model] = 0.0
+    
+    stats.requests_by_model[log.model] += 1
+    stats.tokens_by_model[log.model] += log.total_tokens
+    stats.cost_by_model[log.model] += log.estimated_cost
     
     db.commit()
 
 
-def calculate_cost(provider: str, model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    """计算 API 调用成本（美元）"""
-    # 价格表（每 1000 tokens，美元）
-    pricing = {
-        "openai": {
-            "gpt-4o-mini": {"prompt": 0.15, "completion": 0.60},  # 每 1M tokens
-            "gpt-4o": {"prompt": 2.50, "completion": 10.00},
-            "gpt-3.5-turbo": {"prompt": 0.50, "completion": 1.50},
-        },
-        "gemini": {
-            "gemini-2.5-flash-latest": {"prompt": 0.075, "completion": 0.30},  # 每 1M tokens
-            "gemini-pro": {"prompt": 0.50, "completion": 1.50},
-        }
+def get_daily_stats(
+    db: Session,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+) -> List[AIUsageStats]:
+    """获取每日统计"""
+    query = db.query(AIUsageStats)
+    
+    if start_date:
+        query = query.filter(AIUsageStats.stat_date >= start_date)
+    if end_date:
+        query = query.filter(AIUsageStats.stat_date <= end_date)
+    
+    return query.order_by(AIUsageStats.stat_date.desc()).all()
+
+
+def get_provider_stats(
+    db: Session,
+    provider: Optional[str] = None,
+    days: int = 7,
+) -> Dict:
+    """获取提供商统计"""
+    start_date = date.today() - timedelta(days=days)
+    
+    query = db.query(AIUsageLog).filter(AIUsageLog.created_at >= start_date)
+    
+    if provider:
+        query = query.filter(AIUsageLog.provider == provider)
+    
+    logs = query.all()
+    
+    stats = {
+        'total_requests': len(logs),
+        'total_tokens': sum(log.total_tokens for log in logs),
+        'total_cost': sum(log.estimated_cost for log in logs),
+        'success_count': len([log for log in logs if log.status == 'success']),
+        'error_count': len([log for log in logs if log.status == 'error']),
     }
     
-    if provider in pricing and model in pricing[provider]:
-        model_pricing = pricing[provider][model]
-        prompt_cost = (prompt_tokens / 1_000_000) * model_pricing["prompt"]
-        completion_cost = (completion_tokens / 1_000_000) * model_pricing["completion"]
-        return prompt_cost + completion_cost
-    
-    return 0.0
+    return stats
 
+
+def get_session_stats(
+    db: Session,
+    session_id: str,
+    days: int = 30,
+) -> Dict:
+    """获取会话统计"""
+    start_date = datetime.now() - timedelta(days=days)
+    
+    logs = db.query(AIUsageLog).filter(
+        and_(
+            AIUsageLog.session_id == session_id,
+            AIUsageLog.created_at >= start_date
+        )
+    ).all()
+    
+    stats = {
+        'session_id': session_id,
+        'total_requests': len(logs),
+        'total_tokens': sum(log.total_tokens for log in logs),
+        'total_cost': sum(log.estimated_cost for log in logs),
+        'requests_by_provider': {},
+        'requests_by_model': {},
+        'first_request': min([log.created_at for log in logs]) if logs else None,
+        'last_request': max([log.created_at for log in logs]) if logs else None,
+    }
+    
+    # 按提供商统计
+    for log in logs:
+        if log.provider not in stats['requests_by_provider']:
+            stats['requests_by_provider'][log.provider] = 0
+        stats['requests_by_provider'][log.provider] += 1
+    
+    # 按模型统计
+    for log in logs:
+        if log.model not in stats['requests_by_model']:
+            stats['requests_by_model'][log.model] = 0
+        stats['requests_by_model'][log.model] += 1
+    
+    return stats
+
+
+def get_recent_errors(
+    db: Session,
+    limit: int = 10,
+) -> List[AIUsageLog]:
+    """获取最近的错误日志"""
+    return db.query(AIUsageLog).filter(
+        AIUsageLog.status == 'error'
+    ).order_by(
+        AIUsageLog.created_at.desc()
+    ).limit(limit).all()
+
+
+def calculate_cost(
+    provider: str,
+    model: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+) -> float:
+    """计算成本（美元）"""
+    # 价格表（每 1000 tokens，美元）
+    pricing = {
+        'openai': {
+            'gpt-4o-mini': {'prompt': 0.00015, 'completion': 0.0006},
+            'gpt-4o': {'prompt': 0.005, 'completion': 0.015},
+            'gpt-4-turbo': {'prompt': 0.01, 'completion': 0.03},
+        },
+        'gemini': {
+            'gemini-2.5-flash-latest': {'prompt': 0.0, 'completion': 0.0},  # 免费
+            'gemini-pro': {'prompt': 0.0, 'completion': 0.0},  # 免费
+        },
+    }
+    
+    provider_pricing = pricing.get(provider, {})
+    model_pricing = provider_pricing.get(model, {'prompt': 0.0, 'completion': 0.0})
+    
+    prompt_cost = (prompt_tokens / 1000.0) * model_pricing['prompt']
+    completion_cost = (completion_tokens / 1000.0) * model_pricing['completion']
+    
+    return prompt_cost + completion_cost

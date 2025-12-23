@@ -57,10 +57,14 @@ export const AIChatProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [triggerRect, setTriggerRect] = useState<TriggerRect | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>(['了解游戏机制', '查看技术架构', '了解变现模式']);
   
+  // 获取会话 ID
+  const sessionId = getSessionId();
+  
   // 当消息更新时，自动保存到 localStorage
   useEffect(() => {
     if (messages.length > 0) {
       saveMessages(messages);
+      updateSessionActivity();
     }
   }, [messages]);
 
@@ -211,6 +215,7 @@ export const AIChatProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             model: 'gemini-2.5-flash-latest', // 优先使用 Gemini
             temperature: 0.7,
             max_tokens: 1000,
+            session_id: sessionId, // 发送会话 ID
           },
           (chunk: string) => {
             // 实时更新消息内容
@@ -257,6 +262,7 @@ export const AIChatProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           model: 'gemini-2.5-flash-latest',
           temperature: 0.7,
           max_tokens: 1000,
+          session_id: sessionId, // 发送会话 ID
         });
         
         const aiMessage = response.content;

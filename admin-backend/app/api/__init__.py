@@ -11,6 +11,7 @@ from app.api import agents
 from app.api import strategies
 from app.api import theater
 from app.api import agent_api
+from app.api import frontend_config
 
 router = APIRouter()
 router.include_router(auth.router)
@@ -31,4 +32,5 @@ router.include_router(agents.router)
 router.include_router(strategies.router)
 router.include_router(theater.router)
 router.include_router(agent_api.router)  # Phase 7: Agent REST API
+router.include_router(frontend_config.router)  # 前端配置 API
 

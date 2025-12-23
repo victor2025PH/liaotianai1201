@@ -397,15 +397,13 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     # 强制禁用 standalone 模式（通过环境变量）
     export NEXT_STANDALONE=false
     
-    # 禁用 Turbopack（使用传统 Webpack，更稳定）
-    # Turbopack 在某些依赖包（如 jszip, source-map-js）上可能有兼容性问题
-    export NEXT_PRIVATE_SKIP_TURBO=1
-    
     # 设置构建选项
     export NODE_OPTIONS="--max-old-space-size=3072"
     
-    # 执行构建（禁用 Turbopack）
+    # 执行构建（使用 --webpack 标志禁用 Turbopack）
+    # Next.js 16.0.2 默认使用 Turbopack，需要使用 --webpack 标志来禁用
     echo "  使用传统 Webpack 构建（禁用 Turbopack，避免依赖包兼容性问题）..."
+    echo "  注意：package.json 中的 build 脚本已配置 --webpack 标志"
     npm run build || {
       echo "❌ 前端构建失败"
       echo "检查构建日志中的错误信息..."
@@ -453,14 +451,18 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
       exit 1
     }
     
-    # 2. 显式导出端口变量（双重保险）
+    # 2. 显式导出端口变量和环境变量（双重保险）
     export PORT=3005
-    echo "  ✅ 已设置环境变量 PORT=3005"
+    export NEXT_STANDALONE=false
+    export NODE_ENV=production
+    echo "  ✅ 已设置环境变量 PORT=3005, NEXT_STANDALONE=false"
     
     # 3. 使用 npm start 启动（利用 package.json 中的 -p 3005 配置）
     # 添加 --update-env 确保环境变量生效
+    # 使用 --cwd 确保在正确的目录执行
     pm2 start npm \
       --name saas-demo-frontend \
+      --cwd "$PROJECT_ROOT/saas-demo" \
       --max-memory-restart 1G \
       --update-env \
       --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
@@ -471,6 +473,8 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
       echo "❌ PM2 启动失败"
       echo "检查错误日志:"
       tail -20 "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null || echo "无法读取错误日志"
+      echo "检查输出日志:"
+      tail -20 "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" 2>/dev/null || echo "无法读取输出日志"
       exit 1
     }
     
@@ -741,13 +745,15 @@ if [ -d "$PROJECT_ROOT/tgmini20251220" ]; then
   # 启动服务
   mkdir -p "$PROJECT_ROOT/logs"
   echo "启动 tgmini 服务 (端口 $TARGET_PORT)..."
-  pm2 start serve \
+  # 使用 npx serve 确保使用正确的 serve 命令
+  pm2 start npx \
     --name "$PM2_NAME" \
+    --max-memory-restart 1G \
     --error "$PROJECT_ROOT/logs/${PM2_NAME}-error.log" \
     --output "$PROJECT_ROOT/logs/${PM2_NAME}-out.log" \
     --merge-logs \
     --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-    -- -s "$PROJECT_DIR/dist" -l $TARGET_PORT || {
+    -- serve -s "$PROJECT_DIR/dist" -l $TARGET_PORT || {
     echo "⚠️  PM2 启动失败，查看错误..."
     pm2 logs "$PM2_NAME" --lines 50 --nostream 2>/dev/null || true
     exit 1

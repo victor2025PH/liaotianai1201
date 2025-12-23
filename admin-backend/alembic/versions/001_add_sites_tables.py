@@ -135,30 +135,66 @@ def upgrade():
 
 
 def downgrade():
-    op.drop_index('ix_site_analytics_date', table_name='site_analytics')
-    op.drop_index('ix_site_analytics_site_id', table_name='site_analytics')
-    op.drop_index('ix_site_analytics_id', table_name='site_analytics')
-    op.drop_table('site_analytics')
+    conn = op.get_bind()
+    inspector = inspect(conn)
     
-    op.drop_index('ix_contact_forms_site_id_created_at', table_name='contact_forms')
-    op.drop_index('ix_contact_forms_status', table_name='contact_forms')
-    op.drop_index('ix_contact_forms_site_id', table_name='contact_forms')
-    op.drop_index('ix_contact_forms_id', table_name='contact_forms')
-    op.drop_table('contact_forms')
+    # 删除站点统计表（如果存在）
+    if inspector.has_table('site_analytics'):
+        # 检查索引是否存在再删除
+        indexes = [idx['name'] for idx in inspector.get_indexes('site_analytics')]
+        if 'ix_site_analytics_date' in indexes:
+            op.drop_index('ix_site_analytics_date', table_name='site_analytics')
+        if 'ix_site_analytics_site_id' in indexes:
+            op.drop_index('ix_site_analytics_site_id', table_name='site_analytics')
+        if 'ix_site_analytics_id' in indexes:
+            op.drop_index('ix_site_analytics_id', table_name='site_analytics')
+        op.drop_table('site_analytics')
     
-    op.drop_index('ix_ai_conversations_site_id_created_at', table_name='ai_conversations')
-    op.drop_index('ix_ai_conversations_session_id', table_name='ai_conversations')
-    op.drop_index('ix_ai_conversations_site_id', table_name='ai_conversations')
-    op.drop_index('ix_ai_conversations_id', table_name='ai_conversations')
-    op.drop_table('ai_conversations')
+    # 删除联系表单表（如果存在）
+    if inspector.has_table('contact_forms'):
+        indexes = [idx['name'] for idx in inspector.get_indexes('contact_forms')]
+        if 'ix_contact_forms_site_id_created_at' in indexes:
+            op.drop_index('ix_contact_forms_site_id_created_at', table_name='contact_forms')
+        if 'ix_contact_forms_status' in indexes:
+            op.drop_index('ix_contact_forms_status', table_name='contact_forms')
+        if 'ix_contact_forms_site_id' in indexes:
+            op.drop_index('ix_contact_forms_site_id', table_name='contact_forms')
+        if 'ix_contact_forms_id' in indexes:
+            op.drop_index('ix_contact_forms_id', table_name='contact_forms')
+        op.drop_table('contact_forms')
     
-    op.drop_index('ix_site_visits_site_id_created_at', table_name='site_visits')
-    op.drop_index('ix_site_visits_session_id', table_name='site_visits')
-    op.drop_index('ix_site_visits_site_id', table_name='site_visits')
-    op.drop_index('ix_site_visits_id', table_name='site_visits')
-    op.drop_table('site_visits')
+    # 删除 AI 对话记录表（如果存在）
+    if inspector.has_table('ai_conversations'):
+        indexes = [idx['name'] for idx in inspector.get_indexes('ai_conversations')]
+        if 'ix_ai_conversations_site_id_created_at' in indexes:
+            op.drop_index('ix_ai_conversations_site_id_created_at', table_name='ai_conversations')
+        if 'ix_ai_conversations_session_id' in indexes:
+            op.drop_index('ix_ai_conversations_session_id', table_name='ai_conversations')
+        if 'ix_ai_conversations_site_id' in indexes:
+            op.drop_index('ix_ai_conversations_site_id', table_name='ai_conversations')
+        if 'ix_ai_conversations_id' in indexes:
+            op.drop_index('ix_ai_conversations_id', table_name='ai_conversations')
+        op.drop_table('ai_conversations')
     
-    op.drop_index('ix_sites_site_type', table_name='sites')
-    op.drop_index('ix_sites_id', table_name='sites')
-    op.drop_table('sites')
+    # 删除访问记录表（如果存在）
+    if inspector.has_table('site_visits'):
+        indexes = [idx['name'] for idx in inspector.get_indexes('site_visits')]
+        if 'ix_site_visits_site_id_created_at' in indexes:
+            op.drop_index('ix_site_visits_site_id_created_at', table_name='site_visits')
+        if 'ix_site_visits_session_id' in indexes:
+            op.drop_index('ix_site_visits_session_id', table_name='site_visits')
+        if 'ix_site_visits_site_id' in indexes:
+            op.drop_index('ix_site_visits_site_id', table_name='site_visits')
+        if 'ix_site_visits_id' in indexes:
+            op.drop_index('ix_site_visits_id', table_name='site_visits')
+        op.drop_table('site_visits')
+    
+    # 删除站点表（如果存在）
+    if inspector.has_table('sites'):
+        indexes = [idx['name'] for idx in inspector.get_indexes('sites')]
+        if 'ix_sites_site_type' in indexes:
+            op.drop_index('ix_sites_site_type', table_name='sites')
+        if 'ix_sites_id' in indexes:
+            op.drop_index('ix_sites_id', table_name='sites')
+        op.drop_table('sites')
 

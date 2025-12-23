@@ -38,19 +38,31 @@ export default function Home() {
             <div className="flex items-center space-x-4">
               <Link
                 href="/"
-                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                className={`px-3 py-2 rounded-md text-sm font-medium ${
+                  pathname === '/' 
+                    ? 'bg-blue-100 text-blue-700' 
+                    : 'text-gray-700 hover:text-gray-900'
+                }`}
               >
                 仪表盘
               </Link>
               <Link
                 href="/sessions"
-                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                className={`px-3 py-2 rounded-md text-sm font-medium ${
+                  pathname === '/sessions' 
+                    ? 'bg-blue-100 text-blue-700' 
+                    : 'text-gray-700 hover:text-gray-900'
+                }`}
               >
                 会话管理
               </Link>
               <Link
                 href="/analytics"
-                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                className={`px-3 py-2 rounded-md text-sm font-medium ${
+                  pathname === '/analytics' 
+                    ? 'bg-blue-100 text-blue-700' 
+                    : 'text-gray-700 hover:text-gray-900'
+                }`}
               >
                 数据分析
               </Link>

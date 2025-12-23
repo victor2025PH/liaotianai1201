@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { format } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://aiadmin.usdt2026.cc';
 
@@ -89,7 +88,7 @@ export default function RecentErrors() {
                   </p>
                 </div>
                 <span className="text-xs text-gray-500 ml-2">
-                  {format(new Date(error.created_at), 'MM/dd HH:mm', { locale: zhCN })}
+                  {format(new Date(error.created_at), 'MM/dd HH:mm')}
                 </span>
               </div>
             </div>

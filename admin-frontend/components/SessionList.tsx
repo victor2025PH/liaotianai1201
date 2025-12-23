@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { format } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://aiadmin.usdt2026.cc';
 
@@ -116,14 +115,14 @@ export default function SessionList() {
               <div>
                 <p className="text-sm text-gray-600">首次请求</p>
                 <p className="text-sm">
-                  {format(new Date(sessionDetails.first_request), 'yyyy-MM-dd HH:mm:ss', { locale: zhCN })}
+                  {format(new Date(sessionDetails.first_request), 'yyyy-MM-dd HH:mm:ss')}
                 </p>
               </div>
               {sessionDetails.last_request && (
                 <div>
                   <p className="text-sm text-gray-600">最后请求</p>
                   <p className="text-sm">
-                    {format(new Date(sessionDetails.last_request), 'yyyy-MM-dd HH:mm:ss', { locale: zhCN })}
+                    {format(new Date(sessionDetails.last_request), 'yyyy-MM-dd HH:mm:ss')}
                   </p>
                 </div>
               )}

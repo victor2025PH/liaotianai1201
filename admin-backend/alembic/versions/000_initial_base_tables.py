@@ -17,9 +17,18 @@ depends_on = None
 
 
 def upgrade():
+    # 檢查表是否存在（用於處理表已存在的情況）
+    from sqlalchemy import inspect
+    from alembic import context
+    
+    conn = context.get_bind()
+    inspector = inspect(conn)
+    existing_tables = inspector.get_table_names()
+    
     # 創建用戶表
-    op.create_table(
-        'users',
+    if 'users' not in existing_tables:
+        op.create_table(
+            'users',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('email', sa.String(255), nullable=False),
         sa.Column('full_name', sa.String(255), nullable=True),
@@ -29,51 +38,55 @@ def upgrade():
         sa.Column('created_at', sa.DateTime(), nullable=True),
         sa.Column('updated_at', sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('ix_users_id', 'users', ['id'], unique=False)
-    op.create_index('ix_users_email', 'users', ['email'], unique=True)
+        )
+        op.create_index('ix_users_id', 'users', ['id'], unique=False)
+        op.create_index('ix_users_email', 'users', ['email'], unique=True)
     
     # 創建角色表
-    op.create_table(
-        'roles',
+    if 'roles' not in existing_tables:
+        op.create_table(
+            'roles',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('name', sa.String(64), nullable=False),
         sa.Column('description', sa.String(255), nullable=True),
         sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('ix_roles_id', 'roles', ['id'], unique=False)
-    op.create_index(op.f('ix_roles_name'), 'roles', ['name'], unique=True)
+        )
+        op.create_index('ix_roles_id', 'roles', ['id'], unique=False)
+        op.create_index(op.f('ix_roles_name'), 'roles', ['name'], unique=True)
     
     # 創建權限表
-    op.create_table(
-        'permissions',
+    if 'permissions' not in existing_tables:
+        op.create_table(
+            'permissions',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('code', sa.String(128), nullable=False),
         sa.Column('description', sa.String(255), nullable=True),
         sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('ix_permissions_id', 'permissions', ['id'], unique=False)
-    op.create_index(op.f('ix_permissions_code'), 'permissions', ['code'], unique=True)
+        )
+        op.create_index('ix_permissions_id', 'permissions', ['id'], unique=False)
+        op.create_index(op.f('ix_permissions_code'), 'permissions', ['code'], unique=True)
     
     # 創建用戶-角色關聯表
-    op.create_table(
-        'user_roles',
+    if 'user_roles' not in existing_tables:
+        op.create_table(
+            'user_roles',
         sa.Column('user_id', sa.Integer(), nullable=False),
         sa.Column('role_id', sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['role_id'], ['roles.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('user_id', 'role_id')
-    )
+        )
     
     # 創建角色-權限關聯表
-    op.create_table(
-        'role_permissions',
+    if 'role_permissions' not in existing_tables:
+        op.create_table(
+            'role_permissions',
         sa.Column('role_id', sa.Integer(), nullable=False),
         sa.Column('permission_id', sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(['role_id'], ['roles.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['permission_id'], ['permissions.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('role_id', 'permission_id')
-    )
+        )
 
 
 def downgrade():

@@ -51,14 +51,12 @@ jobs:
           use_insecure_cipher: false
           script_stop: false
           debug: true
-          envs: |
-            PYTHONUNBUFFERED=1
-            DEBIAN_FRONTEND=noninteractive
+          envs: PYTHONUNBUFFERED=1,DEBIAN_FRONTEND=noninteractive
           script: |
             set -e
             
             # 连接成功后立即输出，确认 SSH 连接正常
-            echo "✅ SSH 连接已建立"
+            echo "SSH 连接已建立"
             echo "服务器时间: $(date)"
             echo "当前用户: $(whoami)"
             echo "工作目录: $(pwd)"

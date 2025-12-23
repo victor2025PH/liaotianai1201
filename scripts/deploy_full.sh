@@ -445,111 +445,86 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     # 确保日志目录存在
     mkdir -p "$PROJECT_ROOT/logs"
     
-    # 使用 Standard 模式启动（放弃 Standalone 模式，避免 MODULE_NOT_FOUND 错误）
-    echo "🚀 启动 Next.js 服务 (Standard Mode - Port 3005)..."
+    echo "🚀 启动 Next.js 服务..."
     
-    # 1. 进入项目目录（而不是 standalone 目录）
+    # 1. 进入正确目录
     cd "$PROJECT_ROOT/saas-demo" || {
       echo "❌ 无法进入项目目录"
       exit 1
     }
     
-    # 2. 显式导出端口变量和环境变量（双重保险）
+    # 2. 关键修复：修正构建产物的权限 (把 root 归还给当前用户)
+    echo "🔒 修正文件权限..."
+    CURRENT_USER=$(logname 2>/dev/null || whoami)
+    sudo chown -R $CURRENT_USER:$CURRENT_USER .next public package.json node_modules 2>/dev/null || {
+      # 如果 sudo 失败，尝试不使用 sudo（可能已经是正确权限）
+      chown -R $CURRENT_USER:$CURRENT_USER .next public package.json node_modules 2>/dev/null || true
+    }
+    echo "  ✅ 文件权限已修正"
+    
+    # 3. 验证 .next 目录存在且可访问
+    if [ ! -d ".next" ]; then
+      echo "❌ 错误：.next 目录不存在！"
+      echo "当前目录: $(pwd)"
+      echo "目录内容:"
+      ls -la | head -20
+      exit 1
+    fi
+    
+    # 4. 显式导出端口
     export PORT=3005
     export NEXT_STANDALONE=false
     export NODE_ENV=production
-    echo "  ✅ 已设置环境变量 PORT=3005, NEXT_STANDALONE=false"
+    echo "  ✅ 已设置环境变量 PORT=3005"
+    echo "  ✅ 工作目录: $(pwd)"
+    echo "  ✅ .next 目录存在: $([ -d ".next" ] && echo "是" || echo "否")"
     
-    # 3. 使用 npm start 启动（利用 package.json 中的 -p 3005 配置）
-    # 添加 --update-env 确保环境变量生效
-    # 使用 --cwd 确保在正确的目录执行
-    pm2 start npm \
-      --name saas-demo-frontend \
-      --cwd "$PROJECT_ROOT/saas-demo" \
-      --max-memory-restart 1G \
-      --update-env \
-      --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
-      --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
-      --merge-logs \
-      --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-      -- start || {
+    # 5. 启动服务 (强制指定 CWD)
+    # --cwd: 确保 PM2 在正确的目录下寻找 .next
+    # --update-env: 确保 PORT=3005 生效
+    pm2 start npm --name "saas-demo-frontend" \
+        --cwd "$PROJECT_ROOT/saas-demo" \
+        --update-env \
+        --max-memory-restart 1G \
+        --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
+        --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
+        --merge-logs \
+        --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+        -- start || {
       echo "❌ PM2 启动失败"
       echo "检查错误日志:"
       tail -20 "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null || echo "无法读取错误日志"
       echo "检查输出日志:"
       tail -20 "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" 2>/dev/null || echo "无法读取输出日志"
+      echo "调试信息："
+      echo "  当前目录: $(pwd)"
+      echo "  .next 目录内容:"
+      ls -la .next 2>/dev/null | head -10 || echo "无法列出 .next 目录"
       exit 1
     }
     
-    echo "✅ 前端服务已启动 (端口 3005)"
+    echo "⏳ 等待服务启动..."
+    sleep 5
     
-    # 等待服务启动
-    sleep 3
-    
-    # 验证服务是否真正启动成功（检查端口和进程）
-    if ! sudo lsof -i :3005 >/dev/null 2>&1; then
-      echo "⚠️  警告：服务启动后端口 3005 未监听"
+    # 6. 健康检查
+    if curl -s http://127.0.0.1:3005 > /dev/null; then
+      echo "✅ 前端服务启动成功 (Port 3005)!"
+    else
+      echo "❌ 前端服务启动失败！"
+      echo "🔍 调试信息：.next 目录内容："
+      ls -la "$PROJECT_ROOT/saas-demo/.next" 2>/dev/null || echo "无法列出 .next 目录"
       echo "检查 PM2 状态:"
       pm2 list | grep saas-demo-frontend || echo "进程不存在"
       echo "检查错误日志:"
       tail -30 "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null || echo "无法读取错误日志"
-      
-      # 检查是否是 EADDRINUSE 错误
-      if grep -q "EADDRINUSE" "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" 2>/dev/null; then
-        echo "❌ 检测到端口冲突错误 (EADDRINUSE)，重新清理端口..."
-        sudo lsof -ti :3005 | xargs sudo kill -9 2>/dev/null || true
-        sleep 3
-        pm2 restart saas-demo-frontend || {
-          echo "❌ 重启失败，尝试删除后重新启动..."
-          pm2 delete saas-demo-frontend 2>/dev/null || true
-          sleep 2
-          # 重新设置环境变量并启动（与成功方案一致：先 cd，然后直接启动）
-          cd "$PROJECT_ROOT/saas-demo" || exit 1
-          export PORT=3005
-          export NEXT_STANDALONE=false
-          export NODE_ENV=production
-          pm2 start npm \
-            --name saas-demo-frontend \
-            --max-memory-restart 1G \
-            --update-env \
-            --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
-            --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
-            --merge-logs \
-            --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
-            -- start || {
-            echo "❌ 重新启动失败"
-            exit 1
-          }
-          sleep 3
-        }
-      else
-        echo "❌ 服务启动失败，但不是端口冲突问题"
-        exit 1
-      fi
-    fi
-    
-    # 最终验证
-    if sudo lsof -i :3005 >/dev/null 2>&1; then
-      echo "✅ Next.js 服务已成功启动并监听端口 3005"
-    else
-      echo "❌ 服务启动失败：端口 3005 未监听"
       exit 1
     fi
     
-    # 保存 PM2 配置（但不要自动重启，防止病毒进程复活）
+    # 保存 PM2 配置
     pm2 save --no-autorestart 2>/dev/null || pm2 save || true
     
     # 智能健康检查：等待端口启动
     wait_for_port 3005 "SaaS Demo"
-    
-    # 额外 HTTP 健康检查
-    echo "🔍 执行 HTTP 健康检查..."
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3005 || echo "000")
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
-      echo "✅ 前端服务响应正常 (HTTP $HTTP_CODE)"
-    else
-      echo "⚠️  前端服务响应异常 (HTTP $HTTP_CODE)"
-    fi
   fi
   echo ""
 fi

@@ -1,68 +1,31 @@
-十进制：461283036
+# 1. 重启所有 PM2 服务
+pm2 restart all
 
-主机名：27.126.158.220
+# 2. 如果重启失败，先停止再启动
+pm2 delete all
+pm2 save --force
 
-ASN：154260
+# 3. 启动后端
+cd /home/ubuntu/telegram-ai-system/admin-backend
+pm2 start start.sh --name backend
 
-互联网服务提供商：Kazibufast 热点网和 Pisonet
+# 4. 启动前端
+cd /home/ubuntu/telegram-ai-system/saas-demo
+export PORT=3005
+pm2 start npm --name saas-demo-frontend --update-env -- start
 
-服务：未检测到
+# 5. 启动其他三个服务
+cd /home/ubuntu/telegram-ai-system
+pm2 start npx --name tgmini-frontend -- serve -s tgmini20251220/dist -l 3001
+pm2 start npx --name hongbao-frontend -- serve -s hbwy20251220/dist -l 3002
+pm2 start npx --name aizkw-frontend -- serve -s aizkw20251219/dist -l 3003
 
-国家：菲律宾
+# 6. 保存状态
+pm2 save
 
-州/地区：达沃德尔诺特
+# 7. 重启 Nginx
+sudo systemctl restart nginx
 
-城市：保和岛
-
-纬度：7.4928 (北纬 7° 29′ 34.08″)
-
-经度：125.8430 (125° 50′ 34.81″ 东
------BEGIN OPENSSH PRIVATE KEY-----
-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
------END OPENSSH PRIVATE KEY-----
+# 8. 等待几秒后检查
+sleep 5
+pm2 list

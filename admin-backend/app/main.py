@@ -451,6 +451,15 @@ async def on_shutdown() -> None:
         logger.info("自動備份服務已停止")
     except Exception as e:
         logger.warning(f"停止自動備份失敗: {e}")
+    
+    # 停止 WebSocket Manager
+    try:
+        from app.websocket import get_websocket_manager
+        ws_manager = get_websocket_manager()
+        await ws_manager.stop()
+        logger.info("WebSocket Manager 已停止")
+    except Exception as e:
+        logger.warning(f"停止 WebSocket Manager 失敗: {e}")
     # 停止任務調度器
     try:
         from app.services.task_scheduler import get_task_scheduler

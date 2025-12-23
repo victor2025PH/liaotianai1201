@@ -11,7 +11,7 @@ from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision = '001_add_sites_tables'
-down_revision = '000_initial_base_tables'
+down_revision = 'xxxx_add_session_id'  # 基于最新的 AI usage 迁移（添加 session_id）
 branch_labels = None
 depends_on = None
 

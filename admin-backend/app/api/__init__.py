@@ -12,6 +12,8 @@ from app.api import strategies
 from app.api import theater
 from app.api import agent_api
 from app.api import frontend_config
+from app.api import ai_proxy
+from app.api import ai_monitoring
 
 router = APIRouter()
 router.include_router(auth.router)
@@ -33,4 +35,6 @@ router.include_router(strategies.router)
 router.include_router(theater.router)
 router.include_router(agent_api.router)  # Phase 7: Agent REST API
 router.include_router(frontend_config.router)  # 前端配置 API
+router.include_router(ai_proxy.router)  # AI 代理 API（安全）
+router.include_router(ai_monitoring.router)  # AI 监控和管理 API
 

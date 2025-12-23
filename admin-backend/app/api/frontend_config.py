@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.core.config import get_settings
 
-router = APIRouter(prefix="/api/v1/frontend-config", tags=["frontend-config"])
+router = APIRouter(prefix="/frontend-config", tags=["frontend-config"])
 
 
 class FrontendConfigResponse(BaseModel):
@@ -26,9 +26,21 @@ async def get_ai_keys():
     try:
         settings = get_settings()
         
+        # 从环境变量读取 API Keys
+        openai_key = settings.openai_api_key or ""
+        gemini_key = settings.gemini_api_key or ""
+        
+        # 如果环境变量中没有，尝试从 os.environ 直接读取（兼容性处理）
+        if not openai_key:
+            import os
+            openai_key = os.getenv("OPENAI_API_KEY", "")
+        if not gemini_key:
+            import os
+            gemini_key = os.getenv("GEMINI_API_KEY", "")
+        
         return FrontendConfigResponse(
-            openai_api_key=settings.openai_api_key or "",
-            gemini_api_key="",  # 如果需要 Gemini，可以从环境变量读取
+            openai_api_key=openai_key,
+            gemini_api_key=gemini_key,
             default_language="zh-CN",
             ai_model=settings.openai_model or "gpt-4o-mini"
         )

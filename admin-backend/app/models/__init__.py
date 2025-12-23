@@ -48,6 +48,10 @@ from app.models.unified_features import (
     UnifiedConfig,
     GroupActivityMetrics,
 )
+from app.models.ai_usage import (
+    AIUsageLog,
+    AIUsageStats,
+)
 
 __all__ = [
     "Role",
@@ -86,5 +90,7 @@ __all__ = [
     "GroupJoinLog",
     "UnifiedConfig",
     "GroupActivityMetrics",
+    "AIUsageLog",
+    "AIUsageStats",
 ]
 

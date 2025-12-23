@@ -28,13 +28,23 @@ https://tgmini.usdt2026.cc
 https://hongbao.usdt2026.cc
 https://aikz.usdt2026.cc
 
+
+https://aikz.usdt2026.cc
 D:\telegram-ai-system
+https://aizkw.usdt2026.cc
 D:\telegram-ai-system\aizkw20251219
+https://hongbao.usdt2026.cc
 D:\telegram-ai-system\hbwy20251220
+https://tgmini.usdt2026.cc
 D:\telegram-ai-system\tgmini20251220
+https://admin.usdt2026.cc/
+D:\hbgm001
 
 取目录树
 tree /F /A
 
 cmd /k start_worker.bat
+
+
+
 

@@ -62,9 +62,28 @@ npm run build || {
 echo "✅ 前端已重新构建"
 echo ""
 
-# 4. 使用修复后的方式重新启动三个服务
+# 4. 使用修复后的方式重新启动所有服务
 echo "[4/4] 使用修复后的方式重新启动服务..."
 cd "$PROJECT_ROOT" || exit 1
+
+# 启动 saas-demo-frontend (端口 3005)
+if [ -d "$PROJECT_ROOT/saas-demo" ] && [ -d "$PROJECT_ROOT/saas-demo/.next" ]; then
+  echo "启动 saas-demo-frontend..."
+  cd "$PROJECT_ROOT/saas-demo" || exit 1
+  export PORT=3005
+  export NEXT_STANDALONE=false
+  pm2 start npm \
+    --name saas-demo-frontend \
+    --max-memory-restart 1G \
+    --update-env \
+    --error "$PROJECT_ROOT/logs/saas-demo-frontend-error.log" \
+    --output "$PROJECT_ROOT/logs/saas-demo-frontend-out.log" \
+    --merge-logs \
+    --log-date-format "YYYY-MM-DD HH:mm:ss Z" \
+    -- start
+  echo "✅ saas-demo-frontend 已启动"
+  cd "$PROJECT_ROOT" || exit 1
+fi
 
 # 启动 tgmini (端口 3001)
 if [ -d "$PROJECT_ROOT/tgmini20251220" ] && [ -d "$PROJECT_ROOT/tgmini20251220/dist" ]; then

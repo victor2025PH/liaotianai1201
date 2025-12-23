@@ -159,9 +159,22 @@ echo "🧪 测试 Nginx 配置..."
 if sudo nginx -t; then
     echo "✅ Nginx 配置测试通过"
     
-    # 重新加载 Nginx
+    # 重新加载或启动 Nginx
     echo "🔄 重新加载 Nginx..."
-    sudo systemctl reload nginx
+    if sudo systemctl is-active --quiet nginx; then
+        sudo systemctl reload nginx
+        echo "✅ Nginx 已重新加载"
+    else
+        echo "⚠️  Nginx 服务未运行，尝试启动..."
+        sudo systemctl start nginx
+        if sudo systemctl is-active --quiet nginx; then
+            echo "✅ Nginx 已启动"
+        else
+            echo "❌ Nginx 启动失败"
+            echo "请检查 Nginx 状态: sudo systemctl status nginx"
+            exit 1
+        fi
+    fi
     
     echo "✅ Nginx 配置完成！"
     echo ""

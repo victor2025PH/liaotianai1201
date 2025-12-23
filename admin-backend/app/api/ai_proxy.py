@@ -3,14 +3,17 @@ AI 代理 API
 提供安全的 AI 服务代理，避免在前端直接暴露 API Keys
 """
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, AsyncGenerator
 from app.core.config import get_settings
 from app.api.deps import get_db_session
 from sqlalchemy.orm import Session
 from datetime import datetime
 from fastapi import Request
 import logging
+import json
+import asyncio
 from app.crud.ai_usage import create_usage_log, calculate_cost
 
 logger = logging.getLogger(__name__)
@@ -49,7 +52,7 @@ class UsageStats(BaseModel):
     last_request_time: Optional[datetime]
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat")
 async def chat_proxy(
     request: ChatRequest,
     http_request: Request,
@@ -58,7 +61,21 @@ async def chat_proxy(
     """
     代理 AI 聊天请求
     后端调用 AI 服务，避免在前端暴露 API Keys
+    支持流式响应（stream=True）和普通响应
     """
+    # 如果请求流式响应，返回 StreamingResponse
+    if request.stream:
+        return StreamingResponse(
+            _stream_chat_response(request, http_request, db),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # 禁用 Nginx 缓冲
+            }
+        )
+    
+    # 普通响应（原有逻辑）
     try:
         settings = get_settings()
         
@@ -261,6 +278,140 @@ async def chat_proxy(
             status_code=500,
             detail=f"AI 代理请求失败: {str(e)}"
         )
+
+
+async def _stream_chat_response(
+    request: ChatRequest,
+    http_request: Request,
+    db: Session
+) -> AsyncGenerator[str, None]:
+    """
+    流式响应生成器
+    使用 Server-Sent Events (SSE) 格式
+    """
+    try:
+        settings = get_settings()
+        use_gemini = request.model.startswith("gemini") or request.model == "gemini-2.5-flash-latest"
+        use_openai = request.model.startswith("gpt") or request.model == "gpt-4o-mini"
+        
+        gemini_key = settings.gemini_api_key or ""
+        openai_key = settings.openai_api_key or ""
+        
+        # 构建消息
+        messages = []
+        for msg in request.messages:
+            messages.append({
+                "role": msg.role,
+                "content": msg.content
+            })
+        
+        # 优先使用 Gemini
+        if use_gemini and gemini_key:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=gemini_key)
+                
+                model = genai.GenerativeModel('gemini-2.5-flash-latest')
+                
+                # Gemini 流式响应
+                response = model.generate_content(
+                    "\n".join([f"{m['role']}: {m['content']}" for m in messages]),
+                    generation_config={
+                        "temperature": request.temperature,
+                        "max_output_tokens": request.max_tokens,
+                    },
+                    stream=True
+                )
+                
+                full_content = ""
+                for chunk in response:
+                    if chunk.text:
+                        full_content += chunk.text
+                        # 发送 SSE 格式的数据
+                        yield f"data: {json.dumps({'content': chunk.text, 'done': False})}\n\n"
+                
+                # 发送完成信号
+                yield f"data: {json.dumps({'content': '', 'done': True, 'full_content': full_content})}\n\n"
+                
+                # 记录使用统计
+                estimated_tokens = len(full_content.split()) * 1.3
+                estimated_cost = calculate_cost("gemini", "gemini-2.5-flash-latest", int(estimated_tokens * 0.5), int(estimated_tokens * 0.5))
+                create_usage_log(
+                    db=db,
+                    provider="gemini",
+                    model="gemini-2.5-flash-latest",
+                    prompt_tokens=int(estimated_tokens * 0.5),
+                    completion_tokens=int(estimated_tokens * 0.5),
+                    total_tokens=int(estimated_tokens),
+                    estimated_cost=estimated_cost,
+                    status="success",
+                    user_ip=http_request.client.host if http_request.client else None,
+                    user_agent=http_request.headers.get("user-agent"),
+                    site_domain=http_request.headers.get("referer"),
+                )
+                return
+                
+            except Exception as gemini_error:
+                logger.warning(f"Gemini 流式响应失败: {gemini_error}")
+                if use_openai and openai_key:
+                    pass  # 继续到 OpenAI
+                else:
+                    yield f"data: {json.dumps({'error': str(gemini_error), 'done': True})}\n\n"
+                    return
+        
+        # 使用 OpenAI 流式响应
+        if use_openai and openai_key:
+            try:
+                import openai
+                client = openai.OpenAI(api_key=openai_key)
+                
+                stream = client.chat.completions.create(
+                    model=request.model or "gpt-4o-mini",
+                    messages=messages,
+                    temperature=request.temperature,
+                    max_tokens=request.max_tokens,
+                    stream=True,
+                )
+                
+                full_content = ""
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        content = chunk.choices[0].delta.content
+                        full_content += content
+                        yield f"data: {json.dumps({'content': content, 'done': False})}\n\n"
+                
+                # 发送完成信号
+                yield f"data: {json.dumps({'content': '', 'done': True, 'full_content': full_content})}\n\n"
+                
+                # 记录使用统计
+                estimated_tokens = len(full_content.split()) * 1.3
+                estimated_cost = calculate_cost("openai", request.model or "gpt-4o-mini", int(estimated_tokens * 0.5), int(estimated_tokens * 0.5))
+                create_usage_log(
+                    db=db,
+                    provider="openai",
+                    model=request.model or "gpt-4o-mini",
+                    prompt_tokens=int(estimated_tokens * 0.5),
+                    completion_tokens=int(estimated_tokens * 0.5),
+                    total_tokens=int(estimated_tokens),
+                    estimated_cost=estimated_cost,
+                    status="success",
+                    user_ip=http_request.client.host if http_request.client else None,
+                    user_agent=http_request.headers.get("user-agent"),
+                    site_domain=http_request.headers.get("referer"),
+                )
+                return
+                
+            except Exception as openai_error:
+                logger.error(f"OpenAI 流式响应失败: {openai_error}")
+                yield f"data: {json.dumps({'error': str(openai_error), 'done': True})}\n\n"
+                return
+        
+        # 如果都没有配置
+        yield f"data: {json.dumps({'error': 'AI 服务未配置', 'done': True})}\n\n"
+        
+    except Exception as e:
+        logger.error(f"流式响应失败: {e}", exc_info=True)
+        yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
 
 
 @router.get("/stats", response_model=UsageStats)

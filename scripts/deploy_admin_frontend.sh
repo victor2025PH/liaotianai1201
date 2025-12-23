@@ -54,8 +54,10 @@ echo "🛑 停止旧进程..."
 pm2 delete admin-frontend 2>/dev/null || true
 sleep 2
 
-# 7. 启动服务
+# 7. 启动服务（监听所有接口，允许外部访问）
 echo "🚀 启动服务..."
+export HOSTNAME=0.0.0.0
+export PORT=3006
 pm2 start npm --name "admin-frontend" \
     --cwd "$FRONTEND_DIR" \
     --update-env \

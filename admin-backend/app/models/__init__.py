@@ -52,6 +52,13 @@ from app.models.ai_usage import (
     AIUsageLog,
     AIUsageStats,
 )
+from app.models.sites import (
+    Site,
+    SiteVisit,
+    AIConversation,
+    ContactForm,
+    SiteAnalytics,
+)
 
 __all__ = [
     "Role",
@@ -92,5 +99,10 @@ __all__ = [
     "GroupActivityMetrics",
     "AIUsageLog",
     "AIUsageStats",
+    "Site",
+    "SiteVisit",
+    "AIConversation",
+    "ContactForm",
+    "SiteAnalytics",
 ]
 

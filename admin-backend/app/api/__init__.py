@@ -14,6 +14,9 @@ from app.api import agent_api
 from app.api import frontend_config
 from app.api import ai_proxy
 from app.api import ai_monitoring
+from app.api import sites
+from app.api import analytics
+from app.api import contacts
 
 router = APIRouter()
 router.include_router(auth.router)
@@ -37,4 +40,7 @@ router.include_router(agent_api.router)  # Phase 7: Agent REST API
 router.include_router(frontend_config.router)  # 前端配置 API
 router.include_router(ai_proxy.router)  # AI 代理 API（安全）
 router.include_router(ai_monitoring.router)  # AI 监控和管理 API
+router.include_router(sites.router)  # 站点管理 API
+router.include_router(analytics.router)  # 数据统计 API
+router.include_router(contacts.router)  # 联系表单管理 API
 

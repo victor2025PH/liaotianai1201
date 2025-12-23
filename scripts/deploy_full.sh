@@ -503,9 +503,11 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
           echo "❌ 重启失败，尝试删除后重新启动..."
           pm2 delete saas-demo-frontend 2>/dev/null || true
           sleep 2
-          # 重新设置环境变量并启动
+          # 重新设置环境变量并启动（与成功方案一致：先 cd，然后直接启动）
           cd "$PROJECT_ROOT/saas-demo" || exit 1
           export PORT=3005
+          export NEXT_STANDALONE=false
+          export NODE_ENV=production
           pm2 start npm \
             --name saas-demo-frontend \
             --max-memory-restart 1G \

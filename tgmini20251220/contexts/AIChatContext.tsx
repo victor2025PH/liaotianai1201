@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { detectUserLanguage } from '../utils/aiConfig';
-import { sendChatRequest, ChatMessage } from '../utils/aiProxy';
+import { sendChatRequest, sendStreamChatRequest, ChatMessage } from '../utils/aiProxy';
 import { loadMessages, saveMessages, clearStoredMessages } from '../utils/messageStorage';
 
 // Message Type
@@ -193,21 +193,88 @@ export const AIChatProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         { role: 'user', content: text }
       ];
 
-      // 通过代理 API 发送请求（优先使用 Gemini）
-      const response = await sendChatRequest({
-        messages: chatMessages,
-        model: 'gemini-2.5-flash-latest', // 优先使用 Gemini
-        temperature: 0.7,
-        max_tokens: 1000,
-      });
-      
-      // 解析响应
-      const aiMessage = response.content;
-      const newSuggestions = response.suggestions || ['了解开发流程', '查看技术栈', '了解服务范围'];
+      // 先创建一个空的 AI 消息，用于流式更新
+      const aiMessageId = Math.random().toString(36).substring(7);
+      const tempAiMessage: Message = {
+        id: aiMessageId,
+        role: 'ai',
+        content: '',
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, tempAiMessage]);
+      setIsTyping(true);
+
+      // 使用流式响应（优先使用 Gemini）
+      let fullContent = '';
+      try {
+        fullContent = await sendStreamChatRequest(
+          {
+            messages: chatMessages,
+            model: 'gemini-2.5-flash-latest', // 优先使用 Gemini
+            temperature: 0.7,
+            max_tokens: 1000,
+          },
+          (chunk: string) => {
+            // 实时更新消息内容
+            fullContent += chunk;
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMessageId
+                  ? { ...msg, content: fullContent }
+                  : msg
+              )
+            );
+          }
+        );
+
+        // 解析建议（如果存在）
+        let aiMessage = fullContent;
+        let newSuggestions = ['了解开发流程', '查看技术栈', '了解服务范围'];
+        
+        if (fullContent.includes('|||')) {
+          const parts = fullContent.split('|||');
+          aiMessage = parts[0].trim();
+          if (parts.length > 1) {
+            newSuggestions = parts[1]
+              .split('|')
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0);
+          }
+        }
+
+        // 更新最终消息内容
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMessageId
+              ? { ...msg, content: aiMessage }
+              : msg
+          )
+        );
+        setSuggestions(newSuggestions);
+      } catch (streamError) {
+        // 如果流式响应失败，尝试普通响应
+        console.warn('流式响应失败，降级到普通响应:', streamError);
+        const response = await sendChatRequest({
+          messages: chatMessages,
+          model: 'gemini-2.5-flash-latest',
+          temperature: 0.7,
+          max_tokens: 1000,
+        });
+        
+        const aiMessage = response.content;
+        const newSuggestions = response.suggestions || ['了解开发流程', '查看技术栈', '了解服务范围'];
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMessageId
+              ? { ...msg, content: aiMessage }
+              : msg
+          )
+        );
+        setSuggestions(newSuggestions);
+      }
 
       setIsTyping(false);
-      addMessage('ai', aiMessage);
-      setSuggestions(newSuggestions);
     } catch (error) {
       console.error("AI Error:", error);
       setIsTyping(false);

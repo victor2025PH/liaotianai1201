@@ -44,7 +44,7 @@ pm2 list | grep admin-frontend
 ### 端口检查
 
 ```bash
-curl http://127.0.0.1:3001
+curl http://127.0.0.1:3006
 ```
 
 应该返回 HTML 内容（即使显示 404 或加载中，也说明服务在运行）。
@@ -59,7 +59,7 @@ ls -la admin-frontend/.next
 
 ## 🌐 访问地址
 
-- **本地访问**: `http://127.0.0.1:3001`
+- **本地访问**: `http://127.0.0.1:3006`
 - **生产访问**: `https://aiadmin.usdt2026.cc/admin` (需要配置 Nginx)
 
 ## 🔧 Nginx 配置
@@ -70,7 +70,7 @@ ls -la admin-frontend/.next
 # /etc/nginx/sites-available/default 或自定义配置文件
 
 location /admin {
-    proxy_pass http://127.0.0.1:3001;
+    proxy_pass http://127.0.0.1:3006;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection 'upgrade';
@@ -98,7 +98,7 @@ sudo systemctl reload nginx
 **解决方案**:
 ```bash
 # 检查端口是否被占用
-lsof -i :3001
+lsof -i :3006
 
 # 检查 PM2 日志
 pm2 logs admin-frontend --lines 50
@@ -198,7 +198,7 @@ pm2 delete admin-frontend
 
 4. **验证**
    ```bash
-   curl http://127.0.0.1:3001
+   curl http://127.0.0.1:3006
    bash scripts/verify_admin_frontend.sh
    ```
 

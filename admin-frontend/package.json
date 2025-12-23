@@ -4,9 +4,9 @@
   "description": "统一后台管理系统前端",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3001",
+    "dev": "next dev -p 3006",
     "build": "next build",
-    "start": "next start -p 3001",
+    "start": "next start -p 3006",
     "lint": "next lint",
     "type-check": "tsc --noEmit"
   },

@@ -15,12 +15,12 @@ pm2 list | grep admin-frontend || echo "⚠️  admin-frontend 进程不存在"
 echo ""
 
 # 2. 检查端口
-echo "🔌 检查端口 3001:"
-if lsof -i :3001 > /dev/null 2>&1; then
-    echo "✅ 端口 3001 已被占用"
-    lsof -i :3001 | head -3
+echo "🔌 检查端口 3006:"
+if lsof -i :3006 > /dev/null 2>&1; then
+    echo "✅ 端口 3006 已被占用"
+    lsof -i :3006 | head -3
 else
-    echo "❌ 端口 3001 未被占用"
+    echo "❌ 端口 3006 未被占用"
 fi
 echo ""
 
@@ -39,11 +39,11 @@ echo ""
 
 # 4. 测试 HTTP 连接
 echo "🌐 测试 HTTP 连接:"
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3001 || echo "000")
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3006 || echo "000")
 if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "404" ]; then
     echo "✅ HTTP 连接成功 (状态码: $HTTP_STATUS)"
     echo "   响应内容预览:"
-    curl -s http://127.0.0.1:3001 | head -20
+    curl -s http://127.0.0.1:3006 | head -20
 else
     echo "❌ HTTP 连接失败 (状态码: $HTTP_STATUS)"
 fi

@@ -59,7 +59,7 @@ NEXT_PUBLIC_API_BASE_URL=https://aiadmin.usdt2026.cc
 npm run dev
 ```
 
-访问: http://localhost:3001
+访问: http://localhost:3006
 
 ### 4. 构建和部署
 
@@ -67,7 +67,7 @@ npm run dev
 # 构建
 npm run build
 
-# 生产模式
+# 生产模式（端口 3006）
 npm start
 ```
 
@@ -188,8 +188,8 @@ const response = await axios.get(`${API_BASE_URL}/api/v1/ai-monitoring/summary?d
 ### 部署到生产环境
 
 1. 构建项目: `npm run build`
-2. 启动服务: `npm start`
-3. 配置 Nginx 反向代理到端口 3001
+2. 启动服务: `npm start` (端口 3006)
+3. 配置 Nginx 反向代理到端口 3006
 4. 访问: `https://aiadmin.usdt2026.cc/admin`
 
 ### PM2 部署

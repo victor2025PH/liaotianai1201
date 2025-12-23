@@ -58,7 +58,7 @@ alembic stamp head
 
 ### 问题描述
 
-访问 `http://127.0.0.1:3001` 返回 404 Not Found。
+访问 `http://127.0.0.1:3006` 返回 404 Not Found。
 
 ### 原因
 
@@ -87,7 +87,7 @@ bash scripts/deploy_admin_frontend.sh
 pm2 list | grep admin-frontend
 
 # 检查端口
-curl http://127.0.0.1:3001
+curl http://127.0.0.1:3006
 ```
 
 ## 问题 3: SSL 证书错误

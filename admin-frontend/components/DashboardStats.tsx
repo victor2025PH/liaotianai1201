@@ -22,6 +22,9 @@ export default function DashboardStats() {
 
   useEffect(() => {
     fetchStats();
+    // 每 30 秒自动刷新
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchStats = async () => {

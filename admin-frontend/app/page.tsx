@@ -39,6 +39,11 @@ export default function Home() {
           <RecentErrors />
         </div>
 
+        {/* 提供商对比 */}
+        <div className="mt-8">
+          <ProviderComparison />
+        </div>
+
         {/* 会话列表 */}
         <div className="mt-8">
           <SessionList />

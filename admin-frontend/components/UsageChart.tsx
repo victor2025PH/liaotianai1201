@@ -30,6 +30,9 @@ export default function UsageChart() {
 
   useEffect(() => {
     fetchData();
+    // 每 60 秒自动刷新
+    const interval = setInterval(fetchData, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchData = async () => {

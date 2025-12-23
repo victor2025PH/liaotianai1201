@@ -34,6 +34,9 @@ export default function SessionList() {
 
   useEffect(() => {
     fetchActiveSessions();
+    // 每 60 秒自动刷新
+    const interval = setInterval(fetchActiveSessions, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchActiveSessions = async () => {

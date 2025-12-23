@@ -21,6 +21,9 @@ export default function RecentErrors() {
 
   useEffect(() => {
     fetchErrors();
+    // 每 30 秒自动刷新
+    const interval = setInterval(fetchErrors, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchErrors = async () => {

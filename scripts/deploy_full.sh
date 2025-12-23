@@ -226,12 +226,15 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     echo "  ✅ Crontab 已清空"
     sleep 1
     
-    # 1. 杀死 PM2 守护进程（彻底停止所有自动重启）
-    echo "  1. 停止 PM2 守护进程..."
-    pm2 kill 2>/dev/null || true
-    sleep 3
+    # 1. 只停止前端相关进程（不要杀掉后端！）
+    echo "  1. 停止前端相关进程..."
+    pm2 delete saas-demo-frontend 2>/dev/null || true
+    pm2 delete tgmini-frontend 2>/dev/null || true
+    pm2 delete hongbao-frontend 2>/dev/null || true
+    pm2 delete aizkw-frontend 2>/dev/null || true
+    sleep 2
     
-    # 1.1 清理 PM2 日志
+    # 1.1 清理 PM2 日志（但不杀掉 PM2 守护进程，避免影响后端）
     echo "  1.1 清理 PM2 日志..."
     pm2 flush 2>/dev/null || true
     echo "  ✅ PM2 日志已清理"
@@ -535,11 +538,11 @@ if [ -d "$PROJECT_ROOT/saas-demo" ]; then
     pm2 save --no-autorestart 2>/dev/null || pm2 save || true
     
     # 智能健康检查：等待端口启动
-    wait_for_port 3000 "SaaS Demo"
+    wait_for_port 3005 "SaaS Demo"
     
     # 额外 HTTP 健康检查
     echo "🔍 执行 HTTP 健康检查..."
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000 || echo "000")
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3005 || echo "000")
     if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
       echo "✅ 前端服务响应正常 (HTTP $HTTP_CODE)"
     else

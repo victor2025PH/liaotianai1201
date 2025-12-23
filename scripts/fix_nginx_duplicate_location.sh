@@ -25,16 +25,20 @@ echo "📊 找到 $ADMIN_COUNT 个 'location /admin' 块"
 if [ "$ADMIN_COUNT" -gt 1 ]; then
     echo "⚠️  发现重复的 location /admin 块，需要修复"
     
-    # 使用 Python 脚本修复（更可靠）
-    python3 << 'PYTHON_SCRIPT'
+    # 使用 Python 脚本修复（更可靠，使用 sudo）
+    sudo python3 << 'PYTHON_SCRIPT'
 import re
 import sys
+import subprocess
+import tempfile
+import os
 
 config_file = "/etc/nginx/sites-available/aiadmin.usdt2026.cc"
 
 try:
-    with open(config_file, 'r', encoding='utf-8') as f:
-        content = f.read()
+    # 使用 sudo 读取文件
+    result = subprocess.run(['sudo', 'cat', config_file], capture_output=True, text=True, check=True)
+    content = result.stdout
     
     # 查找所有 location /admin 块
     pattern = r'location /admin \{.*?\n(?:\s+[^\}]*\n)*\s*\}'
@@ -85,9 +89,14 @@ try:
 '''
                     content = content[:admin_pos] + ai_monitor_config + content[admin_pos:]
             
-            # 写入修复后的配置
-            with open(config_file, 'w', encoding='utf-8') as f:
+            # 使用 sudo 写入修复后的配置
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False) as f:
                 f.write(content)
+                temp_file = f.name
+            
+            # 使用 sudo 复制临时文件到目标位置
+            subprocess.run(['sudo', 'cp', temp_file, config_file], check=True)
+            os.unlink(temp_file)
             
             print("✅ 已修复配置文件")
             sys.exit(0)

@@ -11,6 +11,7 @@ from sqlalchemy import func, and_, or_
 from app.api.deps import get_db_session
 from app.models.ai_usage import AIUsageLog, AIUsageStats
 from app.core.config import get_settings
+from app.crud.ai_usage import get_session_stats
 import logging
 
 logger = logging.getLogger(__name__)
@@ -241,4 +242,21 @@ async def get_recent_errors(
     except Exception as e:
         logger.error(f"获取错误日志失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"获取错误日志失败: {str(e)}")
+
+
+@router.get("/session/{session_id}")
+async def get_session_statistics(
+    session_id: str,
+    days: int = Query(30, description="统计天数"),
+    db: Session = Depends(get_db_session)
+):
+    """
+    获取指定会话的统计信息
+    """
+    try:
+        stats = get_session_stats(db, session_id, days=days)
+        return stats
+    except Exception as e:
+        logger.error(f"获取会话统计失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取会话统计失败: {str(e)}")
 

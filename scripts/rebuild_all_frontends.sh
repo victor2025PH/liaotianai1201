@@ -67,8 +67,20 @@ cleanup_project() {
 
 cleanup_project "saas-demo" "saas-demo (Next.js)"
 cleanup_project "tgmini20251220" "tgmini (Vite)"
-cleanup_project "react-vite-template/hbwy20251220" "hongbao (Vite)"
-cleanup_project "aizkw20251219" "aizkw (Vite)"
+
+# hongbao - 尝试多个路径
+if [ -d "$PROJECT_ROOT/hbwy20251220" ]; then
+    cleanup_project "hbwy20251220" "hongbao (Vite)"
+elif [ -d "$PROJECT_ROOT/react-vite-template/hbwy20251220" ]; then
+    cleanup_project "react-vite-template/hbwy20251220" "hongbao (Vite)"
+fi
+
+# aizkw - 尝试多个路径
+if [ -d "$PROJECT_ROOT/aizkw20251219" ]; then
+    cleanup_project "aizkw20251219" "aizkw (Vite)"
+elif [ -d "$PROJECT_ROOT/migrations/aizkw20251219" ]; then
+    cleanup_project "migrations/aizkw20251219" "aizkw (Vite)"
+fi
 cleanup_project "ai-monitor-frontend" "ai-monitor-frontend"
 cleanup_project "sites-admin-frontend" "sites-admin-frontend"
 
@@ -121,18 +133,77 @@ build_nextjs() {
     fi
 }
 
+# 智能查找项目路径
+find_project_dir() {
+    local name=$1
+    local expected_paths=$2  # 用 : 分隔的多个路径
+    
+    # 先检查预期路径
+    for path in $(echo "$expected_paths" | tr ':' ' '); do
+        if [ -d "$PROJECT_ROOT/$path" ] && [ -f "$PROJECT_ROOT/$path/package.json" ]; then
+            echo "$path"
+            return 0
+        fi
+    done
+    
+    # 如果预期路径都不存在，使用 find 查找
+    local found=""
+    if [ "$name" = "hongbao" ] || [ "$name" = "hbwy" ]; then
+        found=$(find "$PROJECT_ROOT" -maxdepth 5 -type f -name "package.json" 2>/dev/null | \
+            grep -iE "(hbwy|hongbao)" | \
+            grep -v "/\.git/" | \
+            grep -v "/node_modules/" | \
+            head -1 | xargs dirname 2>/dev/null || echo "")
+        if [ -n "$found" ]; then
+            found=${found#$PROJECT_ROOT/}
+        fi
+    elif [ "$name" = "aizkw" ]; then
+        found=$(find "$PROJECT_ROOT" -maxdepth 5 -type f -name "package.json" 2>/dev/null | \
+            grep -iE "aizkw" | \
+            grep -v "/logs/" | \
+            grep -v "/\.git/" | \
+            grep -v "/node_modules/" | \
+            head -1 | xargs dirname 2>/dev/null || echo "")
+        if [ -n "$found" ]; then
+            found=${found#$PROJECT_ROOT/}
+        fi
+    fi
+    
+    if [ -n "$found" ] && [ -f "$PROJECT_ROOT/$found/package.json" ]; then
+        echo "$found"
+        return 0
+    fi
+    
+    return 1
+}
+
 build_vite() {
-    local dir=$1
+    local expected_dir=$1
     local name=$2
     
-    if [ -d "$PROJECT_ROOT/$dir" ]; then
-        echo "构建 $name ($dir)..."
-        cd "$PROJECT_ROOT/$dir" || return
+    # 智能查找实际路径
+    local actual_dir=$(find_project_dir "$name" "$expected_dir")
+    
+    if [ -z "$actual_dir" ]; then
+        echo "  ❌ $name 项目未找到（预期路径: $expected_dir）"
+        echo ""
+        return 1
+    fi
+    
+    if [ "$actual_dir" != "$expected_dir" ]; then
+        echo "  ⚠️  $name 路径不匹配，使用找到的路径: $actual_dir"
+    fi
+    
+    if [ -d "$PROJECT_ROOT/$actual_dir" ] && [ -f "$PROJECT_ROOT/$actual_dir/package.json" ]; then
+        echo "构建 $name ($actual_dir)..."
+        cd "$PROJECT_ROOT/$actual_dir" || return
         
         # 安装依赖
         if [ ! -d "node_modules" ]; then
             echo "  安装依赖..."
-            npm install --production=false 2>&1 | tail -5
+            npm install --production=false 2>&1 | tail -5 || {
+                echo "  ⚠️  依赖安装失败，但继续尝试构建..."
+            }
         else
             echo "  依赖已存在，跳过安装"
         fi
@@ -148,20 +219,23 @@ build_vite() {
                 echo "  ❌ $name 构建失败，未找到 dist 目录"
                 echo "  构建日志:"
                 tail -20 /tmp/build_${name}.log | grep -A 5 "ERROR\|error\|failed" || tail -20 /tmp/build_${name}.log
+                cd "$PROJECT_ROOT" || return
                 return 1
             fi
         else
             echo "  ❌ $name 构建失败"
             echo "  构建日志:"
             tail -20 /tmp/build_${name}.log | grep -A 5 "ERROR\|error\|failed" || tail -20 /tmp/build_${name}.log
+            cd "$PROJECT_ROOT" || return
             return 1
         fi
         
         cd "$PROJECT_ROOT" || return
         echo ""
     else
-        echo "  ⚠️  $name 目录不存在: $dir"
+        echo "  ❌ $name 目录或 package.json 不存在: $actual_dir"
         echo ""
+        return 1
     fi
 }
 
@@ -170,8 +244,8 @@ build_nextjs "saas-demo" "saas-demo"
 
 # 构建 Vite 项目
 build_vite "tgmini20251220" "tgmini"
-build_vite "react-vite-template/hbwy20251220" "hongbao"
-build_vite "aizkw20251219" "aizkw"
+build_vite "hbwy20251220:react-vite-template/hbwy20251220" "hongbao"
+build_vite "aizkw20251219:migrations/aizkw20251219" "aizkw"
 
 # 构建其他前端项目（如果存在）
 if [ -d "$PROJECT_ROOT/ai-monitor-frontend" ] && [ -f "$PROJECT_ROOT/ai-monitor-frontend/package.json" ]; then
@@ -241,29 +315,40 @@ start_nextjs() {
 
 # 启动 Vite 服务
 start_vite() {
-    local dir=$1
+    local expected_dir=$1
     local name=$2
     local port=$3
     local pm2_name=$4
     
-    if [ -d "$PROJECT_ROOT/$dir" ] && [ -d "$PROJECT_ROOT/$dir/dist" ]; then
-        echo "启动 $name (serve dist, 端口 $port)..."
+    # 智能查找实际路径
+    local actual_dir=$(find_project_dir "$name" "$expected_dir")
+    
+    if [ -z "$actual_dir" ]; then
+        echo "  ❌ $name 项目未找到，跳过启动"
+        echo ""
+        return 1
+    fi
+    
+    if [ -d "$PROJECT_ROOT/$actual_dir" ] && [ -d "$PROJECT_ROOT/$actual_dir/dist" ]; then
+        echo "启动 $name (serve dist, 端口 $port, 路径: $actual_dir)..."
+        pm2 delete "$pm2_name" 2>/dev/null || true
         pm2 start serve \
             --name "$pm2_name" \
-            --cwd "$PROJECT_ROOT/$dir" \
+            --cwd "$PROJECT_ROOT/$actual_dir" \
             -- -s dist -l $port 2>&1 | tail -3
         echo ""
     else
-        echo "  ❌ $name 未找到 dist 目录，跳过启动"
+        echo "  ❌ $name 未找到 dist 目录（路径: $actual_dir），跳过启动"
         echo ""
+        return 1
     fi
 }
 
 # 启动所有服务
 start_nextjs "saas-demo" "saas-demo" 3000 "next-server"
 start_vite "tgmini20251220" "tgmini" 3001 "tgmini-frontend"
-start_vite "react-vite-template/hbwy20251220" "hongbao" 3002 "hongbao-frontend"
-start_vite "aizkw20251219" "aizkw" 3003 "aizkw-frontend"
+start_vite "hbwy20251220:react-vite-template/hbwy20251220" "hongbao" 3002 "hongbao-frontend"
+start_vite "aizkw20251219:migrations/aizkw20251219" "aizkw" 3003 "aizkw-frontend"
 
 # 启动其他前端服务
 if [ -d "$PROJECT_ROOT/ai-monitor-frontend/.next" ] || [ -d "$PROJECT_ROOT/ai-monitor-frontend/dist" ]; then
@@ -283,6 +368,41 @@ if [ -d "$PROJECT_ROOT/sites-admin-frontend/.next" ] || [ -d "$PROJECT_ROOT/site
 fi
 
 echo "✅ 服务启动完成"
+echo ""
+
+# 4.5 重启后端服务（重要：无论前端构建是否成功）
+echo "4.5️⃣ 重启后端服务"
+echo "----------------------------------------"
+
+if [ -d "$PROJECT_ROOT/admin-backend" ]; then
+    cd "$PROJECT_ROOT/admin-backend" || true
+    
+    # 检查虚拟环境
+    if [ ! -d ".venv" ]; then
+        echo "  创建虚拟环境..."
+        python3 -m venv .venv 2>/dev/null || true
+    fi
+    
+    source .venv/bin/activate 2>/dev/null || true
+    
+    # 重启后端服务
+    pm2 restart backend luckyred-api 2>/dev/null || {
+        echo "  尝试启动后端服务..."
+        if [ -f ".venv/bin/uvicorn" ]; then
+            pm2 delete backend luckyred-api 2>/dev/null || true
+            pm2 start .venv/bin/uvicorn \
+                --name backend \
+                --interpreter none \
+                -- app.main:app --host 0.0.0.0 --port 8000 2>/dev/null || true
+        fi
+    }
+    
+    echo "  ✅ 后端服务已处理"
+    cd "$PROJECT_ROOT" || true
+else
+    echo "  ⚠️  admin-backend 目录不存在"
+fi
+
 echo ""
 
 # 5. 等待服务启动

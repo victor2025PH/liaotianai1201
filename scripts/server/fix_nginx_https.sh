@@ -12,7 +12,7 @@ echo ""
 declare -A SITES=(
   ["tgmini"]="tgmini.usdt2026.cc:3001"
   ["hongbao"]="hongbao.usdt2026.cc:3002"
-  ["aizkw"]="aikz.usdt2026.cc:3003"
+  ["aikz"]="aikz.usdt2026.cc:3000"
 )
 
 FIXED_COUNT=0

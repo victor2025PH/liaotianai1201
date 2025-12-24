@@ -31,7 +31,7 @@ else
   declare -A SITES=(
     ["tgmini.usdt2026.cc"]="3001"
     ["hongbao.usdt2026.cc"]="3002"
-    ["aikz.usdt2026.cc"]="3003"
+    ["aikz.usdt2026.cc"]="3000"
   )
   
   for domain in "${!SITES[@]}"; do

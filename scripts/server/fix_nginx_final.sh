@@ -18,7 +18,7 @@ fi
 declare -A SITES=(
   ["tgmini.usdt2026.cc"]="3001"
   ["hongbao.usdt2026.cc"]="3002"
-  ["aikz.usdt2026.cc"]="3003"
+  ["aikz.usdt2026.cc"]="3000"
 )
 
 # aizkw 特殊处理（如果没有证书，使用 HTTP only）

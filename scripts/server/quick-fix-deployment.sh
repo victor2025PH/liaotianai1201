@@ -33,7 +33,7 @@ fi
 SITES=(
     "tgmini20251220:tgmini.usdt2026.cc:3001:tgmini-frontend"
     "hbwy20251220:hongbao.usdt2026.cc:3002:hongbao-frontend"
-    "aizkw20251219:aikz.usdt2026.cc:3003:aizkw-frontend"
+    "aizkw20251219:aizkw.usdt2026.cc:3003:aizkw-frontend"
 )
 
 for SITE_INFO in "${SITES[@]}"; do

@@ -126,7 +126,7 @@ server {
     server_name aikz.usdt2026.cc;
 
     location / {
-        proxy_pass http://127.0.0.1:3003;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -145,7 +145,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/aikz.usdt2026.cc/privkey.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:3003;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -277,7 +277,7 @@ echo "时间: $(date)"
 echo "=========================================="
 echo ""
 echo "配置摘要："
-echo "  - aikz.usdt2026.cc -> http://127.0.0.1:3003"
+echo "  - aikz.usdt2026.cc -> http://127.0.0.1:3000"
 echo "  - 后端服务 -> http://127.0.0.1:8000"
 echo ""
 echo "如果仍有问题，请检查："

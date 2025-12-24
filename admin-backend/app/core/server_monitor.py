@@ -5,7 +5,7 @@
 import logging
 import asyncio
 import paramiko
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -185,7 +185,7 @@ class ServerMonitor:
             try:
                 # 获取CPU使用率
                 stdin, stdout, stderr = ssh.exec_command(
-                    "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\\1/' | awk '{print 100 - $1}'"
+                    r"top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\\1/' | awk '{print 100 - $1}'"
                 )
                 cpu_output = stdout.read().decode().strip()
                 cpu_usage = float(cpu_output) if cpu_output else 0.0

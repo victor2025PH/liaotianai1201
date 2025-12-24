@@ -9,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT" || exit 1
 
+<<<<<<< HEAD
 echo "🔧 修复 admin-frontend 端口冲突..."
 echo "   将端口从 3006 改为 3008"
 echo ""
@@ -126,4 +127,3 @@ echo "      curl http://127.0.0.1:3008"
 echo ""
 echo "   4. 备份位置: $BACKUP_DIR"
 echo ""
-

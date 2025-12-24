@@ -68,11 +68,13 @@ for domain in "${!CORRECT_PORTS[@]}"; do
     echo ""
 done
 
-# 2. 验证 aiadmin.usdt2026.cc 配置
+# 2. 验证并创建 aiadmin.usdt2026.cc 配置
 echo "2️⃣ 验证管理后台配置 (aiadmin.usdt2026.cc)"
 echo "----------------------------------------"
 
 ADMIN_CONFIG="$NGINX_AVAILABLE/aiadmin.usdt2026.cc"
+ADMIN_ENABLED="$NGINX_ENABLED/aiadmin.usdt2026.cc"
+
 if [ -f "$ADMIN_CONFIG" ] || [ -L "$ADMIN_CONFIG" ]; then
     echo "检查管理后台配置..."
     
@@ -97,7 +99,172 @@ if [ -f "$ADMIN_CONFIG" ] || [ -L "$ADMIN_CONFIG" ]; then
         echo "  ⚠️  /ai-monitor 配置可能有问题"
     fi
 else
-    echo "  ⚠️  管理后台配置文件不存在"
+    echo "  ⚠️  管理后台配置文件不存在，正在创建..."
+    
+    # 检查 SSL 证书
+    SSL_CERT="/etc/letsencrypt/live/aiadmin.usdt2026.cc/fullchain.pem"
+    SSL_KEY="/etc/letsencrypt/live/aiadmin.usdt2026.cc/privkey.pem"
+    HAS_SSL=false
+    
+    if [ -f "$SSL_CERT" ] && [ -f "$SSL_KEY" ]; then
+        HAS_SSL=true
+        echo "  ✅ 检测到 SSL 证书"
+    else
+        echo "  ⚠️  未检测到 SSL 证书，将配置为 HTTP"
+    fi
+    
+    # 创建配置文件
+    if [ "$HAS_SSL" = true ]; then
+        sudo tee "$ADMIN_CONFIG" > /dev/null << 'EOF'
+# 管理后台配置 - HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name aiadmin.usdt2026.cc;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name aiadmin.usdt2026.cc;
+
+    ssl_certificate /etc/letsencrypt/live/aiadmin.usdt2026.cc/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/aiadmin.usdt2026.cc/privkey.pem;
+    
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    client_max_body_size 50M;
+
+    # 日志
+    access_log /var/log/nginx/aiadmin-access.log;
+    error_log /var/log/nginx/aiadmin-error.log;
+
+    # 后端 API 代理
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+    }
+
+    # AI 监控系统前端代理（端口 3006）
+    location /ai-monitor {
+        proxy_pass http://127.0.0.1:3006;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        rewrite ^/ai-monitor/?(.*) /$1 break;
+    }
+
+    # 站点管理后台前端代理（端口 3007）
+    location /admin {
+        proxy_pass http://127.0.0.1:3007;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        rewrite ^/admin/?(.*) /$1 break;
+    }
+
+    # 根路径跳转到管理后台
+    location = / {
+        return 301 /admin;
+    }
+}
+EOF
+    else
+        sudo tee "$ADMIN_CONFIG" > /dev/null << 'EOF'
+# 管理后台配置 - HTTP（无 SSL 证书）
+server {
+    listen 80;
+    listen [::]:80;
+    server_name aiadmin.usdt2026.cc;
+
+    client_max_body_size 50M;
+
+    # 日志
+    access_log /var/log/nginx/aiadmin-access.log;
+    error_log /var/log/nginx/aiadmin-error.log;
+
+    # 后端 API 代理
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+    }
+
+    # AI 监控系统前端代理（端口 3006）
+    location /ai-monitor {
+        proxy_pass http://127.0.0.1:3006;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        rewrite ^/ai-monitor/?(.*) /$1 break;
+    }
+
+    # 站点管理后台前端代理（端口 3007）
+    location /admin {
+        proxy_pass http://127.0.0.1:3007;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        rewrite ^/admin/?(.*) /$1 break;
+    }
+
+    # 根路径跳转到管理后台
+    location = / {
+        return 301 /admin;
+    }
+}
+EOF
+    fi
+    
+    echo "  ✅ 已创建配置文件: $ADMIN_CONFIG"
+    
+    # 创建符号链接
+    if [ ! -L "$ADMIN_ENABLED" ]; then
+        sudo ln -s "$ADMIN_CONFIG" "$ADMIN_ENABLED"
+        echo "  ✅ 已创建符号链接: $ADMIN_ENABLED"
+    fi
 fi
 
 echo ""

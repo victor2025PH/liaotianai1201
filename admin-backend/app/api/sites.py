@@ -7,7 +7,7 @@ from typing import List, Optional
 from datetime import datetime, date
 from pydantic import BaseModel
 
-from app.db import get_db_session
+from app.api.deps import get_db_session
 from app.crud import sites as crud_sites
 from app.models.sites import Site, SiteVisit, AIConversation, ContactForm
 

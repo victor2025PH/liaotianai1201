@@ -61,7 +61,7 @@ jobs:
             set -e
             
             SITE_NAME="${{ matrix.site.name }}"
-            PROJECT_DIR="/home/ubuntu/telegram-ai-system"
+            PROJECT_DIR="/opt/web3-sites"
             SITE_DIR="$PROJECT_DIR/${{ matrix.site.dir }}"
             DOMAIN="${{ matrix.site.domain }}"
             PORT="${{ matrix.site.port }}"
@@ -91,7 +91,7 @@ jobs:
               echo "⚠️  项目目录不存在，创建目录..."
               mkdir -p "$PROJECT_DIR"
               cd "$PROJECT_DIR"
-              git clone https://github.com/victor2025PH/liaotianai1201.git . || {
+              git clone https://github.com/victor2025PH/web3.git . || {
                 echo "❌ Git clone 失败"
                 exit 1
               }
